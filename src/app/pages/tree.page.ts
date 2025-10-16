@@ -8,12 +8,15 @@ import { IssuesService } from '../services/issues.service';
 import { TasksService } from '../services/tasks.service';
 import { Problem, Issue, Task } from '../models/types';
 import { MatButtonModule } from '@angular/material/button';
+import { MatTreeNestedDataSource } from '@angular/material/tree';
+
 
 import { NestedTreeControl } from '@angular/cdk/tree';
 import { MatTreeModule } from '@angular/material/tree';
 import { MatIconModule } from '@angular/material/icon';
 
-type TreeNode = { id: string; name: string; children?: TreeNode[]; };
+type TreeNode = { id: string; name: string; kind: 'problem' | 'issue'; children?: TreeNode[]; };
+
 
 
 @Component({
@@ -93,26 +96,38 @@ type TreeNode = { id: string; name: string; children?: TreeNode[]; };
     <hr style="margin:16px 0; opacity:.3;">
     <h4>Problems (MatTree preview)</h4>
 
-    <mat-tree [dataSource]="data" [treeControl]="tree" class="mat-elevation-z1">
-      <mat-nested-tree-node *matTreeNodeDef="let node">
-        <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-bottom:1px solid rgba(0,0,0,.06);">
-          <button mat-icon-button disabled>
-            <mat-icon>folder</mat-icon>
-          </button>
-          <span style="font-weight:600">{{ node.name }}</span>
-          <span style="flex:1 1 auto"></span>
-          <!-- 既存のProblem用メソッドを再利用 -->
-          <button mat-button type="button" (click)="renameProblemNode(node)">Rename</button>
-          <button mat-button type="button" color="warn" (click)="removeProblemNode(node)">Delete</button>
+    <mat-tree [dataSource]="dataSource" [treeControl]="tree" class="mat-elevation-z1">
 
-        </div>
-
-    <!-- 再帰アウトレット（子は後で追加） -->
-    <div>
-      <ng-container matTreeNodeOutlet></ng-container>
+  <!-- 親ノード：Problem（子の有無に関係なくここに入る） -->
+  <mat-nested-tree-node *matTreeNodeDef="let node; when: isProblem">
+    <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-bottom:1px solid rgba(0,0,0,.06);">
+      <button mat-icon-button matTreeNodeToggle [disabled]="!(node.children?.length)">
+        <mat-icon>{{ tree.isExpanded(node) ? 'expand_more' : 'chevron_right' }}</mat-icon>
+      </button>
+      <span style="font-weight:600">{{ node.name }}</span>
+      <span style="flex:1 1 auto"></span>
+      <button mat-button type="button" (click)="renameProblemNode(node)">Rename</button>
+      <button mat-button type="button" color="warn" (click)="removeProblemNode(node)">Delete</button>
     </div>
+    <div *ngIf="tree.isExpanded(node)">
+  <ng-container matTreeNodeOutlet></ng-container>
+</div>
+
   </mat-nested-tree-node>
+
+  <!-- 葉ノード：Issue -->
+  <mat-tree-node *matTreeNodeDef="let node">
+    <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-bottom:1px solid rgba(0,0,0,.06); margin-left:32px;">
+      <button mat-icon-button disabled><mat-icon>folder</mat-icon></button>
+      <span>{{ node.name }}</span>
+      <span style="flex:1 1 auto"></span>
+      <!-- ※ 次のステップで Issue の Rename/Delete を実装 -->
+    </div>
+  </mat-tree-node>
+
 </mat-tree>
+
+
 
 
     <ng-template #loading>Loading...</ng-template>
@@ -150,6 +165,10 @@ renameProblemNode(node: { id: string; name: string }) {
   tasksShown: Record<string, boolean> = {};
   taskTitle: Record<string, string> = {};
 
+  dataSource = new MatTreeNestedDataSource<TreeNode>();
+  isProblem = (_: number, node: TreeNode) => node.kind === 'problem';
+
+
   constructor(
     private problems: ProblemsService,
     private issues: IssuesService,
@@ -160,13 +179,25 @@ renameProblemNode(node: { id: string; name: string }) {
     this.problems$ = this.problems.list();
     
     this.subForTree = this.problems.list().subscribe(rows => {
-        this.data = rows.map(r => ({ id: r.id!, name: r.title })); // Problemだけ
-        this.tree.dataNodes = this.data;
-      });
+        this.data = rows.map(r => ({
+          id: r.id!, name: r.title, kind: 'problem', children: [] as TreeNode[]
+        }));
+      
+        // ★ 参照を新規にして変更通知
+        this.tree.dataNodes = [...this.data];
+        this.dataSource.data = [...this.data];
+      
+        this.issueSubs.forEach(s => s.unsubscribe());
+        this.issueSubs.clear();
+      
+        for (const p of this.data) this.attachIssueSubscription(p);
+      });      
+      
    }
 
    ngOnDestroy() {
     this.subForTree?.unsubscribe();
+    this.issueSubs.forEach(s => s.unsubscribe());
   }
   
 
@@ -240,5 +271,36 @@ renameProblemNode(node: { id: string; name: string }) {
   data: TreeNode[] = [];
   tree = new NestedTreeControl<TreeNode>(n => n.children ?? []);
   private subForTree?: import('rxjs').Subscription;
+
+  private issueSubs = new Map<string, import('rxjs').Subscription>(); // problemId -> sub
+
+  private attachIssueSubscription(pNode: TreeNode) {
+    // 既存購読があれば解除
+    this.issueSubs.get(pNode.id)?.unsubscribe();
+  
+    const sub = this.issues.listByProblem(pNode.id).subscribe(issues => {
+      // 子ノードを生成
+      const kids: TreeNode[] = issues.map(i => ({
+        id: i.id!, name: i.title, kind: 'issue'
+      }));
+  
+      // ★ 親ノードの参照を置き換える（これが重要）
+      const idx = this.data.findIndex(n => n.id === pNode.id);
+      if (idx !== -1) {
+        const newNode: TreeNode = { ...this.data[idx], children: kids };
+        this.data = [
+          ...this.data.slice(0, idx),
+          newNode,
+          ...this.data.slice(idx + 1)
+        ];
+      }
+  
+      // ★ dataSource / tree に“新しい配列参照”を渡して通知
+      this.tree.dataNodes = [...this.data];
+      this.dataSource.data = [...this.data];
+    });
+  
+    this.issueSubs.set(pNode.id, sub);
+  }  
 
 }
