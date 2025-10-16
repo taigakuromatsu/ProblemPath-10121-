@@ -1,7 +1,7 @@
 import { bootstrapApplication } from '@angular/platform-browser';
 import { appConfig } from './app/app.config';
 import { App } from './app/app';
-import { importProvidersFrom } from '@angular/core';
+import { provideAnimations } from '@angular/platform-browser/animations';
 
 // Firebase関連（最新版対応）
 import { initializeApp, provideFirebaseApp } from '@angular/fire/app';
@@ -18,7 +18,8 @@ bootstrapApplication(App, {
     provideFirebaseApp(() => initializeApp(environment.firebase)),
     provideFirestore(() => getFirestore()),
     provideAuth(() => getAuth()),
-    provideStorage(() => getStorage())
+    provideStorage(() => getStorage()),
+    provideAnimations(),
   ]
 }).catch((err) => console.error(err));
 

@@ -7,49 +7,57 @@ import { ProblemsService } from '../services/problems.service';
 import { IssuesService } from '../services/issues.service';
 import { TasksService } from '../services/tasks.service';
 import { Problem, Issue, Task } from '../models/types';
+import { MatButtonModule } from '@angular/material/button';
+
+import { NestedTreeControl } from '@angular/cdk/tree';
+import { MatTreeModule } from '@angular/material/tree';
+import { MatIconModule } from '@angular/material/icon';
+
+type TreeNode = { id: string; name: string; children?: TreeNode[]; };
+
 
 @Component({
   standalone: true,
   selector: 'pp-tree',
-  imports: [AsyncPipe, NgFor, NgIf, FormsModule],
+  imports: [AsyncPipe, NgFor, NgIf, FormsModule, MatButtonModule, MatTreeModule, MatIconModule],
   template: `
     <h3>Problems</h3>
 
     <!-- Problem追加 -->
     <form (ngSubmit)="createProblem()" style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
       <input [(ngModel)]="problemTitle" name="problemTitle" placeholder="New Problem title" required />
-      <button type="submit">＋ Add Problem</button>
+      <button mat-raised-button color="primary" type="submit">＋ Add Problem</button>
     </form>
 
     <!-- Problem一覧 -->
     <ul *ngIf="problems$ | async as problems; else loading" style="line-height:1.8">
       <li *ngFor="let p of problems">
         <strong>{{ p.title }}</strong>
-        <button (click)="renameProblem(p)">Rename</button>
-        <button (click)="removeProblem(p)">Delete</button>
+        <button mat-button type="button" (click)="renameProblem(p)">Rename</button>
+        <button mat-button type="button" color="warn" (click)="removeProblem(p)">Delete</button>
 
         <!-- Issue操作 -->
         <div style="margin:6px 0 10px 16px;">
-          <button (click)="toggleIssues(p.id!)">
+          <button mat-button type="button" (click)="toggleIssues(p.id!)">
             {{ issuesShown[p.id!] ? '▲ Hide Issues' : '▼ Show Issues' }}
           </button>
 
           <!-- Issue追加 -->
           <form *ngIf="issuesShown[p.id!]" (ngSubmit)="createIssue(p.id!)" style="display:flex; gap:6px; margin-top:8px;">
             <input [(ngModel)]="issueTitle[p.id!]" name="issueTitle-{{p.id}}" placeholder="New Issue title" required />
-            <button type="submit">＋ Add Issue</button>
+            <button mat-raised-button color="primary" type="submit">＋ Add Issue</button>
           </form>
 
           <!-- Issue一覧 -->
           <ul *ngIf="issuesShown[p.id!] && (issuesMap[p.id!] | async) as issues" style="margin-left:12px;">
             <li *ngFor="let i of issues">
               - <strong>{{ i.title }}</strong>
-              <button (click)="renameIssue(p.id!, i)">Rename</button>
-              <button (click)="removeIssue(p.id!, i)">Delete</button>
+              <button mat-button type="button" (click)="renameIssue(p.id!, i)">Rename</button>
+              <button mat-button type="button" color="warn" (click)="removeIssue(p.id!, i)">Delete</button>
 
               <!-- Task操作 -->
               <div style="margin:6px 0 8px 16px;">
-                <button (click)="toggleTasks(p.id!, i.id!)">
+                <button mat-button type="button" (click)="toggleTasks(p.id!, i.id!)">
                   {{ tasksShown[key(p.id!, i.id!)] ? '▲ Hide Tasks' : '▼ Show Tasks' }}
                 </button>
 
@@ -60,7 +68,7 @@ import { Problem, Issue, Task } from '../models/types';
                   <input [(ngModel)]="taskTitle[key(p.id!, i.id!)]"
                          name="taskTitle-{{ key(p.id!, i.id!) }}"
                          placeholder="New Task title" required />
-                  <button type="submit">＋ Add Task</button>
+                  <button mat-raised-button color="primary" type="submit">＋ Add Task</button>
                 </form>
 
                 <!-- Task一覧 -->
@@ -68,8 +76,8 @@ import { Problem, Issue, Task } from '../models/types';
                     style="margin-left:12px;">
                   <li *ngFor="let t of tasks">
                     · {{ t.title }}
-                    <button (click)="renameTask(p.id!, i.id!, t)">Rename</button>
-                    <button (click)="removeTask(p.id!, i.id!, t)">Delete</button>
+                    <button mat-button type="button" (click)="renameTask(p.id!, i.id!, t)">Rename</button>
+                    <button mat-button type="button" color="warn" (click)="removeTask(p.id!, i.id!, t)">Delete</button>
                   </li>
                   <li *ngIf="tasks.length === 0" style="opacity:.7">（Taskはまだありません）</li>
                 </ul>
@@ -82,10 +90,53 @@ import { Problem, Issue, Task } from '../models/types';
       <li *ngIf="problems.length === 0" style="opacity:.7">（Problemはまだありません）</li>
     </ul>
 
+    <hr style="margin:16px 0; opacity:.3;">
+    <h4>Problems (MatTree preview)</h4>
+
+    <mat-tree [dataSource]="data" [treeControl]="tree" class="mat-elevation-z1">
+      <mat-nested-tree-node *matTreeNodeDef="let node">
+        <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-bottom:1px solid rgba(0,0,0,.06);">
+          <button mat-icon-button disabled>
+            <mat-icon>folder</mat-icon>
+          </button>
+          <span style="font-weight:600">{{ node.name }}</span>
+          <span style="flex:1 1 auto"></span>
+          <!-- 既存のProblem用メソッドを再利用 -->
+          <button mat-button type="button" (click)="renameProblemNode(node)">Rename</button>
+          <button mat-button type="button" color="warn" (click)="removeProblemNode(node)">Delete</button>
+
+        </div>
+
+    <!-- 再帰アウトレット（子は後で追加） -->
+    <div>
+      <ng-container matTreeNodeOutlet></ng-container>
+    </div>
+  </mat-nested-tree-node>
+</mat-tree>
+
+
     <ng-template #loading>Loading...</ng-template>
   `
 })
+
+
 export class TreePage {
+
+    // MatTreeのノードからProblemを操作するアダプタ
+renameProblemNode(node: { id: string; name: string }) {
+    const t = prompt('New Problem title', node.name);
+    if (t && t.trim()) {
+      this.problems.update(node.id, { title: t.trim() });
+    }
+  }
+  
+  removeProblemNode(node: { id: string; name: string }) {
+    if (confirm(`Delete "${node.name}"?`)) {
+      this.problems.remove(node.id);
+    }
+  }
+
+  
   problems$!: Observable<Problem[]>;
   problemTitle = '';
 
@@ -107,7 +158,17 @@ export class TreePage {
 
   ngOnInit() {
     this.problems$ = this.problems.list();
+    
+    this.subForTree = this.problems.list().subscribe(rows => {
+        this.data = rows.map(r => ({ id: r.id!, name: r.title })); // Problemだけ
+        this.tree.dataNodes = this.data;
+      });
+   }
+
+   ngOnDestroy() {
+    this.subForTree?.unsubscribe();
   }
+  
 
   // ---- Problem CRUD ----
   async createProblem() {
@@ -175,4 +236,9 @@ export class TreePage {
       await this.tasks.remove(problemId, issueId, task.id!);
     }
   }
+
+  data: TreeNode[] = [];
+  tree = new NestedTreeControl<TreeNode>(n => n.children ?? []);
+  private subForTree?: import('rxjs').Subscription;
+
 }

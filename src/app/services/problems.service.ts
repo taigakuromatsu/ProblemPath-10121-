@@ -1,26 +1,35 @@
 import { Injectable } from '@angular/core';
-import { Firestore, collection, doc, addDoc, updateDoc, deleteDoc, collectionData } from '@angular/fire/firestore';
-import { serverTimestamp } from 'firebase/firestore';
+import { Firestore } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
 import { Problem } from '../models/types';
 
+// Firebase SDK (native) ＋ rxfire
+import {
+  collection as nativeCollection,
+  doc as nativeDoc,
+  addDoc as nativeAddDoc,
+  updateDoc as nativeUpdateDoc,
+  deleteDoc as nativeDeleteDoc,
+  serverTimestamp
+} from 'firebase/firestore';
+import { collectionData as rxCollectionData } from 'rxfire/firestore';
+
 @Injectable({ providedIn: 'root' })
 export class ProblemsService {
-  // まずはプロジェクト固定で走る（後で切替UIを作る）
   private readonly colPath = 'projects/default/problems';
 
   constructor(private fs: Firestore) {}
 
-  // 一覧（リアルタイム購読）
+  // 一覧（リアルタイム）
   list(): Observable<Problem[]> {
-    const colRef = collection(this.fs, this.colPath);
-    return collectionData(colRef, { idField: 'id' }) as Observable<Problem[]>;
+    const colRef = nativeCollection(this.fs as any, this.colPath);
+    return rxCollectionData(colRef, { idField: 'id' }) as Observable<Problem[]>;
   }
 
   // 作成
   async create(p: Partial<Problem>) {
-    const colRef = collection(this.fs, this.colPath);
-    const docRef = await addDoc(colRef, {
+    const colRef = nativeCollection(this.fs as any, this.colPath);
+    return nativeAddDoc(colRef, {
       title: p.title ?? 'Untitled',
       description: p.description ?? '',
       status: p.status ?? 'not_started',
@@ -32,19 +41,17 @@ export class ProblemsService {
       updatedAt: serverTimestamp(),
       template: p.template ?? {}
     });
-    console.log('[ProblemsService.create] path =', docRef.path);
-    return docRef;
-  }  
+  }
 
   // 更新
   async update(id: string, patch: Partial<Problem>) {
-    const docRef = doc(this.fs, `${this.colPath}/${id}`);
-    return updateDoc(docRef, { ...patch, updatedAt: serverTimestamp() });
+    const ref = nativeDoc(this.fs as any, `${this.colPath}/${id}`);
+    return nativeUpdateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
   }
 
   // 削除
   async remove(id: string) {
-    const docRef = doc(this.fs, `${this.colPath}/${id}`);
-    return deleteDoc(docRef);
+    const ref = nativeDoc(this.fs as any, `${this.colPath}/${id}`);
+    return nativeDeleteDoc(ref);
   }
 }
