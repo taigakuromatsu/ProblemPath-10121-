@@ -327,7 +327,9 @@ renameProblemNode(node: { id: string; name: string }) {
   }
 
 
-  private taskSubs = new Map<string, import('rxjs').Subscription>(); // key = `${problemId}_${issueId}`
+
+  
+private taskSubs = new Map<string, import('rxjs').Subscription>(); // key = `${problemId}_${issueId}`
 
 // IssueノードにTaskの購読を張る
 private attachTaskSubscription(problemId: string, issueNode: TreeNode) {
