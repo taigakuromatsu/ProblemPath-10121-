@@ -1,0 +1,178 @@
+import { Component } from '@angular/core';
+import { AsyncPipe, NgFor, NgIf } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { Observable } from 'rxjs';
+
+import { ProblemsService } from '../services/problems.service';
+import { IssuesService } from '../services/issues.service';
+import { TasksService } from '../services/tasks.service';
+import { Problem, Issue, Task } from '../models/types';
+
+@Component({
+  standalone: true,
+  selector: 'pp-tree',
+  imports: [AsyncPipe, NgFor, NgIf, FormsModule],
+  template: `
+    <h3>Problems</h3>
+
+    <!-- Problem追加 -->
+    <form (ngSubmit)="createProblem()" style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+      <input [(ngModel)]="problemTitle" name="problemTitle" placeholder="New Problem title" required />
+      <button type="submit">＋ Add Problem</button>
+    </form>
+
+    <!-- Problem一覧 -->
+    <ul *ngIf="problems$ | async as problems; else loading" style="line-height:1.8">
+      <li *ngFor="let p of problems">
+        <strong>{{ p.title }}</strong>
+        <button (click)="renameProblem(p)">Rename</button>
+        <button (click)="removeProblem(p)">Delete</button>
+
+        <!-- Issue操作 -->
+        <div style="margin:6px 0 10px 16px;">
+          <button (click)="toggleIssues(p.id!)">
+            {{ issuesShown[p.id!] ? '▲ Hide Issues' : '▼ Show Issues' }}
+          </button>
+
+          <!-- Issue追加 -->
+          <form *ngIf="issuesShown[p.id!]" (ngSubmit)="createIssue(p.id!)" style="display:flex; gap:6px; margin-top:8px;">
+            <input [(ngModel)]="issueTitle[p.id!]" name="issueTitle-{{p.id}}" placeholder="New Issue title" required />
+            <button type="submit">＋ Add Issue</button>
+          </form>
+
+          <!-- Issue一覧 -->
+          <ul *ngIf="issuesShown[p.id!] && (issuesMap[p.id!] | async) as issues" style="margin-left:12px;">
+            <li *ngFor="let i of issues">
+              - <strong>{{ i.title }}</strong>
+              <button (click)="renameIssue(p.id!, i)">Rename</button>
+              <button (click)="removeIssue(p.id!, i)">Delete</button>
+
+              <!-- Task操作 -->
+              <div style="margin:6px 0 8px 16px;">
+                <button (click)="toggleTasks(p.id!, i.id!)">
+                  {{ tasksShown[key(p.id!, i.id!)] ? '▲ Hide Tasks' : '▼ Show Tasks' }}
+                </button>
+
+                <!-- Task追加 -->
+                <form *ngIf="tasksShown[key(p.id!, i.id!)]"
+                      (ngSubmit)="createTask(p.id!, i.id!)"
+                      style="display:flex; gap:6px; margin-top:8px;">
+                  <input [(ngModel)]="taskTitle[key(p.id!, i.id!)]"
+                         name="taskTitle-{{ key(p.id!, i.id!) }}"
+                         placeholder="New Task title" required />
+                  <button type="submit">＋ Add Task</button>
+                </form>
+
+                <!-- Task一覧 -->
+                <ul *ngIf="tasksShown[key(p.id!, i.id!)] && (tasksMap[key(p.id!, i.id!)] | async) as tasks"
+                    style="margin-left:12px;">
+                  <li *ngFor="let t of tasks">
+                    · {{ t.title }}
+                    <button (click)="renameTask(p.id!, i.id!, t)">Rename</button>
+                    <button (click)="removeTask(p.id!, i.id!, t)">Delete</button>
+                  </li>
+                  <li *ngIf="tasks.length === 0" style="opacity:.7">（Taskはまだありません）</li>
+                </ul>
+              </div>
+            </li>
+            <li *ngIf="issues.length === 0" style="opacity:.7">（Issueはまだありません）</li>
+          </ul>
+        </div>
+      </li>
+      <li *ngIf="problems.length === 0" style="opacity:.7">（Problemはまだありません）</li>
+    </ul>
+
+    <ng-template #loading>Loading...</ng-template>
+  `
+})
+export class TreePage {
+  problems$!: Observable<Problem[]>;
+  problemTitle = '';
+
+  // Issue購読/UI状態
+  issuesMap: Record<string, Observable<Issue[]>> = {};
+  issuesShown: Record<string, boolean> = {};
+  issueTitle: Record<string, string> = {};
+
+  // Task購読/UI状態（problemId_issueId をキーにする）
+  tasksMap: Record<string, Observable<Task[]>> = {};
+  tasksShown: Record<string, boolean> = {};
+  taskTitle: Record<string, string> = {};
+
+  constructor(
+    private problems: ProblemsService,
+    private issues: IssuesService,
+    private tasks: TasksService
+  ) {}
+
+  ngOnInit() {
+    this.problems$ = this.problems.list();
+  }
+
+  // ---- Problem CRUD ----
+  async createProblem() {
+    const t = this.problemTitle.trim();
+    if (!t) return;
+    await this.problems.create({ title: t });
+    this.problemTitle = '';
+  }
+  async renameProblem(p: Problem) {
+    const t = prompt('New Problem title', p.title);
+    if (t && t.trim()) await this.problems.update(p.id!, { title: t.trim() });
+  }
+  async removeProblem(p: Problem) {
+    if (confirm(`Delete "${p.title}"?`)) await this.problems.remove(p.id!);
+  }
+
+  // ---- Issue 表示＆CRUD ----
+  toggleIssues(problemId: string) {
+    if (!this.issuesShown[problemId]) {
+      this.issuesMap[problemId] = this.issues.listByProblem(problemId);
+      this.issuesShown[problemId] = true;
+    } else {
+      this.issuesShown[problemId] = !this.issuesShown[problemId];
+    }
+  }
+  async createIssue(problemId: string) {
+    const t = (this.issueTitle[problemId] ?? '').trim();
+    if (!t) return;
+    await this.issues.create(problemId, { title: t });
+    this.issueTitle[problemId] = '';
+  }
+  async renameIssue(problemId: string, i: Issue) {
+    const t = prompt('New Issue title', i.title);
+    if (t && t.trim()) await this.issues.update(problemId, i.id!, { title: t.trim() });
+  }
+  async removeIssue(problemId: string, i: Issue) {
+    if (confirm(`Delete Issue "${i.title}"?`)) await this.issues.remove(problemId, i.id!);
+  }
+
+  // ---- Task 表示＆CRUD ----
+  key(problemId: string, issueId: string) { return `${problemId}_${issueId}`; }
+
+  toggleTasks(problemId: string, issueId: string) {
+    const k = this.key(problemId, issueId);
+    if (!this.tasksShown[k]) {
+      this.tasksMap[k] = this.tasks.listByIssue(problemId, issueId);
+      this.tasksShown[k] = true;
+    } else {
+      this.tasksShown[k] = !this.tasksShown[k];
+    }
+  }
+  async createTask(problemId: string, issueId: string) {
+    const k = this.key(problemId, issueId);
+    const t = (this.taskTitle[k] ?? '').trim();
+    if (!t) return;
+    await this.tasks.create(problemId, issueId, { title: t });
+    this.taskTitle[k] = '';
+  }
+  async renameTask(problemId: string, issueId: string, task: Task) {
+    const t = prompt('New Task title', task.title);
+    if (t && t.trim()) await this.tasks.update(problemId, issueId, task.id!, { title: t.trim() });
+  }
+  async removeTask(problemId: string, issueId: string, task: Task) {
+    if (confirm(`Delete Task "${task.title}"?`)) {
+      await this.tasks.remove(problemId, issueId, task.id!);
+    }
+  }
+}
