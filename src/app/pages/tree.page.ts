@@ -15,7 +15,7 @@ import { NestedTreeControl } from '@angular/cdk/tree';
 import { MatTreeModule } from '@angular/material/tree';
 import { MatIconModule } from '@angular/material/icon';
 
-type TreeNode = { id: string; name: string; kind: 'problem' | 'issue'; children?: TreeNode[]; };
+type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task'; children?: TreeNode[]; };
 
 
 
@@ -98,7 +98,7 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue'; children?
 
     <mat-tree [dataSource]="dataSource" [treeControl]="tree" class="mat-elevation-z1">
 
-  <!-- 親ノード：Problem（子の有無に関係なくここに入る） -->
+  <!-- Problem（親） -->
   <mat-nested-tree-node *matTreeNodeDef="let node; when: isProblem">
     <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-bottom:1px solid rgba(0,0,0,.06);">
       <button mat-icon-button matTreeNodeToggle [disabled]="!(node.children?.length)">
@@ -109,19 +109,29 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue'; children?
       <button mat-button type="button" (click)="renameProblemNode(node)">Rename</button>
       <button mat-button type="button" color="warn" (click)="removeProblemNode(node)">Delete</button>
     </div>
-    <div *ngIf="tree.isExpanded(node)">
-  <ng-container matTreeNodeOutlet></ng-container>
-</div>
-
+    <div *ngIf="tree.isExpanded(node)"><ng-container matTreeNodeOutlet></ng-container></div>
   </mat-nested-tree-node>
 
-  <!-- 葉ノード：Issue -->
-  <mat-tree-node *matTreeNodeDef="let node">
-    <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-bottom:1px solid rgba(0,0,0,.06); margin-left:32px;">
-      <button mat-icon-button disabled><mat-icon>folder</mat-icon></button>
+  <!-- Issue（親） -->
+  <mat-nested-tree-node *matTreeNodeDef="let node; when: isIssue">
+    <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-bottom:1px solid rgba(0,0,0,.06); margin-left:24px;">
+      <button mat-icon-button matTreeNodeToggle [disabled]="!(node.children?.length)">
+        <mat-icon>{{ tree.isExpanded(node) ? 'expand_more' : 'chevron_right' }}</mat-icon>
+      </button>
       <span>{{ node.name }}</span>
       <span style="flex:1 1 auto"></span>
-      <!-- ※ 次のステップで Issue の Rename/Delete を実装 -->
+      <!-- （後で Issue の Rename/Delete をここに付ける） -->
+    </div>
+    <div *ngIf="tree.isExpanded(node)"><ng-container matTreeNodeOutlet></ng-container></div>
+  </mat-nested-tree-node>
+
+  <!-- Task（葉） -->
+  <mat-tree-node *matTreeNodeDef="let node">
+    <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-bottom:1px solid rgba(0,0,0,.06); margin-left:56px;">
+      <button mat-icon-button disabled><mat-icon>task_alt</mat-icon></button>
+      <span>{{ node.name }}</span>
+      <span style="flex:1 1 auto"></span>
+      <!-- （後で Task の Rename/Delete をここに付ける） -->
     </div>
   </mat-tree-node>
 
@@ -167,6 +177,8 @@ renameProblemNode(node: { id: string; name: string }) {
 
   dataSource = new MatTreeNestedDataSource<TreeNode>();
   isProblem = (_: number, node: TreeNode) => node.kind === 'problem';
+  isIssue = (_: number, node: TreeNode) => node.kind === 'issue';
+
 
 
   constructor(
@@ -198,6 +210,7 @@ renameProblemNode(node: { id: string; name: string }) {
    ngOnDestroy() {
     this.subForTree?.unsubscribe();
     this.issueSubs.forEach(s => s.unsubscribe());
+    this.taskSubs.forEach(s => s.unsubscribe());
   }
   
 
@@ -272,6 +285,11 @@ renameProblemNode(node: { id: string; name: string }) {
   tree = new NestedTreeControl<TreeNode>(n => n.children ?? []);
   private subForTree?: import('rxjs').Subscription;
 
+  
+  
+  
+  
+  
   private issueSubs = new Map<string, import('rxjs').Subscription>(); // problemId -> sub
 
   private attachIssueSubscription(pNode: TreeNode) {
@@ -279,28 +297,68 @@ renameProblemNode(node: { id: string; name: string }) {
     this.issueSubs.get(pNode.id)?.unsubscribe();
   
     const sub = this.issues.listByProblem(pNode.id).subscribe(issues => {
-      // 子ノードを生成
+      // 1) 最新の Issue ノード群を生成
       const kids: TreeNode[] = issues.map(i => ({
         id: i.id!, name: i.title, kind: 'issue'
       }));
   
-      // ★ 親ノードの参照を置き換える（これが重要）
-      const idx = this.data.findIndex(n => n.id === pNode.id);
-      if (idx !== -1) {
-        const newNode: TreeNode = { ...this.data[idx], children: kids };
+      // 2) 親ノードを“新オブジェクト”で置き換え（参照更新）
+      const pIdx = this.data.findIndex(n => n.id === pNode.id);
+      if (pIdx !== -1) {
+        const newNode: TreeNode = { ...this.data[pIdx], children: kids };
         this.data = [
-          ...this.data.slice(0, idx),
+          ...this.data.slice(0, pIdx),
           newNode,
-          ...this.data.slice(idx + 1)
+          ...this.data.slice(pIdx + 1)
         ];
       }
   
-      // ★ dataSource / tree に“新しい配列参照”を渡して通知
+      // 3) まずツリーに通知（参照ごと差し替え）
       this.tree.dataNodes = [...this.data];
       this.dataSource.data = [...this.data];
+  
+      // 4) ★ここで“最新のIssue配列”に対して Task 購読を張る
+      for (const issueNode of kids) {
+        this.attachTaskSubscription(pNode.id, issueNode);
+      }
     });
   
     this.issueSubs.set(pNode.id, sub);
-  }  
+  }
+
+
+  private taskSubs = new Map<string, import('rxjs').Subscription>(); // key = `${problemId}_${issueId}`
+
+// IssueノードにTaskの購読を張る
+private attachTaskSubscription(problemId: string, issueNode: TreeNode) {
+  const key = `${problemId}_${issueNode.id}`;
+  this.taskSubs.get(key)?.unsubscribe();
+
+  const sub = this.tasks.listByIssue(problemId, issueNode.id).subscribe(tasks => {
+    const kids: TreeNode[] = tasks.map(t => ({ id: t.id!, name: t.title, kind: 'task' }));
+
+    // issueNode を置き換え（参照を更新）
+    const pIdx = this.data.findIndex(p => p.id === problemId);
+    if (pIdx !== -1) {
+      const iIdx = this.data[pIdx].children?.findIndex(i => i.id === issueNode.id) ?? -1;
+      if (iIdx !== -1) {
+        const newIssue = { ...this.data[pIdx].children![iIdx], children: kids };
+        const newProblems = [...this.data];
+        const newIssues = [
+          ...newProblems[pIdx].children!.slice(0, iIdx),
+          newIssue,
+          ...newProblems[pIdx].children!.slice(iIdx + 1)
+        ];
+        newProblems[pIdx] = { ...newProblems[pIdx], children: newIssues };
+        this.data = newProblems;
+        this.tree.dataNodes = [...this.data];
+        this.dataSource.data = [...this.data];
+      }
+    }
+  });
+
+  this.taskSubs.set(key, sub);
+}
+
 
 }
