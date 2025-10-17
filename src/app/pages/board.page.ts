@@ -10,9 +10,12 @@ import { IssuesService } from '../services/issues.service';
 import { TasksService } from '../services/tasks.service';
 import { Problem, Issue, Task } from '../models/types';
 
-import { DragDropModule, CdkDragDrop } from '@angular/cdk/drag-drop';
+import { DragDropModule, CdkDragDrop, moveItemInArray, transferArrayItem } from '@angular/cdk/drag-drop';
 import { Router, ActivatedRoute, RouterLink } from '@angular/router';
-
+import { tap, shareReplay } from 'rxjs/operators';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { DestroyRef } from '@angular/core';
+import { CdkDrag, CdkDropList } from '@angular/cdk/drag-drop'
 
 @Component({
     standalone: true,
@@ -43,11 +46,7 @@ import { Router, ActivatedRoute, RouterLink } from '@angular/router';
             <div
               *ngFor="let col of statusCols"
               style="border:1px solid #eee; border-radius:10px; padding:10px; min-height:80px;"
-              cdkDropList
-              [id]="'list-' + col"
-              [cdkDropListConnectedTo]="dropIds"
-              cdkDropListSortingDisabled="true"
-              (cdkDropListDropped)="onDrop($event, pid)"
+              
             >
               <div style="font-weight:600; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
                 <span>{{ statusLabel[col] }}</span>
@@ -60,30 +59,36 @@ import { Router, ActivatedRoute, RouterLink } from '@angular/router';
                 </div>
   
               <!-- 列内を Issue ごとにグループ表示 -->
-              <ng-container *ngFor="let i of issues">
+                <ng-container *ngFor="let i of issues">
                 <ng-container *ngIf="tasksMap[key(pid, i.id!)] | async as tasks">
-                  <ng-container *ngIf="tasksByStatus(tasks, col) as ts">
-                    <div *ngIf="ts.length > 0" style="border:1px solid #e5e7eb; border-radius:10px; padding:8px; margin-bottom:10px;">
-                      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+                    <ng-container *ngIf="tasksByStatus(tasks, col) as ts">
+                    <div
+                        cdkDropList
+                        [cdkDropListData]="ts"
+                        [cdkDropListConnectedTo]="listIds(i.id!)"
+                        [id]="listId(col, i.id!)"
+                        (cdkDropListDropped)="onListDrop($event, pid, i.id!)"
+                        [cdkDropListEnterPredicate]="canEnter"
+                        style="border:1px solid #e5e7eb; border-radius:10px; padding:8px; margin-bottom:10px; min-height:60px;"
+                    >
+                        <!-- Issueグループのヘッダ -->
+                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
                         <div style="font-weight:600;">{{ i.title }}</div>
                         <span style="font-size:12px; opacity:.7;">{{ ts.length }} 件</span>
-                      </div>
-  
-                      <div *ngFor="let t of ts"
+                        </div>
+
+                        <!-- カード本体 -->
+                        <div *ngFor="let t of ts; trackBy: trackTask"
                             cdkDrag
                             [cdkDragData]="{ task: t, issueId: i.id }"
                             [cdkDragDisabled]="isBusy(t.id!)"
                             [style.opacity]="isBusy(t.id!) ? 0.5 : 1"
                             style="border:1px solid #ddd; border-radius:8px; padding:8px; margin-bottom:6px;">
-
-                        <!-- ドラッグ時のプレビュー -->
                         <ng-template cdkDragPreview>
                             <div style="border:1px solid #bbb; border-radius:8px; padding:8px; background:#fff;">
                             {{ t.title }}
                             </div>
                         </ng-template>
-
-                        <!-- プレースホルダ（空白を確保） -->
                         <ng-template cdkDragPlaceholder>
                             <div style="border:1px dashed #bbb; border-radius:8px; padding:8px; background:#fafafa;"></div>
                         </ng-template>
@@ -96,11 +101,17 @@ import { Router, ActivatedRoute, RouterLink } from '@angular/router';
                             {{ statusLabel[next] }}
                             </button>
                         </div>
-                      </div>
+                        </div>
+
+                        <!-- 空プレースホルダ（受け皿が可視化される） -->
+                        <div *ngIf="ts.length === 0"
+                            style="padding:8px; border:1px dashed #d1d5db; border-radius:8px; text-align:center; opacity:.6; min-height: 100px;">
+                        ここにドロップ
+                        </div>
                     </div>
-                  </ng-container>
+                    </ng-container>
                 </ng-container>
-              </ng-container>
+                </ng-container>
             </div>
           </div>
         </div>
@@ -133,6 +144,7 @@ totals: Record<'not_started'|'in_progress'|'done', number> = {
     this.totals = t;
   }
   
+  trackTask = (_: number, t: Task) => t.id;
 
     // 同一タスクの多重操作を防ぐための処理中セット
 busyTaskIds = new Set<string>();
@@ -160,29 +172,28 @@ isBusy(id: string | undefined | null): boolean {
     private issues: IssuesService,
     private tasks: TasksService,
     private router: Router,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private destroyRef: DestroyRef
   ) {}
 
-  ngOnInit() {
-    // Problem一覧（order昇順）をそのまま利用
+  
+ngOnInit() {
     this.problems$ = this.problems.list();
-
+  
     this.issues$ = this.selectedProblem$.pipe(
-        switchMap(pid => {
-          if (!pid) {
-            // ★ 問題未選択時は全リセット
-            this.taskCountSubs.forEach(s => s.unsubscribe());
-            this.taskCountSubs.clear();
-            this.tasksSnapshot = {};
-            this.totals = { not_started: 0, in_progress: 0, done: 0 };
-            return of([]);
-          }
-      
-          const stream = this.issues.listByProblem(pid);
-      
-          // Issuesが届くたび、そのIssueごとに Tasks の購読を確保
-          stream.subscribe(list => {
-            // 1) 既存購読のうち、今回リストに含まれないものを掃除
+      switchMap(pid => {
+        if (!pid) {
+          // 全リセット
+          this.taskCountSubs.forEach(s => s.unsubscribe());
+          this.taskCountSubs.clear();
+          this.tasksSnapshot = {};
+          this.totals = { not_started: 0, in_progress: 0, done: 0 };
+          return of([]);
+        }
+  
+        const stream = this.issues.listByProblem(pid).pipe(
+          tap(list => {
+            // ★ tap内に移動（外側購読のライフサイクルに乗る）
             const aliveKeys = new Set(list.map(i => this.key(pid, i.id!)));
             for (const [k, sub] of this.taskCountSubs.entries()) {
               if (!aliveKeys.has(k)) {
@@ -191,40 +202,35 @@ isBusy(id: string | undefined | null): boolean {
                 delete this.tasksSnapshot[k];
               }
             }
-      
-            // 2) 各Issueの Task ストリーム購読を確保（未登録のみ）
             for (const i of list) {
               const k = this.key(pid, i.id!);
-      
               if (!this.tasksMap[k]) {
-                this.tasksMap[k] = this.tasks.listByIssue(pid, i.id!);
+                // ↓ shareReplay(1) で二重購読を防ぐ
+                this.tasksMap[k] = this.tasks.listByIssue(pid, i.id!).pipe(shareReplay(1));
               }
-      
               if (!this.taskCountSubs.has(k)) {
-                const sub = this.tasks.listByIssue(pid, i.id!).subscribe(ts => {
+                const sub = this.tasksMap[k].subscribe(ts => {
                   this.tasksSnapshot[k] = ts ?? [];
-                  this.recalcTotals();            // ★ 受信のたびに合計再計算
+                  this.recalcTotals();
                 });
                 this.taskCountSubs.set(k, sub);
               }
             }
-      
-            // 3) 初回も一度集計を更新（空なら0のまま）
             this.recalcTotals();
-          });
-      
-          return stream;
-        })
-      );
-      
-
-        // URLの ?pid=... を監視して選択状態に反映
-        this.route.queryParamMap.subscribe((m) => {
-            const pid = m.get('pid');
-            this.selectedProblemId = pid;
-            this.selectedProblem$.next(pid);
-        });
-
+          })
+        );
+        return stream;
+      })
+    );
+  
+    // クエリパラメータ購読は破棄を自動化
+    this.route.queryParamMap
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(m => {
+        const pid = m.get('pid');
+        this.selectedProblemId = pid;
+        this.selectedProblem$.next(pid);
+      });
   }
 
   onSelectProblem(pid: string | null) {
@@ -266,32 +272,99 @@ isBusy(id: string | undefined | null): boolean {
     return (tasks ?? []).filter(t => t.status === status);
   }  
 
+// ある Issue に属する3列（not_started / in_progress / done）を接続
+listIds(issueId: string): string[] {
+    return (['not_started','in_progress','done'] as const).map(s => this.listId(s, issueId));
+  }
+  
+  // 各リストの一意ID（onListDrop の parse 規則と一致させる）
+  listId(status: 'not_started'|'in_progress'|'done', issueId: string): string {
+    return `dl-${status}-${issueId}`;
+  }  
 
-  // ★ 列DropListのID一覧（list-not_started / list-in_progress / list-done）
-dropIds = (['not_started','in_progress','done'] as const).map(s => `list-${s}`);
 
-async onDrop(ev: CdkDragDrop<any>, problemId: string) {
-    // 同一列内は未対応（orderは後段）なのでスキップ
-    if (ev.previousContainer === ev.container) return;
+
+  async onListDrop(
+    ev: CdkDragDrop<Task[]>,
+    problemId: string,
+    issueId: string
+  ) {
+    // ID -> status を復元（dl-<status>-<issueId>）
+    const parse = (id: string) => id.split('-')[1] as 'not_started'|'in_progress'|'done';
+    const srcStatus  = parse(ev.previousContainer.id);
+    const destStatus = parse(ev.container.id);
   
-    const dest = ev.container.id.replace('list-','') as 'not_started'|'in_progress'|'done';
-    const data = ev.item.data as { task: Task; issueId: string };
-    const t = data.task;
+    // 配列を取得（cdkDropListData の参照）
+    const src = ev.previousContainer.data ?? [];
+    const dst = ev.container.data ?? [];
   
-    if (!t.id || this.isBusy(t.id)) return;
+    // 同一リスト内＝並べ替えだけ
+    if (ev.previousContainer === ev.container) {
+      moveItemInArray(dst, ev.previousIndex, ev.currentIndex);
+      await this.persistOrder(problemId, issueId, dst);   // 現在リストを 10,20,30... で保存
+      return;
+    }
   
-    const progress = dest === 'done' ? 100 : dest === 'not_started' ? 0 : 50;
+    // 列間＝要素を移動（src -> dst）
+    transferArrayItem(src, dst, ev.previousIndex, ev.currentIndex);
   
-    this.busyTaskIds.add(t.id);
+    // 移動した Task を取得
+    const moved = dst[ev.currentIndex];
+    if (!moved?.id || this.isBusy(moved.id)) return;
+  
+    // 進捗の自動連動（簡易）
+    const progress = destStatus === 'done' ? 100 : destStatus === 'not_started' ? 0 : 50;
+  
+    // 1) まず moved の status + progress を更新
+    this.busyTaskIds.add(moved.id);
     try {
-      await this.tasks.update(problemId, data.issueId, t.id, { status: dest, progress });
+      await this.tasks.update(problemId, issueId, moved.id, { status: destStatus, progress });
     } catch (e) {
       console.error(e);
-      alert('更新に失敗しました');
+      alert('ステータス更新に失敗しました');
     } finally {
-      this.busyTaskIds.delete(t.id);
+      this.busyTaskIds.delete(moved.id);
+    }
+  
+    // 2) 両リストの order を再採番して保存（10刻み）
+    await Promise.all([
+      this.persistOrder(problemId, issueId, src),
+      this.persistOrder(problemId, issueId, dst),
+    ]);
+  }
+  
+  private async persistOrder(
+    problemId: string,
+    issueId: string,
+    arr: Task[]
+  ) {
+    const updates = arr.map((t, idx) => ({ id: t.id!, order: (idx + 1) * 10 }));
+    for (const u of updates) {
+      if (!u.id || this.isBusy(u.id)) continue;
+      this.busyTaskIds.add(u.id);
+      try {
+        await this.tasks.update(problemId, issueId, u.id, { order: u.order });
+      } catch (e) {
+        console.error(e);
+        alert('順序の保存に失敗しました');
+      } finally {
+        this.busyTaskIds.delete(u.id);
+      }
     }
   }
 
+  ngOnDestroy() {
+    this.taskCountSubs.forEach(s => s.unsubscribe());
+    this.taskCountSubs.clear();
+  }
+  
+  
+// ドロップ可否（処理中タスクは不可）
+canEnter = (drag: CdkDrag, _drop: CdkDropList) => {
+    const data = drag?.data as { task: Task; issueId: string } | undefined;
+    const id = data?.task?.id;
+    return !!id && !this.isBusy(id);
+  };
+  
 
 }

@@ -150,7 +150,7 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task';
 </mat-nested-tree-node>
 
   <!-- Task（葉） -->
-  <mat-tree-node *matTreeNodeDef="let node">
+  <mat-nested-tree-node *matTreeNodeDef="let node">
     <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-bottom:1px solid rgba(0,0,0,.06); margin-left:56px;">
       <button mat-icon-button disabled><mat-icon>task_alt</mat-icon></button>
       <span>{{ node.name }}</span>
@@ -158,7 +158,7 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task';
       <button mat-button type="button" (click)="renameTaskNode(node)">Rename</button>
       <button mat-button type="button" color="warn" (click)="removeTaskNode(node)">Delete</button>
     </div>
-  </mat-tree-node>
+  </mat-nested-tree-node>
 
 </mat-tree>
 
