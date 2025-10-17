@@ -41,6 +41,8 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task';
     <ul *ngIf="problems$ | async as problems; else loading" style="line-height:1.8">
       <li *ngFor="let p of problems">
         <strong>{{ p.title }}</strong>
+        <button mat-button type="button" (click)="moveProblemUp(p)"  aria-label="Move up">▲</button>
+        <button mat-button type="button" (click)="moveProblemDown(p)" aria-label="Move down">▼</button>
         <button mat-button type="button" (click)="renameProblem(p)">Rename</button>
         <button mat-button type="button" color="warn" (click)="removeProblem(p)">Delete</button>
 
@@ -60,6 +62,8 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task';
           <ul *ngIf="issuesShown[p.id!] && (issuesMap[p.id!] | async) as issues" style="margin-left:12px;">
             <li *ngFor="let i of issues">
               - <strong>{{ i.title }}</strong>
+              <button mat-button type="button" (click)="moveIssueUp(p.id!, i)">▲</button>
+              <button mat-button type="button" (click)="moveIssueDown(p.id!, i)">▼</button>
               <button mat-button type="button" (click)="renameIssue(p.id!, i)">Rename</button>
               <button mat-button type="button" color="warn" (click)="removeIssue(p.id!, i)">Delete</button>
 
@@ -84,6 +88,8 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task';
                     style="margin-left:12px;">
                   <li *ngFor="let t of tasks">
                     · {{ t.title }}
+                    <button mat-button type="button" (click)="moveTaskUp(p.id!, i.id!, t)">▲</button>
+                    <button mat-button type="button" (click)="moveTaskDown(p.id!, i.id!, t)">▼</button>
                     <button mat-button type="button" (click)="renameTask(p.id!, i.id!, t)">Rename</button>
                     <button mat-button type="button" color="warn" (click)="removeTask(p.id!, i.id!, t)">Delete</button>
                   </li>
@@ -150,6 +156,7 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task';
     <ng-template #loading>Loading...</ng-template>
   `
 })
+
 
 
 export class TreePage {
@@ -268,6 +275,20 @@ export class TreePage {
     if (confirm(`Delete "${p.title}"?`)) await this.problems.remove(p.id!);
   }
 
+  async moveProblemUp(p: Problem) {
+    if (p.id == null || p.order == null) return;
+    await this.problems.moveUp(p.id, p.order);
+  }
+  
+  async moveProblemDown(p: Problem) {
+    if (p.id == null || p.order == null) return;
+    await this.problems.moveDown(p.id, p.order);
+  }
+  
+
+
+
+
   // ---- Issue 表示＆CRUD ----
   toggleIssues(problemId: string) {
     if (!this.issuesShown[problemId]) {
@@ -290,6 +311,17 @@ export class TreePage {
   async removeIssue(problemId: string, i: Issue) {
     if (confirm(`Delete Issue "${i.title}"?`)) await this.issues.remove(problemId, i.id!);
   }
+  async moveIssueUp(problemId: string, i: Issue) {
+    if (!i.id || i.order == null) return;
+    await this.issues.moveUp(problemId, i.id, i.order);
+  }
+  
+  async moveIssueDown(problemId: string, i: Issue) {
+    if (!i.id || i.order == null) return;
+    await this.issues.moveDown(problemId, i.id, i.order);
+  }  
+
+
 
   // ---- Task 表示＆CRUD ----
   key(problemId: string, issueId: string) { return `${problemId}_${issueId}`; }
@@ -319,16 +351,24 @@ export class TreePage {
       await this.tasks.remove(problemId, issueId, task.id!);
     }
   }
+  async moveTaskUp(problemId: string, issueId: string, t: Task) {
+    if (!t.id || t.order == null) return;
+    await this.tasks.moveUp(problemId, issueId, t.id, t.order);
+  }
+  
+  async moveTaskDown(problemId: string, issueId: string, t: Task) {
+    if (!t.id || t.order == null) return;
+    await this.tasks.moveDown(problemId, issueId, t.id, t.order);
+  }
+
+
 
   data: TreeNode[] = [];
   tree = new NestedTreeControl<TreeNode>(n => n.children ?? []);
   private subForTree?: import('rxjs').Subscription;
 
   
-  
-  
-  
-  
+
   private issueSubs = new Map<string, import('rxjs').Subscription>(); // problemId -> sub
 
   private attachIssueSubscription(pNode: TreeNode) {

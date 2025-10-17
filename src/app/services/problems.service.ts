@@ -15,6 +15,8 @@ import {
   orderBy as nativeOrderBy,
   getDocs as nativeGetDocs,
   limit as nativeLimit,
+  where as nativeWhere,
+  writeBatch as nativeWriteBatch,
 } from 'firebase/firestore';
 import { collectionData as rxCollectionData } from 'rxfire/firestore';
 
@@ -71,6 +73,52 @@ export class ProblemsService {
     const ref = nativeDoc(this.fs as any, `${this.colPath}/${id}`);
     return nativeUpdateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
   }
+
+
+  // ★ 上へ：直前の order のドキュメントを見つけて order を入れ替える
+async moveUp(id: string, currentOrder: number): Promise<void> {
+    const colRef = nativeCollection(this.fs as any, this.colPath);
+    // currentOrder より小さい中で一番近いもの
+    const q = nativeQuery(
+      colRef,
+      nativeWhere('order', '<', currentOrder),
+      nativeOrderBy('order', 'desc'),
+      nativeLimit(1)
+    );
+    const snap = await nativeGetDocs(q);
+    if (snap.empty) return; // 先頭なら何もしない
+    const neighbor = snap.docs[0];
+    const batch = nativeWriteBatch(this.fs as any);
+    const aRef = nativeDoc(this.fs as any, `${this.colPath}/${id}`);
+    const bRef = neighbor.ref;
+    const neighborOrder = (neighbor.data() as any).order ?? 0;
+    batch.update(aRef, { order: neighborOrder, updatedAt: serverTimestamp() });
+    batch.update(bRef, { order: currentOrder, updatedAt: serverTimestamp() });
+    await batch.commit();
+  }
+  
+  // ★ 下へ：直後の order のドキュメントと入れ替える
+  async moveDown(id: string, currentOrder: number): Promise<void> {
+    const colRef = nativeCollection(this.fs as any, this.colPath);
+    // currentOrder より大きい中で一番近いもの
+    const q = nativeQuery(
+      colRef,
+      nativeWhere('order', '>', currentOrder),
+      nativeOrderBy('order', 'asc'),
+      nativeLimit(1)
+    );
+    const snap = await nativeGetDocs(q);
+    if (snap.empty) return; // 末尾なら何もしない
+    const neighbor = snap.docs[0];
+    const batch = nativeWriteBatch(this.fs as any);
+    const aRef = nativeDoc(this.fs as any, `${this.colPath}/${id}`);
+    const bRef = neighbor.ref;
+    const neighborOrder = (neighbor.data() as any).order ?? 0;
+    batch.update(aRef, { order: neighborOrder, updatedAt: serverTimestamp() });
+    batch.update(bRef, { order: currentOrder, updatedAt: serverTimestamp() });
+    await batch.commit();
+  }
+
 
   // 削除
   async remove(id: string) {
