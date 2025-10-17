@@ -10,7 +10,11 @@ import {
   addDoc as nativeAddDoc,
   updateDoc as nativeUpdateDoc,
   deleteDoc as nativeDeleteDoc,
-  serverTimestamp
+  serverTimestamp,
+  query as nativeQuery,
+  orderBy as nativeOrderBy,
+  getDocs as nativeGetDocs,
+  limit as nativeLimit,
 } from 'firebase/firestore';
 import { collectionData as rxCollectionData } from 'rxfire/firestore';
 
@@ -24,12 +28,20 @@ export class TasksService {
   listByIssue(problemId: string, issueId: string): Observable<Task[]> {
     const path = `${this.base}/${problemId}/issues/${issueId}/tasks`;
     const colRef = nativeCollection(this.fs as any, path);
-    return rxCollectionData(colRef, { idField: 'id' }) as Observable<Task[]>;
+    // order優先、同値時はcreatedAtで安定化
+    const q = nativeQuery(
+      colRef,
+      nativeOrderBy('order', 'asc'),
+      nativeOrderBy('createdAt', 'asc')
+    );
+    return rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>;
   }
+  
 
   // 作成
   async create(problemId: string, issueId: string, t: Partial<Task>) {
     const colRef = nativeCollection(this.fs as any, `${this.base}/${problemId}/issues/${issueId}/tasks`);
+    const order = t.order ?? await this.nextOrder(problemId, issueId);  // ★ 追加
     return nativeAddDoc(colRef, {
       title: t.title ?? 'Untitled Task',
       description: t.description ?? '',
@@ -37,7 +49,7 @@ export class TasksService {
       progress: t.progress ?? 0,
       tags: t.tags ?? [],
       assignees: t.assignees ?? [],
-      order: t.order ?? 0,
+      order,                                                           // ★ 採番保存
       dueDate: t.dueDate ?? null,
       priority: t.priority ?? 'mid',
       createdAt: serverTimestamp(),
@@ -45,6 +57,7 @@ export class TasksService {
       recurrenceRule: t.recurrenceRule ?? null
     });
   }
+  
 
   // 更新
   async update(problemId: string, issueId: string, id: string, patch: Partial<Task>) {
@@ -57,5 +70,19 @@ export class TasksService {
     const ref = nativeDoc(this.fs as any, `${this.base}/${problemId}/issues/${issueId}/tasks/${id}`);
     return nativeDeleteDoc(ref);
   }
+
+
+  private async nextOrder(problemId: string, issueId: string): Promise<number> {
+    const colRef = nativeCollection(this.fs as any, `${this.base}/${problemId}/issues/${issueId}/tasks`);
+    const q = nativeQuery(colRef, nativeOrderBy('order', 'desc'), nativeLimit(1));
+    const snap = await nativeGetDocs(q);
+    if (snap.empty) return 1;
+    const max = (snap.docs[0].data() as any).order ?? 0;
+    return (Number(max) || 0) + 1;
+  }
+  
+
+
+
 }
 

@@ -242,7 +242,7 @@ export class TreePage {
         this.issueSubs.clear();
       
         for (const p of this.data) this.attachIssueSubscription(p);
-      });      
+      });
       
    }
 
