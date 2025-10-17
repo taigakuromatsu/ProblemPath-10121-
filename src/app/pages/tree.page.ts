@@ -17,13 +17,14 @@ import { MatIconModule } from '@angular/material/icon';
 
 import { RouterLink } from '@angular/router';
 
+type Status = 'not_started' | 'in_progress' | 'done';
 type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task'; 
+    status?: Status;
     parentId?: string;
     parentIssueId?: string;
     parentProblemId?: string;
     children?: TreeNode[];
 };
-
 
 
 @Component({
@@ -153,7 +154,11 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task';
   <mat-nested-tree-node *matTreeNodeDef="let node">
     <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-bottom:1px solid rgba(0,0,0,.06); margin-left:56px;">
       <button mat-icon-button disabled><mat-icon>task_alt</mat-icon></button>
-      <span>{{ node.name }}</span>
+        <span style="display:flex; align-items:center; gap:6px;">
+        <span [style.color]="statusColor(node.status)">{{ statusIcon(node.status) }}</span>
+        <span>{{ node.name }}</span> <!-- ← タイトルは常に既定色 -->
+        </span>
+
       <span style="flex:1 1 auto"></span>
       <button mat-button type="button" (click)="renameTaskNode(node)">Rename</button>
       <button mat-button type="button" color="warn" (click)="removeTaskNode(node)">Delete</button>
@@ -172,6 +177,48 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task';
 
 
 export class TreePage {
+
+    
+// 追加：表示用ユーティリティ
+statusIcon(s?: Status) {
+    if (s === 'done') return '✅';
+    if (s === 'in_progress') return '🔼';
+    return '✕'; // not_started or undefined
+  }
+  statusColor(s?: Status) {
+    if (s === 'done') return '#16a34a';       // 緑
+    if (s === 'in_progress') return '#2563eb';// 青
+    return '#dc2626';                         // 赤
+  }
+  
+  // 追加：配列から Issue / Problem の集計ステータスを決める
+  private decideAggregateStatus(taskStatuses: Status[]): Status {
+    if (!taskStatuses.length) return 'not_started';
+    if (taskStatuses.some(s => s === 'in_progress')) return 'in_progress';
+    if (taskStatuses.every(s => s === 'done')) return 'done';
+    // それ以外（= 未着手混在）は not_started を優先
+    return 'not_started';
+  }  
+
+  // ★追加：Problem の集計更新
+private recomputeProblemStatus(problemId: string) {
+    const pIdx = this.data.findIndex(p => p.id === problemId);
+    if (pIdx === -1) return;
+  
+    const issueStatuses = (this.data[pIdx].children ?? [])
+      .map(i => i.status)
+      .filter((s): s is Status => !!s);
+  
+    const pStatus = this.decideAggregateStatus(issueStatuses);
+    const newProblem = { ...this.data[pIdx], status: pStatus };
+    this.data = [
+      ...this.data.slice(0, pIdx),
+      newProblem,
+      ...this.data.slice(pIdx + 1)
+    ];
+    this.tree.dataNodes = [...this.data];
+    this.dataSource.data = [...this.data];
+  }
 
     isLoadingProblems = true;
     loadError: string | null = null;
@@ -263,8 +310,12 @@ private startProblemsSubscription() {
     this.subForTree = this.problems.list().subscribe({
       next: rows => {
         this.data = rows.map(r => ({
-          id: r.id!, name: r.title, kind: 'problem', children: [] as TreeNode[]
-        }));
+            id: r.id!,
+            name: r.title,
+            kind: 'problem',
+            status: 'not_started',     // ← ここを新規付加
+            children: [] as TreeNode[]
+          }));
   
         // 参照ごと差し替えで通知
         this.tree.dataNodes = [...this.data];
@@ -417,8 +468,11 @@ private startProblemsSubscription() {
     const sub = this.issues.listByProblem(pNode.id).subscribe(issues => {
       // 1) 最新の Issue ノード群を生成
       const kids: TreeNode[] = issues.map(i => ({
-        id: i.id!, name: i.title, kind: 'issue',
+        id: i.id!,
+        name: i.title,
+        kind: 'issue',
         parentId: pNode.id,
+        status: 'not_started' // ← 追加
       }));
   
       // 2) 親ノードを“新オブジェクト”で置き換え（参照更新）
@@ -436,6 +490,8 @@ private startProblemsSubscription() {
       this.tree.dataNodes = [...this.data];
       this.dataSource.data = [...this.data];
   
+      this.recomputeProblemStatus(pNode.id);
+
       // 4) ★ここで“最新のIssue配列”に対して Task 購読を張る
       for (const issueNode of kids) {
         this.attachTaskSubscription(pNode.id, issueNode);
@@ -456,18 +512,24 @@ private attachTaskSubscription(problemId: string, issueNode: TreeNode) {
   this.taskSubs.get(key)?.unsubscribe();
 
   const sub = this.tasks.listByIssue(problemId, issueNode.id).subscribe(tasks => {
-    const kids: TreeNode[] = tasks.map(t => ({ 
-        id: t.id!, name: t.title, kind: 'task',
+    const kids: TreeNode[] = tasks.map(t => ({
+        id: t.id!,
+        name: t.title,
+        kind: 'task',
+        status: (t.status as Status) ?? 'not_started', // ← 追加
         parentIssueId: issueNode.id,
         parentProblemId: problemId
-    }));
+      }));
 
     // issueNode を置き換え（参照を更新）
     const pIdx = this.data.findIndex(p => p.id === problemId);
     if (pIdx !== -1) {
       const iIdx = this.data[pIdx].children?.findIndex(i => i.id === issueNode.id) ?? -1;
       if (iIdx !== -1) {
-        const newIssue = { ...this.data[pIdx].children![iIdx], children: kids };
+        const issueTaskStatuses = kids.map(k => k.status!).filter(Boolean) as Status[];
+        const issueStatus = this.decideAggregateStatus(issueTaskStatuses);
+
+        const newIssue = { ...this.data[pIdx].children![iIdx], children: kids, status: issueStatus };
         const newProblems = [...this.data];
         const newIssues = [
           ...newProblems[pIdx].children!.slice(0, iIdx),
@@ -478,6 +540,8 @@ private attachTaskSubscription(problemId: string, issueNode: TreeNode) {
         this.data = newProblems;
         this.tree.dataNodes = [...this.data];
         this.dataSource.data = [...this.data];
+
+        this.recomputeProblemStatus(problemId);
       }
     }
   });
