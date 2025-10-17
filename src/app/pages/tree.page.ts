@@ -15,7 +15,12 @@ import { NestedTreeControl } from '@angular/cdk/tree';
 import { MatTreeModule } from '@angular/material/tree';
 import { MatIconModule } from '@angular/material/icon';
 
-type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task'; children?: TreeNode[]; };
+type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task'; 
+    parentId?: string;
+    parentIssueId?: string;
+    parentProblemId?: string;
+    children?: TreeNode[];
+};
 
 
 
@@ -120,10 +125,11 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task'; 
       </button>
       <span>{{ node.name }}</span>
       <span style="flex:1 1 auto"></span>
-      <!-- （後で Issue の Rename/Delete をここに付ける） -->
-    </div>
-    <div *ngIf="tree.isExpanded(node)"><ng-container matTreeNodeOutlet></ng-container></div>
-  </mat-nested-tree-node>
+      <button mat-button type="button" (click)="renameIssueNode(node)">Rename</button>
+    <button mat-button type="button" color="warn" (click)="removeIssueNode(node)">Delete</button>
+  </div>
+  <div *ngIf="tree.isExpanded(node)"><ng-container matTreeNodeOutlet></ng-container></div>
+</mat-nested-tree-node>
 
   <!-- Task（葉） -->
   <mat-tree-node *matTreeNodeDef="let node">
@@ -131,7 +137,8 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task'; 
       <button mat-icon-button disabled><mat-icon>task_alt</mat-icon></button>
       <span>{{ node.name }}</span>
       <span style="flex:1 1 auto"></span>
-      <!-- （後で Task の Rename/Delete をここに付ける） -->
+      <button mat-button type="button" (click)="renameTaskNode(node)">Rename</button>
+      <button mat-button type="button" color="warn" (click)="removeTaskNode(node)">Delete</button>
     </div>
   </mat-tree-node>
 
@@ -148,7 +155,7 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task'; 
 export class TreePage {
 
     // MatTreeのノードからProblemを操作するアダプタ
-renameProblemNode(node: { id: string; name: string }) {
+  renameProblemNode(node: { id: string; name: string }) {
     const t = prompt('New Problem title', node.name);
     if (t && t.trim()) {
       this.problems.update(node.id, { title: t.trim() });
@@ -160,6 +167,38 @@ renameProblemNode(node: { id: string; name: string }) {
       this.problems.remove(node.id);
     }
   }
+
+  // MatTreeのノードから Issue を操作するアダプタ
+  renameIssueNode(node: { id: string; name: string; parentId?: string }) {
+    if (!node.parentId) return;  // 念のためガード
+    const t = prompt('New Issue title', node.name);
+    if (t && t.trim()) {
+      this.issues.update(node.parentId, node.id, { title: t.trim() });
+    }
+  }
+  
+  removeIssueNode(node: { id: string; name: string; parentId?: string }) {
+    if (!node.parentId) return;
+    if (confirm(`Delete Issue "${node.name}"?`)) {
+      this.issues.remove(node.parentId, node.id);
+    }
+  }
+  
+  renameTaskNode(node: { id: string; name: string; parentProblemId?: string; parentIssueId?: string }) {
+    if (!node.parentProblemId || !node.parentIssueId) return;
+    const t = prompt('New Task title', node.name);
+    if (t && t.trim()) {
+      this.tasks.update(node.parentProblemId, node.parentIssueId, node.id, { title: t.trim() });
+    }
+  }
+  
+  removeTaskNode(node: { id: string; name: string; parentProblemId?: string; parentIssueId?: string }) {
+    if (!node.parentProblemId || !node.parentIssueId) return;
+    if (confirm(`Delete Task "${node.name}"?`)) {
+      this.tasks.remove(node.parentProblemId, node.parentIssueId, node.id);
+    }
+  }
+  
 
   
   problems$!: Observable<Problem[]>;
@@ -299,7 +338,8 @@ renameProblemNode(node: { id: string; name: string }) {
     const sub = this.issues.listByProblem(pNode.id).subscribe(issues => {
       // 1) 最新の Issue ノード群を生成
       const kids: TreeNode[] = issues.map(i => ({
-        id: i.id!, name: i.title, kind: 'issue'
+        id: i.id!, name: i.title, kind: 'issue',
+        parentId: pNode.id,
       }));
   
       // 2) 親ノードを“新オブジェクト”で置き換え（参照更新）
@@ -328,7 +368,7 @@ renameProblemNode(node: { id: string; name: string }) {
 
 
 
-  
+
 private taskSubs = new Map<string, import('rxjs').Subscription>(); // key = `${problemId}_${issueId}`
 
 // IssueノードにTaskの購読を張る
@@ -337,7 +377,11 @@ private attachTaskSubscription(problemId: string, issueNode: TreeNode) {
   this.taskSubs.get(key)?.unsubscribe();
 
   const sub = this.tasks.listByIssue(problemId, issueNode.id).subscribe(tasks => {
-    const kids: TreeNode[] = tasks.map(t => ({ id: t.id!, name: t.title, kind: 'task' }));
+    const kids: TreeNode[] = tasks.map(t => ({ 
+        id: t.id!, name: t.title, kind: 'task',
+        parentIssueId: issueNode.id,
+        parentProblemId: problemId
+    }));
 
     // issueNode を置き換え（参照を更新）
     const pIdx = this.data.findIndex(p => p.id === problemId);
