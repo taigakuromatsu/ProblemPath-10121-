@@ -43,3 +43,15 @@ export interface Task extends BaseNode {
     interval?: number;
   };
 }
+
+// --- Settings scaffolding (add below your existing types) ---
+export type Personality = 'analytical' | 'pragmatic' | 'creative';
+export type AppLang = 'ja' | 'en';
+
+export interface UserPrefs {
+  personality: Personality;
+  lang: AppLang;
+  theme: 'light' | 'dark' | 'system' | 'custom';
+  accentColor?: string; // 例: '#4f46e5'
+}
+

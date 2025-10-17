@@ -1,7 +1,6 @@
 import { Component } from '@angular/core';
 import { AsyncPipe, NgFor, NgIf } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import { Observable, BehaviorSubject, of } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 import { MatButtonModule } from '@angular/material/button';
@@ -12,6 +11,8 @@ import { TasksService } from '../services/tasks.service';
 import { Problem, Issue, Task } from '../models/types';
 
 import { DragDropModule, CdkDragDrop } from '@angular/cdk/drag-drop';
+import { Router, ActivatedRoute, RouterLink } from '@angular/router';
+
 
 @Component({
     standalone: true,
@@ -103,7 +104,9 @@ export class BoardPage {
   constructor(
     private problems: ProblemsService,
     private issues: IssuesService,
-    private tasks: TasksService
+    private tasks: TasksService,
+    private router: Router,
+    private route: ActivatedRoute
   ) {}
 
   ngOnInit() {
@@ -127,12 +130,22 @@ export class BoardPage {
         return stream;
       })
     );
+        // URLの ?pid=... を監視して選択状態に反映
+        this.route.queryParamMap.subscribe((m) => {
+            const pid = m.get('pid');
+            this.selectedProblemId = pid;
+            this.selectedProblem$.next(pid);
+        });
+
   }
 
   onSelectProblem(pid: string | null) {
     this.selectedProblemId = pid;
     this.selectedProblem$.next(pid);
+    // ★ URLにも反映（他のクエリは維持）
+    this.router.navigate([], { queryParams: { pid }, queryParamsHandling: 'merge' });
   }
+  
 
   key(problemId: string, issueId: string) { return `${problemId}_${issueId}`; }
 

@@ -15,6 +15,8 @@ import { NestedTreeControl } from '@angular/cdk/tree';
 import { MatTreeModule } from '@angular/material/tree';
 import { MatIconModule } from '@angular/material/icon';
 
+import { RouterLink } from '@angular/router';
+
 type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task'; 
     parentId?: string;
     parentIssueId?: string;
@@ -27,7 +29,7 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task';
 @Component({
   standalone: true,
   selector: 'pp-tree',
-  imports: [AsyncPipe, NgFor, NgIf, FormsModule, MatButtonModule, MatTreeModule, MatIconModule],
+  imports: [AsyncPipe, NgFor, NgIf, FormsModule, MatButtonModule, MatTreeModule, MatIconModule, RouterLink],
   template: `
     <h3>Problems</h3>
 
@@ -53,6 +55,8 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task';
         <button mat-button type="button" (click)="moveProblemDown(p)" aria-label="Move down">▼</button>
         <button mat-button type="button" (click)="renameProblem(p)">Rename</button>
         <button mat-button type="button" color="warn" (click)="removeProblem(p)">Delete</button>
+        <a mat-button [routerLink]="['/board']" [queryParams]="{ pid: p.id }">Boardで見る</a>
+
 
         <!-- Issue操作 -->
         <div style="margin:6px 0 10px 16px;">
