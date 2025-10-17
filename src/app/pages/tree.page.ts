@@ -31,6 +31,14 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task';
   template: `
     <h3>Problems</h3>
 
+    <!-- ★ 追加：エラー表示＆再試行 -->
+<div *ngIf="loadError" style="padding:8px 12px; border:1px solid #f44336; background:#ffebee; color:#b71c1c; border-radius:6px; margin:8px 0;">
+  {{ loadError }}
+  <button mat-button color="warn" type="button" (click)="retryProblems()" style="margin-left:8px;">
+    再試行
+  </button>
+</div>
+
     <!-- Problem追加 -->
     <form (ngSubmit)="createProblem()" style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
       <input [(ngModel)]="problemTitle" name="problemTitle" placeholder="New Problem title" required />
@@ -161,6 +169,9 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task';
 
 export class TreePage {
 
+    isLoadingProblems = true;
+    loadError: string | null = null;
+
     // MatTreeのノードからProblemを操作するアダプタ
   renameProblemNode(node: { id: string; name: string }) {
     const t = prompt('New Problem title', node.name);
@@ -234,24 +245,48 @@ export class TreePage {
   ) {}
 
   ngOnInit() {
+    this.startProblemsSubscription();
+   }
+
+   // ★ 追加：購読開始（再試行でも使う）
+private startProblemsSubscription() {
+    this.isLoadingProblems = true;
+    this.loadError = null;
+  
     this.problems$ = this.problems.list();
-    
-    this.subForTree = this.problems.list().subscribe(rows => {
+  
+    this.subForTree?.unsubscribe();
+    this.subForTree = this.problems.list().subscribe({
+      next: rows => {
         this.data = rows.map(r => ({
           id: r.id!, name: r.title, kind: 'problem', children: [] as TreeNode[]
         }));
-      
-        // ★ 参照を新規にして変更通知
+  
+        // 参照ごと差し替えで通知
         this.tree.dataNodes = [...this.data];
         this.dataSource.data = [...this.data];
-      
+  
+        // Issue購読を貼り直し
         this.issueSubs.forEach(s => s.unsubscribe());
         this.issueSubs.clear();
-      
         for (const p of this.data) this.attachIssueSubscription(p);
-      });
-      
-   }
+  
+        this.isLoadingProblems = false;
+        this.loadError = null;
+      },
+      error: (err) => {
+        console.error('problems subscribe error', err);
+        this.isLoadingProblems = false;
+        this.loadError = err?.message ?? '読み込みに失敗しました';
+      }
+    });
+  }
+  
+  // ★ 追加：再試行
+  retryProblems() {
+    this.startProblemsSubscription();
+  }
+  
 
    ngOnDestroy() {
     this.subForTree?.unsubscribe();
