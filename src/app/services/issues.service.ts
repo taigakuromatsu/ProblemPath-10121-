@@ -129,8 +129,6 @@ async moveUp(problemId: string, id: string, currentOrder: number): Promise<void>
     const max = (snap.docs[0].data() as any).order ?? 0;
     return (Number(max) || 0) + 1;
   }
-  
-
 
 }
 

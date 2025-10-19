@@ -14,6 +14,8 @@ import { MatTreeNestedDataSource } from '@angular/material/tree';
 import { NestedTreeControl } from '@angular/cdk/tree';
 import { MatTreeModule } from '@angular/material/tree';
 import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
+
 
 import { RouterLink } from '@angular/router';
 
@@ -30,7 +32,7 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task';
 @Component({
   standalone: true,
   selector: 'pp-tree',
-  imports: [AsyncPipe, NgFor, NgIf, FormsModule, MatButtonModule, MatTreeModule, MatIconModule, RouterLink],
+  imports: [AsyncPipe, NgFor, NgIf, FormsModule, MatButtonModule, MatTreeModule, MatIconModule, RouterLink, MatTooltipModule],
   template: `
     <h3>Problems</h3>
 
@@ -152,11 +154,17 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task';
 
   <!-- Task（葉） -->
   <mat-nested-tree-node *matTreeNodeDef="let node">
-    <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-bottom:1px solid rgba(0,0,0,.06); margin-left:56px;">
+    <div style="display:flex; align-items:center; gap:8px; padding:6px 8px;
+            border-bottom:1px solid rgba(0,0,0,.06); margin-left:56px;
+            border-left:4px solid {{ statusColor(node.status) }};">
       <button mat-icon-button disabled><mat-icon>task_alt</mat-icon></button>
-        <span style="display:flex; align-items:center; gap:6px;">
-        <span [style.color]="statusColor(node.status)">{{ statusIcon(node.status) }}</span>
-        <span>{{ node.name }}</span> <!-- ← タイトルは常に既定色 -->
+        <span style="display:flex; align-items:center; gap:6px; max-width: 520px;">
+          <span [style.color]="statusColor(node.status)" matTooltip="{{ node.status==='done' ? '完了' : node.status==='in_progress' ? '対応中' : '未着手' }}">
+            {{ statusIcon(node.status) }}
+          </span>
+          <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1 1 auto;" [matTooltip]="node.name">
+            {{ node.name }}
+          </span>
         </span>
 
       <span style="flex:1 1 auto"></span>
@@ -179,8 +187,8 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task';
 export class TreePage {
 
     
-// 追加：表示用ユーティリティ
-statusIcon(s?: Status) {
+  // 追加：表示用ユーティリティ
+  statusIcon(s?: Status) {
     if (s === 'done') return '✅';
     if (s === 'in_progress') return '🔼';
     return '✕'; // not_started or undefined
@@ -190,7 +198,10 @@ statusIcon(s?: Status) {
     if (s === 'in_progress') return '#2563eb';// 青
     return '#dc2626';                         // 赤
   }
-  
+
+  busyIds = new Set<string>();
+  isBusyId(id?: string|null){ return !!id && this.busyIds.has(id); }
+
   // 追加：配列から Issue / Problem の集計ステータスを決める
   private decideAggregateStatus(taskStatuses: Status[]): Status {
     if (!taskStatuses.length) return 'not_started';
@@ -260,14 +271,21 @@ private recomputeProblemStatus(problemId: string) {
       this.tasks.update(node.parentProblemId, node.parentIssueId, node.id, { title: t.trim() });
     }
   }
-  
-  removeTaskNode(node: { id: string; name: string; parentProblemId?: string; parentIssueId?: string }) {
-    if (!node.parentProblemId || !node.parentIssueId) return;
+
+  async removeTaskNode(node: { id: string; name: string; parentProblemId?: string; parentIssueId?: string }) {
+    if (!node.parentProblemId || !node.parentIssueId || this.isBusyId(node.id)) return;
     if (confirm(`Delete Task "${node.name}"?`)) {
-      this.tasks.remove(node.parentProblemId, node.parentIssueId, node.id);
+      this.busyIds.add(node.id!);
+      try {
+        await this.tasks.remove(node.parentProblemId, node.parentIssueId, node.id!);
+      } catch {
+        // 任意で alert('削除に失敗しました');
+      } finally {
+        this.busyIds.delete(node.id!);
+      }
     }
   }
-  
+
 
   
   problems$!: Observable<Problem[]>;
@@ -474,6 +492,16 @@ private startProblemsSubscription() {
         parentId: pNode.id,
         status: 'not_started' // ← 追加
       }));
+
+      // kids 生成の直後に追加
+      const aliveKeys = new Set(kids.map(k => `${pNode.id}_${k.id}`));
+      for (const [k, sub] of this.taskSubs.entries()) {
+        // この Problem に属する Task 購読で、今は存在しない Issue のものを掃除
+        if (k.startsWith(pNode.id + '_') && !aliveKeys.has(k)) {
+          sub.unsubscribe();
+          this.taskSubs.delete(k);
+        }
+      }
   
       // 2) 親ノードを“新オブジェクト”で置き換え（参照更新）
       const pIdx = this.data.findIndex(n => n.id === pNode.id);
