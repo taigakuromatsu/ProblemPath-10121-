@@ -1,5 +1,5 @@
 import { Component } from '@angular/core';
-import { AsyncPipe, NgFor, NgIf } from '@angular/common';
+import { AsyncPipe, NgFor, NgIf, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Observable } from 'rxjs';
 
@@ -14,6 +14,9 @@ import { MatTreeNestedDataSource } from '@angular/material/tree';
 import { NestedTreeControl } from '@angular/cdk/tree';
 import { MatTreeModule } from '@angular/material/tree';
 import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MaintenanceService } from '../services/maintenance.service';
+
 
 import { RouterLink } from '@angular/router';
 
@@ -30,7 +33,7 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task';
 @Component({
   standalone: true,
   selector: 'pp-tree',
-  imports: [AsyncPipe, NgFor, NgIf, FormsModule, MatButtonModule, MatTreeModule, MatIconModule, RouterLink],
+  imports: [AsyncPipe, NgFor, NgIf, FormsModule, MatButtonModule, MatTreeModule, MatIconModule, RouterLink, MatTooltipModule, DatePipe],
   template: `
     <h3>Problems</h3>
 
@@ -105,6 +108,15 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task';
                     <button mat-button type="button" (click)="moveTaskDown(p.id!, i.id!, t)">▼</button>
                     <button mat-button type="button" (click)="renameTask(p.id!, i.id!, t)">Rename</button>
                     <button mat-button type="button" color="warn" (click)="removeTask(p.id!, i.id!, t)">Delete</button>
+                    <!-- 追加: 期限入力 -->
+                    <span style="margin-left:8px;">
+                      <input type="date"
+                            [ngModel]="dateField(t.dueDate)"
+                            (ngModelChange)="setDue(p.id!, i.id!, t, $event)"
+                            style="padding:2px 6px; border:1px solid #ddd; border-radius:6px;"
+                            [title]="t.dueDate ? ('due: ' + (t.dueDate | date:'yyyy-MM-dd')) : '期限未設定'"/>
+                      <span *ngIf="isOverdue(t)" style="color:#dc2626; font-size:12px; margin-left:6px;">期限切れ</span>
+                    </span>
                   </li>
                   <li *ngIf="tasks.length === 0" style="opacity:.7">（Taskはまだありません）</li>
                 </ul>
@@ -152,11 +164,17 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task';
 
   <!-- Task（葉） -->
   <mat-nested-tree-node *matTreeNodeDef="let node">
-    <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-bottom:1px solid rgba(0,0,0,.06); margin-left:56px;">
+    <div style="display:flex; align-items:center; gap:8px; padding:6px 8px;
+            border-bottom:1px solid rgba(0,0,0,.06); margin-left:56px;
+            border-left:4px solid {{ statusColor(node.status) }};">
       <button mat-icon-button disabled><mat-icon>task_alt</mat-icon></button>
-        <span style="display:flex; align-items:center; gap:6px;">
-        <span [style.color]="statusColor(node.status)">{{ statusIcon(node.status) }}</span>
-        <span>{{ node.name }}</span> <!-- ← タイトルは常に既定色 -->
+        <span style="display:flex; align-items:center; gap:6px; max-width: 520px;">
+          <span [style.color]="statusColor(node.status)" matTooltip="{{ node.status==='done' ? '完了' : node.status==='in_progress' ? '対応中' : '未着手' }}">
+            {{ statusIcon(node.status) }}
+          </span>
+          <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1 1 auto;" [matTooltip]="node.name">
+            {{ node.name }}
+          </span>
         </span>
 
       <span style="flex:1 1 auto"></span>
@@ -179,8 +197,8 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task';
 export class TreePage {
 
     
-// 追加：表示用ユーティリティ
-statusIcon(s?: Status) {
+  // 追加：表示用ユーティリティ
+  statusIcon(s?: Status) {
     if (s === 'done') return '✅';
     if (s === 'in_progress') return '🔼';
     return '✕'; // not_started or undefined
@@ -190,7 +208,10 @@ statusIcon(s?: Status) {
     if (s === 'in_progress') return '#2563eb';// 青
     return '#dc2626';                         // 赤
   }
-  
+
+  busyIds = new Set<string>();
+  isBusyId(id?: string|null){ return !!id && this.busyIds.has(id); }
+
   // 追加：配列から Issue / Problem の集計ステータスを決める
   private decideAggregateStatus(taskStatuses: Status[]): Status {
     if (!taskStatuses.length) return 'not_started';
@@ -260,14 +281,21 @@ private recomputeProblemStatus(problemId: string) {
       this.tasks.update(node.parentProblemId, node.parentIssueId, node.id, { title: t.trim() });
     }
   }
-  
-  removeTaskNode(node: { id: string; name: string; parentProblemId?: string; parentIssueId?: string }) {
-    if (!node.parentProblemId || !node.parentIssueId) return;
+
+  async removeTaskNode(node: { id: string; name: string; parentProblemId?: string; parentIssueId?: string }) {
+    if (!node.parentProblemId || !node.parentIssueId || this.isBusyId(node.id)) return;
     if (confirm(`Delete Task "${node.name}"?`)) {
-      this.tasks.remove(node.parentProblemId, node.parentIssueId, node.id);
+      this.busyIds.add(node.id!);
+      try {
+        await this.tasks.remove(node.parentProblemId, node.parentIssueId, node.id!);
+      } catch {
+        // 任意で alert('削除に失敗しました');
+      } finally {
+        this.busyIds.delete(node.id!);
+      }
     }
   }
-  
+
 
   
   problems$!: Observable<Problem[]>;
@@ -292,7 +320,8 @@ private recomputeProblemStatus(problemId: string) {
   constructor(
     private problems: ProblemsService,
     private issues: IssuesService,
-    private tasks: TasksService
+    private tasks: TasksService,
+    private maintenance: MaintenanceService
   ) {}
 
   ngOnInit() {
@@ -474,6 +503,16 @@ private startProblemsSubscription() {
         parentId: pNode.id,
         status: 'not_started' // ← 追加
       }));
+
+      // kids 生成の直後に追加
+      const aliveKeys = new Set(kids.map(k => `${pNode.id}_${k.id}`));
+      for (const [k, sub] of this.taskSubs.entries()) {
+        // この Problem に属する Task 購読で、今は存在しない Issue のものを掃除
+        if (k.startsWith(pNode.id + '_') && !aliveKeys.has(k)) {
+          sub.unsubscribe();
+          this.taskSubs.delete(k);
+        }
+      }
   
       // 2) 親ノードを“新オブジェクト”で置き換え（参照更新）
       const pIdx = this.data.findIndex(n => n.id === pNode.id);
@@ -547,6 +586,25 @@ private attachTaskSubscription(problemId: string, issueNode: TreeNode) {
   });
 
   this.taskSubs.set(key, sub);
+}
+
+// 入力[type=date]用に "YYYY-MM-DD" を返す（'YYYY-MM-DD' or ''）
+dateField(dateStr?: string | null): string {
+  return (dateStr ?? '') || '';
+}
+
+// 期限の保存（val は 'YYYY-MM-DD' or ''）→ そのまま保存（toISOString禁止）
+async setDue(problemId: string, issueId: string, t: Task, val: string) {
+  const dueDate = val ? val : null; // ← ここをISO化しない！
+  await this.tasks.update(problemId, issueId, t.id!, { dueDate });
+}
+
+// 期限切れ表示（文字列比較で安全に判定）
+isOverdue(t: Task): boolean {
+  if (!t?.dueDate) return false;
+  if (t.status === 'done') return false;
+  const todayStr = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+  return t.dueDate < todayStr;
 }
 
 

@@ -13,7 +13,7 @@ export interface BaseNode {
   description?: string;
   status?: Status;
   progress?: number;              // 0–100
-  dueDate?: string;               // ISO文字列でOK（後でDate型に変更しても良い）
+  dueDate?: string | null;         // ISO文字列 or null
   priority?: 'low' | 'mid' | 'high';
   tags?: string[];
   assignees?: string[];
@@ -42,6 +42,10 @@ export interface Task extends BaseNode {
     freq: 'DAILY' | 'WEEKLY' | 'MONTHLY';
     interval?: number;
   };
+  // スケジュール横断表示のための親参照
+  problemId?: string;
+  issueId?: string;
+  projectId?: string;
 }
 
 // --- Settings scaffolding (add below your existing types) ---
@@ -54,4 +58,3 @@ export interface UserPrefs {
   theme: 'light' | 'dark' | 'system' | 'custom';
   accentColor?: string; // 例: '#4f46e5'
 }
-

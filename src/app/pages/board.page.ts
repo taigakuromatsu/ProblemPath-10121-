@@ -68,9 +68,13 @@ import { CdkDrag, CdkDropList } from '@angular/cdk/drag-drop'
                         [cdkDropListConnectedTo]="listIds(i.id!)"
                         [id]="listId(col, i.id!)"
                         (cdkDropListDropped)="onListDrop($event, pid, i.id!)"
-                        [cdkDropListEnterPredicate]="canEnter"
-                        style="border:1px solid #e5e7eb; border-radius:10px; padding:8px; margin-bottom:10px; min-height:60px;"
-                    >
+                          [cdkDropListEnterPredicate]="canEnter"
+                          style="border:1px solid #e5e7eb; border-radius:10px; padding:8px; margin-bottom:10px; min-height:60px;
+                                transition:border-color .15s ease;"
+                          (cdkDropListEntered)="($event.container.element.nativeElement.style.borderColor = '#9ca3af')"
+                          (cdkDropListExited)="($event.container.element.nativeElement.style.borderColor = '#e5e7eb')"
+                        >
+                          
                         <!-- Issueグループのヘッダ -->
                         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
                         <div style="font-weight:600;">{{ i.title }}</div>
