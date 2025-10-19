@@ -228,54 +228,5 @@ listAllNoDue(openOnly = true): Observable<Task[]> {
   return a$;
 }
 
-
-
-
-// temporary code
-// 既存の import 群はそのまま。nativeGetDocs は既に import 済みなのでそれを使います。
-
-async debugSample(): Promise<void> {
-  // ユーティリティ
-  const ymd = (d: Date) => {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const da = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${da}`;
-  };
-  const today = new Date();
-  const todayStr = ymd(today);
-
-  // 1) projectId だけで 5件
-  const q1 = nativeQuery(
-    nativeCollectionGroup(this.fs as any, 'tasks'),
-    nativeWhere('projectId', '==', 'default'),
-    nativeLimit(5)
-  );
-  const s1 = await nativeGetDocs(q1);
-  console.log('[DEBUG] q1(projectId==default) count=', s1.size, s1.docs.map(d => d.data()));
-
-  // 2) 期限未設定だけで 5件
-  const q2 = nativeQuery(
-    nativeCollectionGroup(this.fs as any, 'tasks'),
-    nativeWhere('projectId', '==', 'default'),
-    nativeWhere('dueDate', '==', null),
-    nativeLimit(5)
-  );
-  const s2 = await nativeGetDocs(q2);
-  console.log('[DEBUG] q2(no due) count=', s2.size, s2.docs.map(d => d.data()));
-
-  // 3) 今日の日付レンジ（openOnly は無視）
-  const q3 = nativeQuery(
-    nativeCollectionGroup(this.fs as any, 'tasks'),
-    nativeWhere('projectId', '==', 'default'),
-    nativeWhere('dueDate', '>=', todayStr),
-    nativeWhere('dueDate', '<=', todayStr),
-    nativeOrderBy('dueDate', 'asc'),
-    nativeLimit(20)
-  );
-  const s3 = await nativeGetDocs(q3);
-  console.log('[DEBUG] q3(today range) count=', s3.size, s3.docs.map(d => d.data()));
-}
-
 }
 
