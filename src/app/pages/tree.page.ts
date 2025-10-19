@@ -1,5 +1,5 @@
 import { Component } from '@angular/core';
-import { AsyncPipe, NgFor, NgIf } from '@angular/common';
+import { AsyncPipe, NgFor, NgIf, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Observable } from 'rxjs';
 
@@ -15,6 +15,7 @@ import { NestedTreeControl } from '@angular/cdk/tree';
 import { MatTreeModule } from '@angular/material/tree';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MaintenanceService } from '../services/maintenance.service';
 
 
 import { RouterLink } from '@angular/router';
@@ -32,7 +33,7 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task';
 @Component({
   standalone: true,
   selector: 'pp-tree',
-  imports: [AsyncPipe, NgFor, NgIf, FormsModule, MatButtonModule, MatTreeModule, MatIconModule, RouterLink, MatTooltipModule],
+  imports: [AsyncPipe, NgFor, NgIf, FormsModule, MatButtonModule, MatTreeModule, MatIconModule, RouterLink, MatTooltipModule, DatePipe],
   template: `
     <h3>Problems</h3>
 
@@ -107,6 +108,15 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task';
                     <button mat-button type="button" (click)="moveTaskDown(p.id!, i.id!, t)">▼</button>
                     <button mat-button type="button" (click)="renameTask(p.id!, i.id!, t)">Rename</button>
                     <button mat-button type="button" color="warn" (click)="removeTask(p.id!, i.id!, t)">Delete</button>
+                    <!-- 追加: 期限入力 -->
+                    <span style="margin-left:8px;">
+                      <input type="date"
+                            [ngModel]="dateField(t.dueDate)"
+                            (ngModelChange)="setDue(p.id!, i.id!, t, $event)"
+                            style="padding:2px 6px; border:1px solid #ddd; border-radius:6px;"
+                            [title]="t.dueDate ? ('due: ' + (t.dueDate | date:'yyyy-MM-dd')) : '期限未設定'"/>
+                      <span *ngIf="isOverdue(t)" style="color:#dc2626; font-size:12px; margin-left:6px;">期限切れ</span>
+                    </span>
                   </li>
                   <li *ngIf="tasks.length === 0" style="opacity:.7">（Taskはまだありません）</li>
                 </ul>
@@ -310,7 +320,8 @@ private recomputeProblemStatus(problemId: string) {
   constructor(
     private problems: ProblemsService,
     private issues: IssuesService,
-    private tasks: TasksService
+    private tasks: TasksService,
+    private maintenance: MaintenanceService
   ) {}
 
   ngOnInit() {
@@ -575,6 +586,25 @@ private attachTaskSubscription(problemId: string, issueNode: TreeNode) {
   });
 
   this.taskSubs.set(key, sub);
+}
+
+// 入力[type=date]用に "YYYY-MM-DD" を返す（'YYYY-MM-DD' or ''）
+dateField(dateStr?: string | null): string {
+  return (dateStr ?? '') || '';
+}
+
+// 期限の保存（val は 'YYYY-MM-DD' or ''）→ そのまま保存（toISOString禁止）
+async setDue(problemId: string, issueId: string, t: Task, val: string) {
+  const dueDate = val ? val : null; // ← ここをISO化しない！
+  await this.tasks.update(problemId, issueId, t.id!, { dueDate });
+}
+
+// 期限切れ表示（文字列比較で安全に判定）
+isOverdue(t: Task): boolean {
+  if (!t?.dueDate) return false;
+  if (t.status === 'done') return false;
+  const todayStr = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+  return t.dueDate < todayStr;
 }
 
 

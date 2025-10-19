@@ -1,10 +1,12 @@
 import { Injectable } from '@angular/core';
 import { Firestore } from '@angular/fire/firestore';
-import { Observable } from 'rxjs';
-import { Task } from '../models/types';
+import { Task, Status} from '../models/types';
+import { Observable,combineLatest, map } from 'rxjs';
+
 
 // 読み取りは rxfire、CRUD は Firebase SDK (native)
 import {
+  collectionGroup as nativeCollectionGroup,
   collection as nativeCollection,
   doc as nativeDoc,
   addDoc as nativeAddDoc,
@@ -20,8 +22,21 @@ import {
 } from 'firebase/firestore';
 import { collectionData as rxCollectionData } from 'rxfire/firestore';
 
+const PROJECT_ID = 'default';
+const OPEN_STATUSES: Status[] = ['not_started','in_progress','review_wait','fixing'];
+
 @Injectable({ providedIn: 'root' })
+ 
+
 export class TasksService {
+
+  // …クラス内のユーティリティ: 重複排除
+private dedupeById(list: Task[]): Task[] {
+  const m = new Map<string, Task>();
+  for (const t of list) if (t?.id) m.set(t.id!, t);
+  return Array.from(m.values());
+}
+
   private readonly base = 'projects/default/problems';
 
   constructor(private fs: Firestore) {}
@@ -56,7 +71,10 @@ export class TasksService {
       priority: t.priority ?? 'mid',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      recurrenceRule: t.recurrenceRule ?? null
+      recurrenceRule: t.recurrenceRule ?? null,
+      problemId,
+      issueId,
+      projectId: 'default',
     });
   }
   
@@ -131,6 +149,133 @@ async moveUp(problemId: string, issueId: string, id: string, currentOrder: numbe
     return (Number(max) || 0) + 1;
   }
 
+  /** 期限範囲（YYYY-MM-DD 文字列） */
+listAllByDueRange(startYmd: string, endYmd: string, openOnly = true): Observable<Task[]> {
+  const base = nativeCollectionGroup(this.fs as any, 'tasks');
+
+  // 新データ（projectId あり）
+  const qScoped = nativeQuery(
+    base,
+    nativeWhere('projectId', '==', PROJECT_ID),
+    nativeWhere('dueDate', '>=', startYmd),
+    nativeWhere('dueDate', '<=', endYmd),
+    ...(openOnly ? [nativeWhere('status', 'in', OPEN_STATUSES)] : []),
+    nativeOrderBy('dueDate', 'asc')
+  );
+
+  // 旧データ（projectId 無しも拾うため、フィルタを付けない）
+  const qLegacy = nativeQuery(
+    base,
+    nativeWhere('dueDate', '>=', startYmd),
+    nativeWhere('dueDate', '<=', endYmd),
+    ...(openOnly ? [nativeWhere('status', 'in', OPEN_STATUSES)] : []),
+    nativeOrderBy('dueDate', 'asc')
+  );
+
+  const a$ = rxCollectionData(qScoped as any, { idField: 'id' }) as Observable<Task[]>;
+  const b$ = rxCollectionData(qLegacy as any, { idField: 'id' }) as Observable<Task[]>;
+
+  return combineLatest([a$, b$]).pipe(
+    map(([a, b]) => this.dedupeById([...(a ?? []), ...(b ?? [])]))
+  );
+}
+
+/** 期限切れ（todayYmd より前、YYYY-MM-DD 文字列） */
+listAllOverdue(todayYmd: string, openOnly = true): Observable<Task[]> {
+  const base = nativeCollectionGroup(this.fs as any, 'tasks');
+
+  const qScoped = nativeQuery(
+    base,
+    nativeWhere('projectId', '==', PROJECT_ID),
+    nativeWhere('dueDate', '<', todayYmd),
+    ...(openOnly ? [nativeWhere('status', 'in', OPEN_STATUSES)] : []),
+    nativeOrderBy('dueDate', 'asc')
+  );
+
+  const qLegacy = nativeQuery(
+    base,
+    nativeWhere('dueDate', '<', todayYmd),
+    ...(openOnly ? [nativeWhere('status', 'in', OPEN_STATUSES)] : []),
+    nativeOrderBy('dueDate', 'asc')
+  );
+
+  const a$ = rxCollectionData(qScoped as any, { idField: 'id' }) as Observable<Task[]>;
+  const b$ = rxCollectionData(qLegacy as any, { idField: 'id' }) as Observable<Task[]>;
+
+  return combineLatest([a$, b$]).pipe(
+    map(([a, b]) => this.dedupeById([...(a ?? []), ...(b ?? [])]))
+  );
+}
+
+/** 期限未設定（null） */
+listAllNoDue(openOnly = true): Observable<Task[]> {
+  const base = nativeCollectionGroup(this.fs as any, 'tasks');
+
+  const qScoped = nativeQuery(
+    base,
+    nativeWhere('projectId', '==', PROJECT_ID),
+    nativeWhere('dueDate', '==', null),
+    ...(openOnly ? [nativeWhere('status', 'in', OPEN_STATUSES)] : []),
+    nativeOrderBy('createdAt', 'desc')
+  );
+
+  // 旧データは「dueDate フィールド自体が存在しない」可能性があり、
+  // Firestore では「存在しない」を条件で拾えないため、
+  // ここは qScoped のみ（＝null 保存分のみ）を対象にします。
+  // ※どうしても missing も拾いたい場合は backfill で null を入れてください。
+
+  const a$ = rxCollectionData(qScoped as any, { idField: 'id' }) as Observable<Task[]>;
+  return a$;
+}
+
+
+
+
+// temporary code
+// 既存の import 群はそのまま。nativeGetDocs は既に import 済みなのでそれを使います。
+
+async debugSample(): Promise<void> {
+  // ユーティリティ
+  const ymd = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const da = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${da}`;
+  };
+  const today = new Date();
+  const todayStr = ymd(today);
+
+  // 1) projectId だけで 5件
+  const q1 = nativeQuery(
+    nativeCollectionGroup(this.fs as any, 'tasks'),
+    nativeWhere('projectId', '==', 'default'),
+    nativeLimit(5)
+  );
+  const s1 = await nativeGetDocs(q1);
+  console.log('[DEBUG] q1(projectId==default) count=', s1.size, s1.docs.map(d => d.data()));
+
+  // 2) 期限未設定だけで 5件
+  const q2 = nativeQuery(
+    nativeCollectionGroup(this.fs as any, 'tasks'),
+    nativeWhere('projectId', '==', 'default'),
+    nativeWhere('dueDate', '==', null),
+    nativeLimit(5)
+  );
+  const s2 = await nativeGetDocs(q2);
+  console.log('[DEBUG] q2(no due) count=', s2.size, s2.docs.map(d => d.data()));
+
+  // 3) 今日の日付レンジ（openOnly は無視）
+  const q3 = nativeQuery(
+    nativeCollectionGroup(this.fs as any, 'tasks'),
+    nativeWhere('projectId', '==', 'default'),
+    nativeWhere('dueDate', '>=', todayStr),
+    nativeWhere('dueDate', '<=', todayStr),
+    nativeOrderBy('dueDate', 'asc'),
+    nativeLimit(20)
+  );
+  const s3 = await nativeGetDocs(q3);
+  console.log('[DEBUG] q3(today range) count=', s3.size, s3.docs.map(d => d.data()));
+}
 
 }
 

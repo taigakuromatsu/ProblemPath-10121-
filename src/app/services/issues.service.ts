@@ -115,10 +115,15 @@ async moveUp(problemId: string, id: string, currentOrder: number): Promise<void>
     return nativeUpdateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
   }
 
-  // 削除
+  // ★ 修正: 削除（Issue 本体の前に配下 tasks を全削除）
   async remove(problemId: string, id: string) {
-    const ref = nativeDoc(this.fs as any, `${this.base}/${problemId}/issues/${id}`);
-    return nativeDeleteDoc(ref);
+    // 1) tasks サブコレクションを全削除
+    const tasksPath = `${this.base}/${problemId}/issues/${id}/tasks`;
+    await this.deleteCollection(tasksPath);
+
+    // 2) issue ドキュメントを削除
+    const issueRef = nativeDoc(this.fs as any, `${this.base}/${problemId}/issues/${id}`);
+    return nativeDeleteDoc(issueRef);
   }
 
   private async nextOrder(problemId: string): Promise<number> {
@@ -128,6 +133,21 @@ async moveUp(problemId: string, id: string, currentOrder: number): Promise<void>
     if (snap.empty) return 1;
     const max = (snap.docs[0].data() as any).order ?? 0;
     return (Number(max) || 0) + 1;
+  }
+
+   // ★ 追加: コレクションをバッチで小分け削除（上限500対策）
+   private async deleteCollection(path: string, batchSize = 300): Promise<void> {
+    const colRef = nativeCollection(this.fs as any, path);
+    // バッチサイズずつ消していく（削除後に再度クエリして空になるまで繰り返し）
+    while (true) {
+      const q = nativeQuery(colRef, nativeLimit(batchSize));
+      const snap = await nativeGetDocs(q);
+      if (snap.empty) break;
+
+      const batch = nativeWriteBatch(this.fs as any);
+      snap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    }
   }
 
 }

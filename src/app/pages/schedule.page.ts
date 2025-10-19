@@ -1,8 +1,198 @@
-import { Component } from '@angular/core';
+// schedule.page.ts
+import { Component, Input } from '@angular/core';
+import { AsyncPipe, NgFor, NgIf } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatSelectModule } from '@angular/material/select';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { RouterLink } from '@angular/router';
+import { Observable, combineLatest } from 'rxjs';
+import { map } from 'rxjs/operators';
+import { TasksService } from '../services/tasks.service';
+import { Task } from '../models/types';
+
+/* =======================
+   行コンポーネント（先に定義）
+   ======================= */
+@Component({
+  standalone: true,
+  selector: 'pp-schedule-row',
+  imports: [NgIf, RouterLink, MatButtonModule, MatIconModule, MatTooltipModule],
+  template: `
+  <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid #e5e7eb; border-radius:8px; margin-bottom:6px;">
+    <span [style.opacity]="t.status==='done' ? .6 : 1" style="flex:1 1 auto;">
+      <strong>{{ t.title }}</strong>
+      <span *ngIf="t.priority" style="font-size:12px; margin-left:6px; opacity:.8;">[{{ t.priority }}]</span>
+      <span *ngIf="t.dueDate" style="font-size:12px; margin-left:8px; opacity:.8;">
+        due: {{ t.dueDate }}
+      </span>
+    </span>
+
+    <!-- Boardへ（problemId/issueId がある場合だけリンク） -->
+    <a *ngIf="t.problemId && t.issueId"
+       mat-stroked-button
+       [routerLink]="['/board']"
+       [queryParams]="{ pid: t.problemId }"
+       matTooltip="Boardで見る">Board</a>
+  </div>
+  `
+})
+export class ScheduleRow {
+  @Input() t!: Task;
+}
+
+/* =======================
+   一覧コンポーネント（リッチ案：排他的セクション）
+   ======================= */
 
 @Component({
   standalone: true,
   selector: 'pp-schedule',
-  template: `<h3>Schedule</h3><p>ここに「今日/今週/期限切れ」ビューを載せます。</p>`
+  imports: [
+    AsyncPipe, NgFor, NgIf, FormsModule,
+    MatButtonModule, MatIconModule, MatSelectModule, MatTooltipModule,
+    RouterLink, ScheduleRow
+  ],
+  template: `
+  <div style="display:flex; align-items:center; gap:12px; margin:8px 0 16px;">
+    <a mat-stroked-button routerLink="/tree">← Treeへ</a>
+    <h3 style="margin:0;">Schedule</h3>
+    <span style="flex:1 1 auto;"></span>
+
+    <label>表示:
+      <select [(ngModel)]="openOnly" (ngModelChange)="reload()">
+        <option [ngValue]="true">未完了のみ</option>
+        <option [ngValue]="false">すべて</option>
+      </select>
+    </label>
+  </div>
+
+  <ng-container *ngIf="vm$ | async as vm">
+
+    <section>
+      <h4 style="margin:12px 0;">⚠️ 期限切れ（{{ vm.overdue.length }}）</h4>
+      <div *ngIf="!vm.overdue.length" style="opacity:.6">（なし）</div>
+      <ul><li *ngFor="let t of vm.overdue; trackBy: trackTask"><pp-schedule-row [t]="t"></pp-schedule-row></li></ul>
+    </section>
+
+    <section>
+      <h4 style="margin:12px 0;">📅 今日（{{ vm.today.length }}）</h4>
+      <div *ngIf="!vm.today.length" style="opacity:.6">（なし）</div>
+      <ul><li *ngFor="let t of vm.today; trackBy: trackTask"><pp-schedule-row [t]="t"></pp-schedule-row></li></ul>
+    </section>
+
+    <section>
+      <h4 style="margin:12px 0;">🗓 明日（{{ vm.tomorrow.length }}）</h4>
+      <div *ngIf="!vm.tomorrow.length" style="opacity:.6">（なし）</div>
+      <ul><li *ngFor="let t of vm.tomorrow; trackBy: trackTask"><pp-schedule-row [t]="t"></pp-schedule-row></li></ul>
+    </section>
+
+    <section>
+      <h4 style="margin:12px 0;">🗓 今週の残り（{{ vm.thisWeekRest.length }}）</h4>
+      <div *ngIf="!vm.thisWeekRest.length" style="opacity:.6">（なし）</div>
+      <ul><li *ngFor="let t of vm.thisWeekRest; trackBy: trackTask"><pp-schedule-row [t]="t"></pp-schedule-row></li></ul>
+    </section>
+
+    <section>
+      <h4 style="margin:12px 0;">🗓 来週（{{ vm.nextWeek.length }}）</h4>
+      <div *ngIf="!vm.nextWeek.length" style="opacity:.6">（なし）</div>
+      <ul><li *ngFor="let t of vm.nextWeek; trackBy: trackTask"><pp-schedule-row [t]="t"></pp-schedule-row></li></ul>
+    </section>
+
+    <section>
+      <h4 style="margin:12px 0;">📆 以降（{{ vm.later.length }}）</h4>
+      <div *ngIf="!vm.later.length" style="opacity:.6">（なし）</div>
+      <ul><li *ngFor="let t of vm.later; trackBy: trackTask"><pp-schedule-row [t]="t"></pp-schedule-row></li></ul>
+    </section>
+
+    <section>
+      <h4 style="margin:12px 0;">— 期限未設定（{{ vm.nodue.length }}）</h4>
+      <div *ngIf="!vm.nodue.length" style="opacity:.6">（なし）</div>
+      <ul><li *ngFor="let t of vm.nodue; trackBy: trackTask"><pp-schedule-row [t]="t"></pp-schedule-row></li></ul>
+    </section>
+
+  </ng-container>
+  `
 })
-export class SchedulePage {}
+export class SchedulePage {
+
+  openOnly = true;
+
+  // ViewModel（重複なし・排他的）
+  vm$!: Observable<{
+    overdue: Task[];
+    today: Task[];
+    tomorrow: Task[];
+    thisWeekRest: Task[];
+    nextWeek: Task[];
+    later: Task[];
+    nodue: Task[];
+  }>;
+
+  constructor(private tasks: TasksService) {}
+
+  ngOnInit() { this.reload(); }
+
+  trackTask = (_: number, t: Task) => t.id;
+
+  private ymd(d: Date): string {
+    const y = d.getFullYear();
+    const m = (d.getMonth() + 1).toString().padStart(2, '0');
+    const da = d.getDate().toString().padStart(2, '0');
+    return `${y}-${m}-${da}`;
+  }
+
+  private addDays(base: Date, n: number): Date {
+    const d = new Date(base);
+    d.setDate(d.getDate() + n);
+    return d;
+  }
+
+  reload() {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const tomorrow = this.addDays(today, 1);
+
+    // 今週（月曜始まり）
+    const day = today.getDay();               // Sun=0
+    const diffToMon = (day === 0 ? -6 : 1 - day);
+    const startOfWeek = this.addDays(today, diffToMon);
+    const endOfWeek = this.addDays(startOfWeek, 6);
+
+    // 来週
+    const startOfNextWeek = this.addDays(endOfWeek, 1);
+    const endOfNextWeek = this.addDays(startOfNextWeek, 6);
+
+    // 今週の残り = 明後日〜今週末（今日・明日を除外）
+    const dayAfterTomorrow = this.addDays(tomorrow, 1);
+
+    // 以降（来週末の翌日〜は大きめ上限で縛る）
+    const FAR_FUTURE = '9999-12-31';
+
+    // 各ストリーム（サービスの既存APIだけでOK）
+    const overdue$      = this.tasks.listAllOverdue(this.ymd(today), this.openOnly);                // due < 今日
+    const today$        = this.tasks.listAllByDueRange(this.ymd(today), this.ymd(today), this.openOnly);
+    const tomorrow$     = this.tasks.listAllByDueRange(this.ymd(tomorrow), this.ymd(tomorrow), this.openOnly);
+
+    // 今週の残り（範囲が反転するケースは、レンジが空になるだけなのでこのままでOK）
+    const thisWeekRest$ = this.tasks.listAllByDueRange(
+      this.ymd(dayAfterTomorrow), this.ymd(endOfWeek), this.openOnly
+    );
+
+    const nextWeek$     = this.tasks.listAllByDueRange(
+      this.ymd(startOfNextWeek), this.ymd(endOfNextWeek), this.openOnly
+    );
+
+    const later$        = this.tasks.listAllByDueRange(
+      this.ymd(this.addDays(endOfNextWeek, 1)), FAR_FUTURE, this.openOnly
+    );
+
+    const nodue$        = this.tasks.listAllNoDue(this.openOnly);
+
+    this.vm$ = combineLatest([overdue$, today$, tomorrow$, thisWeekRest$, nextWeek$, later$, nodue$]).pipe(
+      map(([overdue, today, tomorrow, thisWeekRest, nextWeek, later, nodue]) => ({
+        overdue, today, tomorrow, thisWeekRest, nextWeek, later, nodue
+      }))
+    );
+  }
+}
