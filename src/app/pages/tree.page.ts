@@ -12,6 +12,13 @@ import { MatTreeModule } from '@angular/material/tree';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
+// 追加
+import { AsyncPipe } from '@angular/common';
+import { NgChartsModule } from 'ng2-charts';
+import { ChartConfiguration } from 'chart.js';
+import { Observable,combineLatest, map, of } from 'rxjs';
+
+
 type Status = 'not_started' | 'in_progress' | 'done';
 type TreeNode = {
   id: string;
@@ -27,9 +34,54 @@ type TreeNode = {
 @Component({
   standalone: true,
   selector: 'pp-tree',
-  imports: [NgIf, MatButtonModule, MatTreeModule, MatIconModule, MatTooltipModule],
+  imports: [NgIf, AsyncPipe,  MatButtonModule, MatTreeModule, MatIconModule, MatTooltipModule, NgChartsModule],
   template: `
     <h3>Problems</h3>
+
+    <!-- ===== Dashboard（集計＋グラフ） ===== -->
+      <div style="display:flex; align-items:center; gap:8px; margin:8px 0 12px;">
+        <button mat-stroked-button type="button" (click)="showDash = !showDash">
+          {{ showDash ? 'Hide Dashboard' : 'Show Dashboard' }}
+        </button>
+      </div>
+
+      <div *ngIf="showDash && (dash$ | async) as d"
+          style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:18px;">
+
+        <!-- 左：円グラフ（Open vs Done） -->
+        <div style="border:1px solid #e5e7eb; border-radius:12px; padding:12px;">
+          <div style="font-weight:600; margin-bottom:8px;">Overall Status</div>
+          <canvas baseChart
+            [type]="'doughnut'"
+            [data]="doughnutData(d.openTotal, d.doneTotal)"
+            [options]="doughnutOptions">
+          </canvas>
+          <div style="display:flex; gap:12px; margin-top:8px; font-size:12px; opacity:.8;">
+            <span>Open: {{ d.openTotal }}</span>
+            <span>Done: {{ d.doneTotal }}</span>
+            <span>Total: {{ d.openTotal + d.doneTotal }}</span>
+            <span>Progress: {{ d.progressPct }}%</span>
+          </div>
+        </div>
+
+        <!-- 右：棒グラフ（期日別の分布）-->
+        <div style="border:1px solid #e5e7eb; border-radius:12px; padding:12px;">
+          <div style="font-weight:600; margin-bottom:8px;">Open Tasks by Due</div>
+          <canvas baseChart
+            [type]="'bar'"
+            [data]="barData(d)"
+            [options]="barOptions">
+          </canvas>
+          <div style="display:flex; gap:12px; margin-top:8px; font-size:12px; opacity:.8;">
+            <span>Overdue: {{ d.overdue }}</span>
+            <span>Today: {{ d.today }}</span>
+            <span>This week: {{ d.thisWeek }}</span>
+            <span>No due: {{ d.nodue }}</span>
+          </div>
+        </div>
+      </div>
+      <!-- ===== /Dashboard ===== -->
+
 
     <!-- エラー表示＆再試行 -->
     <div *ngIf="loadError" style="padding:8px 12px; border:1px solid #f44336; background:#ffebee; color:#b71c1c; border-radius:6px; margin:8px 0;">
@@ -190,7 +242,10 @@ export class TreePage {
     private tasks: TasksService
   ) {}
 
-  ngOnInit() { this.startProblemsSubscription(); }
+  ngOnInit() { 
+    this.startProblemsSubscription(); 
+    this.dash$ = this.buildDash$();
+  }
 
   private startProblemsSubscription() {
     this.isLoadingProblems = true;
@@ -324,4 +379,93 @@ export class TreePage {
 
     this.taskSubs.set(key, sub);
   }
+
+
+  // --- Dashboard state ---
+showDash = false;
+dash$!: Observable<{
+  overdue: number; today: number; thisWeek: number; nodue: number;
+  openTotal: number; doneTotal: number; progressPct: number;
+}>;
+
+
+// Chart.js options（素の設定：色指定なし）
+doughnutOptions: ChartConfiguration<'doughnut'>['options'] = {
+  responsive: true,
+  plugins: { legend: { position: 'bottom' } }
+};
+barOptions: ChartConfiguration<'bar'>['options'] = {
+  responsive: true,
+  plugins: { legend: { display: false } },
+  scales: { x: { grid: { display: false } }, y: { beginAtZero: true } }
+};
+
+// Dataset builders
+doughnutData(open: number, done: number) {
+  return {
+    labels: ['Open', 'Done'],
+    datasets: [{ data: [open, done] }]
+  } as ChartConfiguration<'doughnut'>['data'];
+}
+barData(d: { overdue: number; today: number; thisWeek: number; nodue: number; }) {
+  return {
+    labels: ['Overdue', 'Today', 'This week', 'No due'],
+    datasets: [{ data: [d.overdue, d.today, d.thisWeek, d.nodue] }]
+  } as ChartConfiguration<'bar'>['data'];
+}
+
+// --- 日付ユーティリティ ---
+private ymd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const da = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${da}`;
+}
+private addDays(base: Date, n: number): Date {
+  const d = new Date(base);
+  d.setDate(d.getDate() + n);
+  return d;
+}
+
+// --- ダッシュボード集計ストリーム ---
+private buildDash$(): Observable<{
+  overdue: number; today: number; thisWeek: number; nodue: number;
+  openTotal: number; doneTotal: number; progressPct: number;
+}> {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const tomorrow = this.addDays(today, 1);
+
+  // 今週（月曜始まり）
+  const dow = today.getDay(); // Sun=0
+  const diffToMon = (dow === 0 ? -6 : 1 - dow);
+  const startOfWeek = this.addDays(today, diffToMon);
+  const endOfWeek   = this.addDays(startOfWeek, 6);
+
+  // Openのみの分布
+  const overdue$  = this.tasks.listAllOverdue(this.ymd(today), true);
+  const today$    = this.tasks.listAllByDueRange(this.ymd(today), this.ymd(today), true);
+  const thisWeek$ = this.tasks.listAllByDueRange(this.ymd(tomorrow), this.ymd(endOfWeek), true);
+  const nodue$    = this.tasks.listAllNoDue(true);
+
+  // 全タスク（Open+Done）
+  const all$      = this.tasks.listAllByDueRange('0000-01-01', '9999-12-31', false);
+
+  return combineLatest([overdue$, today$, thisWeek$, nodue$, all$]).pipe(
+    map(([ov, td, wk, nd, all]) => {
+      const overdue = ov?.length ?? 0;
+      const today   = td?.length ?? 0;
+      const thisWeek= wk?.length ?? 0;
+      const nodue   = nd?.length ?? 0;
+
+      const total     = all?.length ?? 0;
+      const doneTotal = (all ?? []).filter(t => t.status === 'done').length;
+      const openTotal = total - doneTotal;
+      const progressPct = total > 0 ? Math.round((doneTotal / total) * 100) : 0;
+
+      return { overdue, today, thisWeek, nodue, openTotal, doneTotal, progressPct };
+    })
+  );
+}
+
+
 }
