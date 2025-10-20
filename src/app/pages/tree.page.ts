@@ -17,6 +17,7 @@ import { AsyncPipe } from '@angular/common';
 import { NgChartsModule } from 'ng2-charts';
 import { ChartConfiguration } from 'chart.js';
 import { Observable,combineLatest, map, of } from 'rxjs';
+import { AuthService } from '../services/auth.service';
 
 
 type Status = 'not_started' | 'in_progress' | 'done';
@@ -37,6 +38,16 @@ type TreeNode = {
   imports: [NgIf, AsyncPipe,  MatButtonModule, MatTreeModule, MatIconModule, MatTooltipModule, NgChartsModule],
   template: `
     <h3>Problems</h3>
+    <div style="display:flex; align-items:center; gap:12px; margin:8px 0;">
+    <span style="flex:1 1 auto;"></span>
+    <ng-container *ngIf="auth.loggedIn$ | async; else signinT">
+      <span style="opacity:.8; margin-right:6px;">{{ (auth.displayName$ | async) || 'signed in' }}</span>
+      <button mat-stroked-button type="button" (click)="auth.signOut()">Sign out</button>
+    </ng-container>
+    <ng-template #signinT>
+      <button mat-raised-button color="primary" type="button" (click)="auth.signInWithGoogle()">Sign in</button>
+    </ng-template>
+  </div>
 
     <!-- ===== Dashboard（集計＋グラフ） ===== -->
     <div style="display:flex; align-items:center; gap:8px; margin:8px 0 12px;">
@@ -105,8 +116,8 @@ type TreeNode = {
           </button>
           <span style="font-weight:600">{{ node.name }}</span>
           <span style="flex:1 1 auto"></span>
-          <button mat-button type="button" (click)="renameProblemNode(node)">Rename</button>
-          <button mat-button type="button" color="warn" (click)="removeProblemNode(node)">Delete</button>
+          <button mat-button type="button" (click)="renameProblemNode(node)" *ngIf="auth.loggedIn$ | async">Rename</button>
+          <button mat-button type="button" color="warn" (click)="removeProblemNode(node)" *ngIf="auth.loggedIn$ | async">Delete</button>
         </div>
         <div *ngIf="tree.isExpanded(node)"><ng-container matTreeNodeOutlet></ng-container></div>
       </mat-nested-tree-node>
@@ -119,8 +130,8 @@ type TreeNode = {
           </button>
           <span>{{ node.name }}</span>
           <span style="flex:1 1 auto"></span>
-          <button mat-button type="button" (click)="renameIssueNode(node)">Rename</button>
-          <button mat-button type="button" color="warn" (click)="removeIssueNode(node)">Delete</button>
+          <button mat-button type="button" (click)="renameIssueNode(node)" *ngIf="auth.loggedIn$ | async">Rename</button>
+          <button mat-button type="button" color="warn" (click)="removeIssueNode(node)" *ngIf="auth.loggedIn$ | async">Delete</button>
         </div>
         <div *ngIf="tree.isExpanded(node)"><ng-container matTreeNodeOutlet></ng-container></div>
       </mat-nested-tree-node>
@@ -143,8 +154,8 @@ type TreeNode = {
           </span>
 
           <span style="flex:1 1 auto"></span>
-          <button mat-button type="button" (click)="renameTaskNode(node)">Rename</button>
-          <button mat-button type="button" color="warn" (click)="removeTaskNode(node)">Delete</button>
+          <button mat-button type="button" (click)="renameTaskNode(node)" *ngIf="auth.loggedIn$ | async">Rename</button>
+          <button mat-button type="button" color="warn" (click)="removeTaskNode(node)" *ngIf="auth.loggedIn$ | async">Delete</button>
         </div>
       </mat-nested-tree-node>
 
@@ -243,7 +254,8 @@ export class TreePage {
   constructor(
     private problems: ProblemsService,
     private issues: IssuesService,
-    private tasks: TasksService
+    private tasks: TasksService,
+    public auth: AuthService
   ) {}
 
   ngOnInit() { 
@@ -500,6 +512,5 @@ private buildDash$(): Observable<{
     })
   );
 }
-
 
 }

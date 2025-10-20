@@ -16,6 +16,7 @@ import { tap, shareReplay } from 'rxjs/operators';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DestroyRef } from '@angular/core';
 import { CdkDrag, CdkDropList } from '@angular/cdk/drag-drop'
+import { AuthService } from '../services/auth.service';
 
 @Component({
     standalone: true,
@@ -32,6 +33,14 @@ import { CdkDrag, CdkDropList } from '@angular/cdk/drag-drop'
             <option *ngFor="let p of (problems$ | async)" [ngValue]="p.id">{{ p.title }}</option>
           </select>
         </label>
+          <span style="flex:1 1 auto;"></span>
+          <ng-container *ngIf="auth.loggedIn$ | async; else signinB">
+            <span style="opacity:.8; margin-right:6px;">{{ (auth.displayName$ | async) || 'signed in' }}</span>
+            <button mat-stroked-button type="button" (click)="auth.signOut()">Sign out</button>
+          </ng-container>
+          <ng-template #signinB>
+            <button mat-raised-button color="primary" type="button" (click)="auth.signInWithGoogle()">Sign in</button>
+          </ng-template>
       </div>
   
       <div *ngIf="!selectedProblemId" style="opacity:.7">Problemを選ぶとカンバンを表示します。</div>
@@ -98,13 +107,14 @@ import { CdkDrag, CdkDropList } from '@angular/cdk/drag-drop'
                         </ng-template>
 
                         <div>{{ t.title }}</div>
-                        <div style="display:flex; gap:6px; margin-top:6px;">
+
+                          <div style="display:flex; gap:6px; margin-top:6px;" *ngIf="auth.loggedIn$ | async">
                             <button mat-button *ngFor="let next of statusCols"
                                     [disabled]="next===t.status || isBusy(t.id!)"
                                     (click)="setTaskStatus(pid, i.id!, t, next)">
-                            {{ statusLabel[next] }}
+                              {{ statusLabel[next] }}
                             </button>
-                        </div>
+                          </div>
                         </div>
 
                         <!-- 空プレースホルダ（受け皿が可視化される） -->
@@ -177,12 +187,18 @@ isBusy(id: string | undefined | null): boolean {
     private tasks: TasksService,
     private router: Router,
     private route: ActivatedRoute,
-    private destroyRef: DestroyRef
+    private destroyRef: DestroyRef,
+    public auth: AuthService
   ) {}
+
+  allowDnD = false;
 
   
 ngOnInit() {
     this.problems$ = this.problems.list();
+    this.auth.loggedIn$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(v => {
+      this.allowDnD = !!v;
+    });
   
     this.issues$ = this.selectedProblem$.pipe(
       switchMap(pid => {
@@ -365,6 +381,7 @@ listIds(issueId: string): string[] {
   
 // ドロップ可否（処理中タスクは不可）
 canEnter = (drag: CdkDrag, _drop: CdkDropList) => {
+  if (!this.allowDnD) return false;
     const data = drag?.data as { task: Task; issueId: string } | undefined;
     const id = data?.task?.id;
     return !!id && !this.isBusy(id);

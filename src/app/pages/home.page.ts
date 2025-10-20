@@ -13,8 +13,10 @@ import { ProblemsService } from '../services/problems.service';
 import { IssuesService } from '../services/issues.service';
 import { TasksService } from '../services/tasks.service';
 import { Problem, Issue, Task } from '../models/types';
-import { Observable, BehaviorSubject, of } from 'rxjs';
+import { Observable, BehaviorSubject, of, combineLatest } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
+import { AuthService } from '../services/auth.service';
+import { map } from 'rxjs/operators';
 
 @Component({
   standalone: true,
@@ -25,29 +27,52 @@ import { switchMap } from 'rxjs/operators';
   ],
   template: `
     <h2>Home</h2>
+
+    <div style="display:flex; align-items:center; gap:12px; margin:8px 0;">
+      <span style="flex:1 1 auto;"></span>
+      <ng-container *ngIf="auth.loggedIn$ | async; else signin">
+        <span style="opacity:.8; margin-right:6px;">{{ (auth.displayName$ | async) || 'signed in' }}</span>
+        <button mat-stroked-button type="button" (click)="auth.signOut()">Sign out</button>
+      </ng-container>
+      <ng-template #signin>
+        <button mat-raised-button color="primary" type="button" (click)="auth.signInWithGoogle()">Sign in with Google</button>
+      </ng-template>
+    </div>
+
     <p>ここで Problem を選んで、その配下の Issue / Task を編集します。</p>
 
-    <nav style="margin-bottom:12px;">
-      <a routerLink="/tree">🌳 Tree</a> |
-      <a routerLink="/board">📋 Board</a> |
-      <a routerLink="/schedule">📆 Schedule</a>
-    </nav>
+<ng-container *ngIf="auth.loggedIn$ | async; then editor; else needSignIn"></ng-container>
 
-    <!-- Problem セレクト（＋新規作成… を内包） -->
-    <div style="display:flex; align-items:center; gap:12px; margin:8px 0 12px;">
-      <label>Problem:
-        <select [(ngModel)]="selectedProblemId" (ngModelChange)="onSelectProblem($event)">
-          <option [ngValue]="null">-- 選択してください --</option>
-          <option *ngFor="let p of (problems$ | async)" [ngValue]="p.id">{{ p.title }}</option>
-          <option [ngValue]="NEW_OPTION_VALUE">＋ 新規作成…</option>
-        </select>
-      </label>
+        <ng-template #needSignIn>
+      <div style="padding:12px; border:1px solid #e5e7eb; border-radius:10px; margin:12px 0;">
+        編集にはサインインが必要です。右上の「Sign in」からログインしてください。<br>
+        閲覧は <a routerLink="/tree">Tree</a> / <a routerLink="/board">Board</a> / <a routerLink="/schedule">Schedule</a> で可能です。
+      </div>
+    </ng-template>
 
-      <span style="flex:1 1 auto"></span>
+    <!-- 未ログイン時は案内だけ出す -->
+    <ng-template #editor>
+      <nav style="margin-bottom:12px;">
+        <a routerLink="/tree">🌳 Tree</a> |
+        <a routerLink="/board">📋 Board</a> |
+        <a routerLink="/schedule">📆 Schedule</a>
+      </nav>
 
-      <button *ngIf="selectedProblemId" mat-stroked-button (click)="renameSelected()">Rename</button>
-      <button *ngIf="selectedProblemId" mat-stroked-button color="warn" (click)="removeSelected()">Delete</button>
-    </div>
+      <!-- Problem セレクト（＋新規作成… を内包） -->
+      <div style="display:flex; align-items:center; gap:12px; margin:8px 0 12px;">
+        <label>Problem:
+          <select [(ngModel)]="selectedProblemId" (ngModelChange)="onSelectProblem($event)">
+            <option [ngValue]="null">-- 選択してください --</option>
+            <option *ngFor="let p of (problems$ | async)" [ngValue]="p.id">{{ p.title }}</option>
+            <option [ngValue]="NEW_OPTION_VALUE">＋ 新規作成…</option>
+          </select>
+        </label>
+
+        <span style="flex:1 1 auto"></span>
+
+        <button *ngIf="selectedProblemId" mat-stroked-button (click)="renameSelected()">Rename</button>
+        <button *ngIf="selectedProblemId" mat-stroked-button color="warn" (click)="removeSelected()">Delete</button>
+      </div>
 
     <!-- 選択中 Problem の編集パネル -->
     <ng-container *ngIf="selectedProblemId as pid">
@@ -106,6 +131,7 @@ import { switchMap } from 'rxjs/operators';
       </div>
     </ng-container>
 
+
     <!-- --- Settings 表示（従来のまま） --- -->
     <section style="margin-top:16px;">
       <h3>Settings (準備のみ／表示)</h3>
@@ -116,6 +142,7 @@ import { switchMap } from 'rxjs/operators';
 {{ (prefs.prefs$ | async) | json }}
       </pre>
     </section>
+  
   `
 })
 export class HomePage {
@@ -138,62 +165,88 @@ export class HomePage {
     private problems: ProblemsService,
     private issues: IssuesService,
     private tasks: TasksService,
-    private destroyRef: DestroyRef
+    private destroyRef: DestroyRef,
+    public auth: AuthService
   ) {}
-
-  ngOnInit() {
-    // テーマ反映（従来通り）
-    this.prefs.prefs$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(p => {
-      this.theme.apply(p.theme, p.accentColor);
-    });
-
-    // Problem 一覧
-    this.problems$ = this.problems.list();
-
-    // 選択 Problem の Issue 一覧
-    this.issues$ = this.selectedProblem$.pipe(
-      switchMap(pid => pid ? this.issues.listByProblem(pid) : of([]))
-    );
-
-    this.issues$
-    .pipe(takeUntilDestroyed(this.destroyRef))
-    .subscribe(issues => {
-      const curPid = this.selectedProblemId;
-      // 選択が外れている/未選択なら掃除して終了
-      if (!curPid) {
-        this.tasksMap = {};
-        return;
-      }
-      const nextMap: Record<string, Observable<Task[]>> = {};
-      for (const i of issues ?? []) {
-        const id = i.id!;
-        // 既存を再利用（不要な再購読を避ける）
-        nextMap[id] = this.tasksMap[id] ?? this.tasks.listByIssue(curPid, id);
-      }
-      this.tasksMap = nextMap; // 参照ごと差し替え
-    });
-  }
-
-  onSelectProblem(val: string | null) {
-    if (val === this.NEW_OPTION_VALUE) {
-      const t = prompt('New Problem title');
-      if (!t || !t.trim()) {
-        // キャンセル/空 → 選択解除
-        this.selectedProblemId = null;
-        this.selectedProblem$.next(null);
-        return;
-      }
-      this.problems.create({ title: t.trim() }).then(docRef => {
-        // Firestore の addDoc は DocumentReference を返す
-        this.selectedProblemId = (docRef as any)?.id ?? null;
-        this.selectedProblem$.next(this.selectedProblemId);
-      });
-      return;
+  
+    ngOnInit() {
+      // テーマ反映（既存）
+      this.prefs.prefs$
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe(p => this.theme.apply(p.theme, p.accentColor));
+  
+      // 未ログイン時は空配列にする
+      this.problems$ = this.auth.loggedIn$.pipe(
+        switchMap(isIn => isIn ? this.problems.list() : of([]))
+      );
+  
+      // 選択 Problem の Issue 一覧（未ログイン/未選択は空）
+      this.issues$ = combineLatest([this.selectedProblem$, this.auth.loggedIn$]).pipe(
+        switchMap(([pid, isIn]) => (isIn && pid) ? this.issues.listByProblem(pid) : of([]))
+      );
+  
+      // Issue → Task購読キャッシュ（未ログイン・未選択時は掃除）
+      this.issues$
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe(issues => {
+          const isIn = (this.authSnapshot = this.authSnapshot ?? false); // フィールドに最後の状態を持たせる
+          // auth.loggedIn$ は下で購読して更新します（↓）
+  
+          if (!this.selectedProblemId) {
+            this.tasksMap = {};
+            return;
+          }
+          const nextMap: Record<string, Observable<Task[]>> = {};
+          for (const i of issues ?? []) {
+            const id = i.id!;
+            nextMap[id] = this.tasksMap[id] ?? this.tasks.listByIssue(this.selectedProblemId!, id);
+          }
+          this.tasksMap = nextMap;
+        });
+  
+      // ログイン状態のスナップショットとサインアウト時のリセット
+      this.auth.loggedIn$
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe(isIn => {
+          this.authSnapshot = isIn;
+          if (!isIn) {
+            this.selectedProblemId = null;
+            this.selectedProblem$.next(null);
+            this.tasksMap = {};
+          }
+        });
     }
-
-    this.selectedProblemId = val;
-    this.selectedProblem$.next(val);
-  }
+  
+    // 任意：メソッド側の保険（UIガードだけで十分なら不要）
+    private authSnapshot = false;
+    private requireLogin(): boolean {
+      if (!this.authSnapshot) {
+        alert('この操作にはサインインが必要です');
+        return false;
+      }
+      return true;
+    }
+  
+    onSelectProblem(val: string | null) {
+      if (val === this.NEW_OPTION_VALUE) {
+        if (!this.requireLogin()) return;
+        const t = prompt('New Problem title');
+        if (!t || !t.trim()) {
+          this.selectedProblemId = null;
+          this.selectedProblem$.next(null);
+          return;
+        }
+        this.problems.create({ title: t.trim() }).then(docRef => {
+          this.selectedProblemId = (docRef as any)?.id ?? null;
+          this.selectedProblem$.next(this.selectedProblemId);
+        });
+        return;
+      }
+      if (!this.requireLogin() && val) return; // 未ログイン時の選択操作を無効化（nullに戻すならこの行は省略）
+      this.selectedProblemId = val;
+      this.selectedProblem$.next(val);
+    }
+  
 
   // --- Problem 操作 ---
   async renameSelected() {
