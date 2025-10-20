@@ -39,48 +39,52 @@ type TreeNode = {
     <h3>Problems</h3>
 
     <!-- ===== Dashboard（集計＋グラフ） ===== -->
-      <div style="display:flex; align-items:center; gap:8px; margin:8px 0 12px;">
-        <button mat-stroked-button type="button" (click)="showDash = !showDash">
-          {{ showDash ? 'Hide Dashboard' : 'Show Dashboard' }}
-        </button>
-      </div>
+    <div style="display:flex; align-items:center; gap:8px; margin:8px 0 12px;">
+      <button mat-stroked-button type="button" (click)="showDash = !showDash">
+        {{ showDash ? 'Hide Dashboard' : 'Show Dashboard' }}
+      </button>
+    </div>
 
-      <div *ngIf="showDash && (dash$ | async) as d"
-          style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:18px;">
+    <div *ngIf="showDash && (dash$ | async) as d"
+        style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:12px; margin-bottom:12px;">
 
-        <!-- 左：円グラフ（Open vs Done） -->
-        <div style="border:1px solid #e5e7eb; border-radius:12px; padding:12px;">
-          <div style="font-weight:600; margin-bottom:8px;">Overall Status</div>
+      <!-- 左：円グラフ -->
+      <div style="border:1px solid #e5e7eb; border-radius:10px; padding:8px;">
+        <div style="font-weight:600; margin-bottom:6px; font-size:13px;">Overall Status</div>
+        <div style="height:180px;">
           <canvas baseChart
             [type]="'doughnut'"
             [data]="doughnutData(d.openTotal, d.doneTotal)"
             [options]="doughnutOptions">
           </canvas>
-          <div style="display:flex; gap:12px; margin-top:8px; font-size:12px; opacity:.8;">
-            <span>Open: {{ d.openTotal }}</span>
-            <span>Done: {{ d.doneTotal }}</span>
-            <span>Total: {{ d.openTotal + d.doneTotal }}</span>
-            <span>Progress: {{ d.progressPct }}%</span>
-          </div>
         </div>
+        <div style="display:flex; gap:10px; margin-top:6px; font-size:12px; opacity:.8;">
+          <span>Open: {{ d.openTotal }}</span>
+          <span>Done: {{ d.doneTotal }}</span>
+          <span>Total: {{ d.openTotal + d.doneTotal }}</span>
+          <span>Progress: {{ d.progressPct }}%</span>
+        </div>
+      </div>
 
-        <!-- 右：棒グラフ（期日別の分布）-->
-        <div style="border:1px solid #e5e7eb; border-radius:12px; padding:12px;">
-          <div style="font-weight:600; margin-bottom:8px;">Open Tasks by Due</div>
+      <!-- 右：棒グラフ -->
+      <div style="border:1px solid #e5e7eb; border-radius:10px; padding:8px;">
+        <div style="font-weight:600; margin-bottom:6px; font-size:13px;">Open Tasks by Due</div>
+        <div style="height:200px;">
           <canvas baseChart
             [type]="'bar'"
             [data]="barData(d)"
             [options]="barOptions">
           </canvas>
-          <div style="display:flex; gap:12px; margin-top:8px; font-size:12px; opacity:.8;">
-            <span>Overdue: {{ d.overdue }}</span>
-            <span>Today: {{ d.today }}</span>
-            <span>This week: {{ d.thisWeek }}</span>
-            <span>No due: {{ d.nodue }}</span>
-          </div>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:6px; font-size:12px; opacity:.8;">
+          <span>Overdue: {{ d.overdue }}</span>
+          <span>Today: {{ d.today }}</span>
+          <span>This week: {{ d.thisWeek }}</span>
+          <span>No due: {{ d.nodue }}</span>
         </div>
       </div>
-      <!-- ===== /Dashboard ===== -->
+    </div>
+    <!-- ===== /Dashboard ===== -->
 
 
     <!-- エラー表示＆再試行 -->
@@ -389,16 +393,44 @@ dash$!: Observable<{
 }>;
 
 
-// Chart.js options（素の設定：色指定なし）
+// Chart.js options（小さめ）
 doughnutOptions: ChartConfiguration<'doughnut'>['options'] = {
   responsive: true,
-  plugins: { legend: { position: 'bottom' } }
+  maintainAspectRatio: false,      // 親の高さに合わせる
+  plugins: {
+    legend: {
+      position: 'bottom',
+      labels: { boxWidth: 10, boxHeight: 10, font: { size: 10 } }
+    }
+  },
+  layout: { padding: { top: 4, bottom: 4, left: 0, right: 0 } },
+  cutout: '60%'                    // ドーナツの中抜きを少し広げて見た目を軽く
 };
+
 barOptions: ChartConfiguration<'bar'>['options'] = {
   responsive: true,
-  plugins: { legend: { display: false } },
-  scales: { x: { grid: { display: false } }, y: { beginAtZero: true } }
+  maintainAspectRatio: false,      // 親の高さに合わせる
+  plugins: {
+    legend: { display: false }
+  },
+  elements: {
+    bar: { borderRadius: 4 } 
+  },
+  scales: {
+    x: {
+      grid: { display: false },
+      ticks: { font: { size: 10 } }
+    },
+    y: {
+      beginAtZero: true,
+      ticks: { font: { size: 10 }, precision: 0 },
+      grid: { lineWidth: 0.5 }
+    }
+  },
+  layout: { padding: { top: 2, bottom: 2, left: 0, right: 0 } }
 };
+
+
 
 // Dataset builders
 doughnutData(open: number, done: number) {
@@ -410,7 +442,9 @@ doughnutData(open: number, done: number) {
 barData(d: { overdue: number; today: number; thisWeek: number; nodue: number; }) {
   return {
     labels: ['Overdue', 'Today', 'This week', 'No due'],
-    datasets: [{ data: [d.overdue, d.today, d.thisWeek, d.nodue] }]
+    datasets: [{ data: [d.overdue, d.today, d.thisWeek, d.nodue],
+      maxBarThickness: 22 
+     }]
   } as ChartConfiguration<'bar'>['data'];
 }
 
