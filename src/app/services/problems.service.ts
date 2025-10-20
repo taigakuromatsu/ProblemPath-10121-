@@ -20,39 +20,41 @@ import {
 } from 'firebase/firestore';
 import { collectionData as rxCollectionData } from 'rxfire/firestore';
 
-
 @Injectable({ providedIn: 'root' })
 export class ProblemsService {
-  private readonly colPath = 'projects/default/problems';
-
   constructor(private fs: Firestore) {}
 
-  // 一覧（リアルタイム）
-  list(): Observable<Problem[]> {
-    const colRef = nativeCollection(this.fs as any, this.colPath);
-    // ★ order優先、同値時はcreatedAtで安定化
-    const q = nativeQuery(colRef,
+  private colPath(projectId: string) {
+    if (!projectId) throw new Error('[ProblemsService] projectId is required');
+    return `projects/${projectId}/problems`;
+  }
+
+  // -------- list --------
+  list(projectId: string): Observable<Problem[]> {
+    console.log('[ProblemsService.list]', { pid: projectId, path: this.colPath(projectId) });
+    const colRef = nativeCollection(this.fs as any, this.colPath(projectId));
+    const q = nativeQuery(
+      colRef,
       nativeOrderBy('order', 'asc'),
       nativeOrderBy('createdAt', 'asc')
     );
     return rxCollectionData(q as any, { idField: 'id' }) as Observable<Problem[]>;
   }
-  
-    // ★ 追加：最大orderを取り、+1で次の順序を割り当て
-    private async nextOrder(): Promise<number> {
-        const colRef = nativeCollection(this.fs as any, this.colPath);
-        const q = nativeQuery(colRef, nativeOrderBy('order', 'desc'), nativeLimit(1));
-        const snap = await nativeGetDocs(q);
-        if (snap.empty) return 1;
-        const max = (snap.docs[0].data() as any).order ?? 0;
-        return (Number(max) || 0) + 1;
-    }
-  
 
-  // 作成
-  async create(p: Partial<Problem>) {
-    const colRef = nativeCollection(this.fs as any, this.colPath);
-    const order = (p.order ?? await this.nextOrder());   
+  // -------- nextOrder（内部ユーティリティ） --------
+  private async nextOrder(projectId: string): Promise<number> {
+    const colRef = nativeCollection(this.fs as any, this.colPath(projectId));
+    const q = nativeQuery(colRef, nativeOrderBy('order', 'desc'), nativeLimit(1));
+    const snap = await nativeGetDocs(q);
+    if (snap.empty) return 1;
+    const max = (snap.docs[0].data() as any).order ?? 0;
+    return (Number(max) || 0) + 1;
+  }
+
+  // -------- create --------
+  async create(projectId: string, p: Partial<Problem>): Promise<any> {
+    const colRef = nativeCollection(this.fs as any, this.colPath(projectId));
+    const order = p.order ?? await this.nextOrder(projectId);
     return nativeAddDoc(colRef, {
       title: p.title ?? 'Untitled',
       description: p.description ?? '',
@@ -60,25 +62,22 @@ export class ProblemsService {
       progress: p.progress ?? 0,
       tags: p.tags ?? [],
       assignees: p.assignees ?? [],
-      order,                               
+      order,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       template: p.template ?? {}
     });
   }
-  
 
-  // 更新
-  async update(id: string, patch: Partial<Problem>) {
-    const ref = nativeDoc(this.fs as any, `${this.colPath}/${id}`);
-    return nativeUpdateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
+  // -------- update --------
+  async update(projectId: string, id: string, patch: Partial<Problem>): Promise<void> {
+    const ref = nativeDoc(this.fs as any, `${this.colPath(projectId)}/${id}`);
+    return nativeUpdateDoc(ref, { ...patch, updatedAt: serverTimestamp() }) as any;
   }
 
-
-  // ★ 上へ：直前の order のドキュメントを見つけて order を入れ替える
-async moveUp(id: string, currentOrder: number): Promise<void> {
-    const colRef = nativeCollection(this.fs as any, this.colPath);
-    // currentOrder より小さい中で一番近いもの
+  // 並べ替え
+  async moveUp(projectId: string, id: string, currentOrder: number): Promise<void> {
+    const colRef = nativeCollection(this.fs as any, this.colPath(projectId));
     const q = nativeQuery(
       colRef,
       nativeWhere('order', '<', currentOrder),
@@ -86,21 +85,19 @@ async moveUp(id: string, currentOrder: number): Promise<void> {
       nativeLimit(1)
     );
     const snap = await nativeGetDocs(q);
-    if (snap.empty) return; // 先頭なら何もしない
+    if (snap.empty) return;
+
     const neighbor = snap.docs[0];
     const batch = nativeWriteBatch(this.fs as any);
-    const aRef = nativeDoc(this.fs as any, `${this.colPath}/${id}`);
-    const bRef = neighbor.ref;
+    const aRef = nativeDoc(this.fs as any, `${this.colPath(projectId)}/${id}`);
     const neighborOrder = (neighbor.data() as any).order ?? 0;
     batch.update(aRef, { order: neighborOrder, updatedAt: serverTimestamp() });
-    batch.update(bRef, { order: currentOrder, updatedAt: serverTimestamp() });
+    batch.update(neighbor.ref, { order: currentOrder, updatedAt: serverTimestamp() });
     await batch.commit();
   }
-  
-  // ★ 下へ：直後の order のドキュメントと入れ替える
-  async moveDown(id: string, currentOrder: number): Promise<void> {
-    const colRef = nativeCollection(this.fs as any, this.colPath);
-    // currentOrder より大きい中で一番近いもの
+
+  async moveDown(projectId: string, id: string, currentOrder: number): Promise<void> {
+    const colRef = nativeCollection(this.fs as any, this.colPath(projectId));
     const q = nativeQuery(
       colRef,
       nativeWhere('order', '>', currentOrder),
@@ -108,20 +105,18 @@ async moveUp(id: string, currentOrder: number): Promise<void> {
       nativeLimit(1)
     );
     const snap = await nativeGetDocs(q);
-    if (snap.empty) return; // 末尾なら何もしない
+    if (snap.empty) return;
+
     const neighbor = snap.docs[0];
     const batch = nativeWriteBatch(this.fs as any);
-    const aRef = nativeDoc(this.fs as any, `${this.colPath}/${id}`);
-    const bRef = neighbor.ref;
+    const aRef = nativeDoc(this.fs as any, `${this.colPath(projectId)}/${id}`);
     const neighborOrder = (neighbor.data() as any).order ?? 0;
     batch.update(aRef, { order: neighborOrder, updatedAt: serverTimestamp() });
-    batch.update(bRef, { order: currentOrder, updatedAt: serverTimestamp() });
+    batch.update(neighbor.ref, { order: currentOrder, updatedAt: serverTimestamp() });
     await batch.commit();
   }
 
-
-  
-  // ★ 追加: コレクションをバッチで小分け削除（上限500対策）
+  // 再帰削除ユーティリティは変更なし
   private async deleteCollection(path: string, batchSize = 300): Promise<void> {
     const colRef = nativeCollection(this.fs as any, path);
     while (true) {
@@ -135,41 +130,28 @@ async moveUp(id: string, currentOrder: number): Promise<void> {
     }
   }
 
-  // ★ 追加: 特定 Problem 配下の issues とその tasks を全削除
-  private async deleteAllIssuesAndTasks(problemId: string, batchSize = 200): Promise<void> {
-    const issuesColPath = `${this.colPath}/${problemId}/issues`;
-
-    // issues を小分けで読み出し → 各 issue の tasks を削除 → issue 自体をバッチ削除
+  private async deleteAllIssuesAndTasks(projectId: string, problemId: string, batchSize = 200): Promise<void> {
+    const issuesColPath = `${this.colPath(projectId)}/${problemId}/issues`;
     while (true) {
       const issuesColRef = nativeCollection(this.fs as any, issuesColPath);
       const q = nativeQuery(issuesColRef, nativeLimit(batchSize));
       const snap = await nativeGetDocs(q);
       if (snap.empty) break;
 
-      // 1) それぞれの issue の tasks を先に削除
       for (const issueDoc of snap.docs) {
         const issueId = issueDoc.id;
         const tasksPath = `${issuesColPath}/${issueId}/tasks`;
-        await this.deleteCollection(tasksPath); // tasks 全削除
+        await this.deleteCollection(tasksPath);
       }
-
-      // 2) issue 本体をまとめて削除
       const batch = nativeWriteBatch(this.fs as any);
       snap.docs.forEach((d) => batch.delete(d.ref));
       await batch.commit();
     }
   }
 
-  // ★ 修正: 削除（Problem 本体の前に配下を再帰削除）
-  async remove(id: string) {
-    // 1) 配下の issues と tasks を全削除
-    await this.deleteAllIssuesAndTasks(id);
-
-    // 2) problem ドキュメントを削除
-    const problemRef = nativeDoc(this.fs as any, `${this.colPath}/${id}`);
-    return nativeDeleteDoc(problemRef);
+  async remove(projectId: string, id: string): Promise<void> {
+    await this.deleteAllIssuesAndTasks(projectId, id);
+    const problemRef = nativeDoc(this.fs as any, `${this.colPath(projectId)}/${id}`);
+    return nativeDeleteDoc(problemRef) as any;
   }
-  
 }
-
-

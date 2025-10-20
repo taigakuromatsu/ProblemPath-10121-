@@ -1,9 +1,12 @@
+// src/app/pages/tree.page.ts
 import { Component } from '@angular/core';
-import { NgIf } from '@angular/common';
+import { NgIf, AsyncPipe } from '@angular/common';
 
 import { ProblemsService } from '../services/problems.service';
 import { IssuesService } from '../services/issues.service';
 import { TasksService } from '../services/tasks.service';
+import { CurrentProjectService } from '../services/current-project.service';
+import { AuthService } from '../services/auth.service';
 
 import { MatButtonModule } from '@angular/material/button';
 import { MatTreeNestedDataSource } from '@angular/material/tree';
@@ -12,42 +15,42 @@ import { MatTreeModule } from '@angular/material/tree';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-// 追加
-import { AsyncPipe } from '@angular/common';
 import { NgChartsModule } from 'ng2-charts';
 import { ChartConfiguration } from 'chart.js';
-import { Observable,combineLatest, map, of } from 'rxjs';
-import { AuthService } from '../services/auth.service';
 
+import { Observable, combineLatest, of } from 'rxjs';
+import { map, switchMap, take, tap } from 'rxjs/operators';
 
 type Status = 'not_started' | 'in_progress' | 'done';
+
 type TreeNode = {
   id: string;
   name: string;
   kind: 'problem' | 'issue' | 'task';
   status?: Status;
-  parentId?: string;
-  parentIssueId?: string;
-  parentProblemId?: string;
+  parentId?: string;            // issue の親 problemId
+  parentIssueId?: string;       // task の親 issueId
+  parentProblemId?: string;     // task の親 problemId
   children?: TreeNode[];
 };
 
 @Component({
   standalone: true,
   selector: 'pp-tree',
-  imports: [NgIf, AsyncPipe,  MatButtonModule, MatTreeModule, MatIconModule, MatTooltipModule, NgChartsModule],
+  imports: [NgIf, AsyncPipe, MatButtonModule, MatTreeModule, MatIconModule, MatTooltipModule, NgChartsModule],
   template: `
     <h3>Problems</h3>
+
     <div style="display:flex; align-items:center; gap:12px; margin:8px 0;">
-    <span style="flex:1 1 auto;"></span>
-    <ng-container *ngIf="auth.loggedIn$ | async; else signinT">
-      <span style="opacity:.8; margin-right:6px;">{{ (auth.displayName$ | async) || 'signed in' }}</span>
-      <button mat-stroked-button type="button" (click)="auth.signOut()">Sign out</button>
-    </ng-container>
-    <ng-template #signinT>
-      <button mat-raised-button color="primary" type="button" (click)="auth.signInWithGoogle()">Sign in</button>
-    </ng-template>
-  </div>
+      <span style="flex:1 1 auto;"></span>
+      <ng-container *ngIf="auth.loggedIn$ | async; else signinT">
+        <span style="opacity:.8; margin-right:6px;">{{ (auth.displayName$ | async) || 'signed in' }}</span>
+        <button mat-stroked-button type="button" (click)="auth.signOut()">Sign out</button>
+      </ng-container>
+      <ng-template #signinT>
+        <button mat-raised-button color="primary" type="button" (click)="auth.signInWithGoogle()">Sign in</button>
+      </ng-template>
+    </div>
 
     <!-- ===== Dashboard（集計＋グラフ） ===== -->
     <div style="display:flex; align-items:center; gap:8px; margin:8px 0 12px;">
@@ -57,7 +60,7 @@ type TreeNode = {
     </div>
 
     <div *ngIf="showDash && (dash$ | async) as d"
-        style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:12px; margin-bottom:12px;">
+         style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:12px; margin-bottom:12px;">
 
       <!-- 左：円グラフ -->
       <div style="border:1px solid #e5e7eb; border-radius:10px; padding:8px;">
@@ -96,7 +99,6 @@ type TreeNode = {
       </div>
     </div>
     <!-- ===== /Dashboard ===== -->
-
 
     <!-- エラー表示＆再試行 -->
     <div *ngIf="loadError" style="padding:8px 12px; border:1px solid #f44336; background:#ffebee; color:#b71c1c; border-radius:6px; margin:8px 0;">
@@ -208,40 +210,51 @@ export class TreePage {
   isLoadingProblems = true;
   loadError: string | null = null;
 
-  // MatTreeのノード操作（軽い編集だけ残す）
+  // MatTreeのノード操作（CRUDはすべてpid明示）
+  constructor(
+    private problems: ProblemsService,
+    private issues: IssuesService,
+    private tasks: TasksService,
+    public auth: AuthService,
+    private currentProject: CurrentProjectService
+  ) {}
+
   renameProblemNode(node: { id: string; name: string }) {
     const t = prompt('New Problem title', node.name);
-    if (t && t.trim()) this.problems.update(node.id, { title: t.trim() });
+    if (!t?.trim()) return;
+    this.withPid(pid => this.problems.update(pid, node.id, { title: t.trim() }));
   }
   removeProblemNode(node: { id: string; name: string }) {
-    if (confirm(`Delete "${node.name}"?`)) this.problems.remove(node.id);
+    if (!confirm(`Delete "${node.name}"?`)) return;
+    this.withPid(pid => this.problems.remove(pid, node.id));
   }
 
   renameIssueNode(node: { id: string; name: string; parentId?: string }) {
     if (!node.parentId) return;
     const t = prompt('New Issue title', node.name);
-    if (t && t.trim()) this.issues.update(node.parentId, node.id, { title: t.trim() });
+    if (!t?.trim()) return;
+    this.withPid(pid => this.issues.update(pid, node.parentId!, node.id, { title: t.trim() }));
   }
   removeIssueNode(node: { id: string; name: string; parentId?: string }) {
     if (!node.parentId) return;
-    if (confirm(`Delete Issue "${node.name}"?`)) this.issues.remove(node.parentId, node.id);
+    if (!confirm(`Delete Issue "${node.name}"?`)) return;
+    this.withPid(pid => this.issues.remove(pid, node.parentId!, node.id));
   }
 
   renameTaskNode(node: { id: string; name: string; parentProblemId?: string; parentIssueId?: string }) {
     if (!node.parentProblemId || !node.parentIssueId) return;
     const t = prompt('New Task title', node.name);
-    if (t && t.trim()) this.tasks.update(node.parentProblemId, node.parentIssueId, node.id, { title: t.trim() });
+    if (!t?.trim()) return;
+    this.withPid(pid => this.tasks.update(pid, node.parentProblemId!, node.parentIssueId!, node.id, { title: t.trim() }));
   }
   async removeTaskNode(node: { id: string; name: string; parentProblemId?: string; parentIssueId?: string }) {
     if (!node.parentProblemId || !node.parentIssueId || this.isBusyId(node.id)) return;
-    if (confirm(`Delete Task "${node.name}"?`)) {
-      this.busyIds.add(node.id!);
-      try {
-        await this.tasks.remove(node.parentProblemId, node.parentIssueId, node.id!);
-      } finally {
-        this.busyIds.delete(node.id!);
-      }
-    }
+    if (!confirm(`Delete Task "${node.name}"?`)) return;
+    this.busyIds.add(node.id!);
+    this.withPid(async pid => {
+      try { await this.tasks.remove(pid, node.parentProblemId!, node.parentIssueId!, node.id!); }
+      finally { this.busyIds.delete(node.id!); }
+    });
   }
 
   data: TreeNode[] = [];
@@ -251,24 +264,25 @@ export class TreePage {
   private issueSubs = new Map<string, import('rxjs').Subscription>(); // problemId -> sub
   private taskSubs  = new Map<string, import('rxjs').Subscription>(); // `${problemId}_${issueId}` -> sub
 
-  constructor(
-    private problems: ProblemsService,
-    private issues: IssuesService,
-    private tasks: TasksService,
-    public auth: AuthService
-  ) {}
+    ngOnInit() {
+       this.startProblemsSubscription();
+        this.dash$ = this.buildDash$();
+    }
 
-  ngOnInit() { 
-    this.startProblemsSubscription(); 
-    this.dash$ = this.buildDash$();
-  }
 
   private startProblemsSubscription() {
     this.isLoadingProblems = true;
     this.loadError = null;
 
     this.subForTree?.unsubscribe();
-    this.subForTree = this.problems.list().subscribe({
+    this.subForTree = combineLatest([this.currentProject.projectId$, this.auth.loggedIn$]).pipe(
+      tap(([pid, isIn]) => console.log('[Tree] subscribe Problems with', { pid, isIn })),
+      // ★ default は購読しない（実pidになるまで空配列）
+      switchMap(([pid, isIn]) => {
+        const safePid = (pid && pid !== 'default') ? pid : null;
+        return (isIn && safePid) ? this.problems.list(safePid) : of([]);
+      })
+    ).subscribe({
       next: rows => {
         this.data = rows.map(r => ({
           id: r.id!,
@@ -278,7 +292,6 @@ export class TreePage {
           children: [] as TreeNode[]
         }));
 
-        // 参照ごと差し替えで通知
         this.tree.dataNodes = [...this.data];
         this.dataSource.data = [...this.data];
 
@@ -313,7 +326,13 @@ export class TreePage {
   private attachIssueSubscription(pNode: TreeNode) {
     this.issueSubs.get(pNode.id)?.unsubscribe();
 
-    const sub = this.issues.listByProblem(pNode.id).subscribe(issues => {
+    const sub = combineLatest([this.currentProject.projectId$, this.auth.loggedIn$]).pipe(
+      tap(([pid, isIn]) => console.log('[Tree] subscribe Issues with', { pid, isIn, problemId: pNode.id })),
+      switchMap(([pid, isIn]) => {
+        const safePid = (pid && pid !== 'default') ? pid : null;
+        return (isIn && safePid) ? this.issues.listByProblem(safePid, pNode.id) : of([]);
+      })
+    ).subscribe(issues => {
       const kids: TreeNode[] = issues.map(i => ({
         id: i.id!,
         name: i.title,
@@ -358,7 +377,13 @@ export class TreePage {
     const key = `${problemId}_${issueNode.id}`;
     this.taskSubs.get(key)?.unsubscribe();
 
-    const sub = this.tasks.listByIssue(problemId, issueNode.id).subscribe(tasks => {
+    const sub = combineLatest([this.currentProject.projectId$, this.auth.loggedIn$]).pipe(
+      tap(([pid, isIn]) => console.log('[Tree] subscribe Tasks with', { pid, isIn, problemId, issueId: issueNode.id })),
+      switchMap(([pid, isIn]) => {
+        const safePid = (pid && pid !== 'default') ? pid : null;
+        return (isIn && safePid) ? this.tasks.listByIssue(safePid, problemId, issueNode.id) : of([]);
+      })
+    ).subscribe(tasks => {
       const kids: TreeNode[] = tasks.map(t => ({
         id: t.id!,
         name: t.title,
@@ -396,121 +421,117 @@ export class TreePage {
     this.taskSubs.set(key, sub);
   }
 
-
   // --- Dashboard state ---
-showDash = false;
-dash$!: Observable<{
-  overdue: number; today: number; thisWeek: number; nodue: number;
-  openTotal: number; doneTotal: number; progressPct: number;
-}>;
+  showDash = false;
+  dash$!: Observable<{
+    overdue: number; today: number; thisWeek: number; nodue: number;
+    openTotal: number; doneTotal: number; progressPct: number;
+  }>;
 
-
-// Chart.js options（小さめ）
-doughnutOptions: ChartConfiguration<'doughnut'>['options'] = {
-  responsive: true,
-  maintainAspectRatio: false,      // 親の高さに合わせる
-  plugins: {
-    legend: {
-      position: 'bottom',
-      labels: { boxWidth: 10, boxHeight: 10, font: { size: 10 } }
-    }
-  },
-  layout: { padding: { top: 4, bottom: 4, left: 0, right: 0 } },
-  cutout: '60%'                    // ドーナツの中抜きを少し広げて見た目を軽く
-};
-
-barOptions: ChartConfiguration<'bar'>['options'] = {
-  responsive: true,
-  maintainAspectRatio: false,      // 親の高さに合わせる
-  plugins: {
-    legend: { display: false }
-  },
-  elements: {
-    bar: { borderRadius: 4 } 
-  },
-  scales: {
-    x: {
-      grid: { display: false },
-      ticks: { font: { size: 10 } }
+  // Chart.js options（小さめ）
+  doughnutOptions: ChartConfiguration<'doughnut'>['options'] = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'bottom',
+        labels: { boxWidth: 10, boxHeight: 10, font: { size: 10 } }
+      }
     },
-    y: {
-      beginAtZero: true,
-      ticks: { font: { size: 10 }, precision: 0 },
-      grid: { lineWidth: 0.5 }
-    }
-  },
-  layout: { padding: { top: 2, bottom: 2, left: 0, right: 0 } }
-};
+    layout: { padding: { top: 4, bottom: 4, left: 0, right: 0 } },
+    cutout: '60%'
+  };
 
+  barOptions: ChartConfiguration<'bar'>['options'] = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    elements: { bar: { borderRadius: 4 } },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+      y: { beginAtZero: true, ticks: { font: { size: 10 }, precision: 0 }, grid: { lineWidth: 0.5 } }
+    },
+    layout: { padding: { top: 2, bottom: 2, left: 0, right: 0 } }
+  };
 
+  doughnutData(open: number, done: number) {
+    return {
+      labels: ['Open', 'Done'],
+      datasets: [{ data: [open, done] }]
+    } as ChartConfiguration<'doughnut'>['data'];
+  }
+  barData(d: { overdue: number; today: number; thisWeek: number; nodue: number; }) {
+    return {
+      labels: ['Overdue', 'Today', 'This week', 'No due'],
+      datasets: [{ data: [d.overdue, d.today, d.thisWeek, d.nodue], maxBarThickness: 22 }]
+    } as ChartConfiguration<'bar'>['data'];
+  }
 
-// Dataset builders
-doughnutData(open: number, done: number) {
-  return {
-    labels: ['Open', 'Done'],
-    datasets: [{ data: [open, done] }]
-  } as ChartConfiguration<'doughnut'>['data'];
-}
-barData(d: { overdue: number; today: number; thisWeek: number; nodue: number; }) {
-  return {
-    labels: ['Overdue', 'Today', 'This week', 'No due'],
-    datasets: [{ data: [d.overdue, d.today, d.thisWeek, d.nodue],
-      maxBarThickness: 22 
-     }]
-  } as ChartConfiguration<'bar'>['data'];
-}
+  // --- 日付ユーティリティ ---
+  private ymd(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const da = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${da}`;
+  }
+  private addDays(base: Date, n: number): Date {
+    const d = new Date(base);
+    d.setDate(d.getDate() + n);
+    return d;
+  }
 
-// --- 日付ユーティリティ ---
-private ymd(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const da = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${da}`;
-}
-private addDays(base: Date, n: number): Date {
-  const d = new Date(base);
-  d.setDate(d.getDate() + n);
-  return d;
-}
+  // --- ダッシュボード（pidに追従）
+  private buildDash$(): Observable<{
+    overdue: number; today: number; thisWeek: number; nodue: number;
+    openTotal: number; doneTotal: number; progressPct: number;
+  }> {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const tomorrow = this.addDays(today, 1);
 
-// --- ダッシュボード集計ストリーム ---
-private buildDash$(): Observable<{
-  overdue: number; today: number; thisWeek: number; nodue: number;
-  openTotal: number; doneTotal: number; progressPct: number;
-}> {
-  const today = new Date(); today.setHours(0,0,0,0);
-  const tomorrow = this.addDays(today, 1);
+    // 今週（月曜始まり）
+    const dow = today.getDay(); // Sun=0
+    const diffToMon = (dow === 0 ? -6 : 1 - dow);
+    const startOfWeek = this.addDays(today, diffToMon);
+    const endOfWeek   = this.addDays(startOfWeek, 6);
 
-  // 今週（月曜始まり）
-  const dow = today.getDay(); // Sun=0
-  const diffToMon = (dow === 0 ? -6 : 1 - dow);
-  const startOfWeek = this.addDays(today, diffToMon);
-  const endOfWeek   = this.addDays(startOfWeek, 6);
+    return this.currentProject.projectId$.pipe(
+      switchMap(pid => {
+        if (!pid) return of({
+          overdue: 0, today: 0, thisWeek: 0, nodue: 0,
+          openTotal: 0, doneTotal: 0, progressPct: 0
+        });
 
-  // Openのみの分布
-  const overdue$  = this.tasks.listAllOverdue(this.ymd(today), true);
-  const today$    = this.tasks.listAllByDueRange(this.ymd(today), this.ymd(today), true);
-  const thisWeek$ = this.tasks.listAllByDueRange(this.ymd(tomorrow), this.ymd(endOfWeek), true);
-  const nodue$    = this.tasks.listAllNoDue(true);
+        const overdue$  = this.tasks.listAllOverdue(pid, this.ymd(today), true);
+        const today$    = this.tasks.listAllByDueRange(pid, this.ymd(today), this.ymd(today), true);
+        const thisWeek$ = this.tasks.listAllByDueRange(pid, this.ymd(tomorrow), this.ymd(endOfWeek), true);
+        const nodue$    = this.tasks.listAllNoDue(pid, true);
+        const all$      = this.tasks.listAllByDueRange(pid, '0000-01-01', '9999-12-31', false);
 
-  // 全タスク（Open+Done）
-  const all$      = this.tasks.listAllByDueRange('0000-01-01', '9999-12-31', false);
+        return combineLatest([overdue$, today$, thisWeek$, nodue$, all$]).pipe(
+          map(([ov, td, wk, nd, all]) => {
+            const overdue = ov?.length ?? 0;
+            const today   = td?.length ?? 0;
+            const thisWeek= wk?.length ?? 0;
+            const nodue   = nd?.length ?? 0;
 
-  return combineLatest([overdue$, today$, thisWeek$, nodue$, all$]).pipe(
-    map(([ov, td, wk, nd, all]) => {
-      const overdue = ov?.length ?? 0;
-      const today   = td?.length ?? 0;
-      const thisWeek= wk?.length ?? 0;
-      const nodue   = nd?.length ?? 0;
+            const total     = all?.length ?? 0;
+            const doneTotal = (all ?? []).filter(t => t.status === 'done').length;
+            const openTotal = total - doneTotal;
+            const progressPct = total > 0 ? Math.round((doneTotal / total) * 100) : 0;
 
-      const total     = all?.length ?? 0;
-      const doneTotal = (all ?? []).filter(t => t.status === 'done').length;
-      const openTotal = total - doneTotal;
-      const progressPct = total > 0 ? Math.round((doneTotal / total) * 100) : 0;
+            return { overdue, today, thisWeek, nodue, openTotal, doneTotal, progressPct };
+          })
+        );
+      })
+    );
+  }
 
-      return { overdue, today, thisWeek, nodue, openTotal, doneTotal, progressPct };
-    })
-  );
-}
+  // ---- ヘルパー ----
+  private withPid(run: (pid: string) => void) {
+    this.currentProject.projectId$.pipe(take(1)).subscribe(pid => {
+      if (!pid) { alert('プロジェクト未選択'); return; }
+      run(pid);
+    });
+  }
 
 }

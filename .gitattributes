@@ -1,0 +1,13 @@
+* text=auto eol=lf
+
+# バイナリは変換しない
+*.png -text
+*.jpg -text
+*.jpeg -text
+*.gif -text
+*.webp -text
+*.pdf -text
+*.woff -text
+*.woff2 -text
+*.ttf -text
+*.ico -text

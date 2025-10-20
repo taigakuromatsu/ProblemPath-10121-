@@ -58,3 +58,29 @@ export interface UserPrefs {
   theme: 'light' | 'dark' | 'system' | 'custom';
   accentColor?: string; // 例: '#4f46e5'
 }
+
+// --- Project / Membership -------------------------------------------------
+
+/** プロジェクト内の権限ロール */
+export type ProjectRole = 'admin' | 'member' | 'viewer';
+
+/** プロジェクトのメタ情報（projects/{projectId}/meta） */
+export interface ProjectMeta {
+  name: string;
+  createdBy: string;   // uid
+  createdAt: any;      // Firestore Timestamp
+}
+
+/** メンバー情報（projects/{projectId}/members/{uid}） */
+export interface ProjectMember {
+  uid: string;
+  role: ProjectRole;
+  joinedAt: any;       // Firestore Timestamp
+}
+
+/** ユーザーが所属するプロジェクト参照（users/{uid}/memberships/{projectId}） */
+export interface UserMembership {
+  projectId: string;
+  role: ProjectRole;
+  joinedAt: any;       // Firestore Timestamp
+}

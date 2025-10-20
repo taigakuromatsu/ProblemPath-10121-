@@ -3,7 +3,7 @@ import { Firestore } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
 import { Issue } from '../models/types';
 
-// ★ 読み取りは rxfire、参照は Firebase SDK (native)
+// 読み取りは rxfire、参照は Firebase SDK (native)
 import {
   collection as nativeCollection,
   doc as nativeDoc,
@@ -21,30 +21,28 @@ import {
 import { collectionData as rxCollectionData } from 'rxfire/firestore';
 
 @Injectable({ providedIn: 'root' })
-
 export class IssuesService {
-  // プロジェクトはまず固定（後で切替UIを作る）
-  private readonly base = 'projects/default/problems';
-
   constructor(private fs: Firestore) {}
+  private base(projectId: string) {
+    if (!projectId) throw new Error('[IssuesService] projectId is required');
+    return `projects/${projectId}/problems`;
+  }
 
-  // 問題（problemId）配下のIssue一覧を購読（リアルタイム）
-  listByProblem(problemId: string): Observable<Issue[]> {
-    const colRef = nativeCollection(this.fs as any, `${this.base}/${problemId}/issues`);
-    // order を優先、同値時は createdAt で安定化
-    const q = nativeQuery(
-      colRef,
-      nativeOrderBy('order', 'asc'),
-      nativeOrderBy('createdAt', 'asc')
-    );
+  // --- listByProblem ---
+  listByProblem(projectId: string, problemId: string): Observable<Issue[]> {
+    console.log('[IssuesService.listByProblem]', {
+      pid: projectId, problemId,
+      path: `${this.base(projectId)}/${problemId}/issues`
+    });
+    const colRef = nativeCollection(this.fs as any, `${this.base(projectId)}/${problemId}/issues`);
+    const q = nativeQuery(colRef, nativeOrderBy('order', 'asc'), nativeOrderBy('createdAt', 'asc'));
     return rxCollectionData(q as any, { idField: 'id' }) as Observable<Issue[]>;
   }
-  
 
-  // 作成
-  async create(problemId: string, i: Partial<Issue>) {
-    const colRef = nativeCollection(this.fs as any, `${this.base}/${problemId}/issues`);
-    const order = i.order ?? await this.nextOrder(problemId);  // ★ 追加
+  // --- create ---
+  async create(projectId: string, problemId: string, i: Partial<Issue>): Promise<any> {
+    const colRef = nativeCollection(this.fs as any, `${this.base(projectId)}/${problemId}/issues`);
+    const order = i.order ?? await this.nextOrder(projectId, problemId);
     return nativeAddDoc(colRef, {
       title: i.title ?? 'Untitled Issue',
       description: i.description ?? '',
@@ -52,82 +50,58 @@ export class IssuesService {
       progress: i.progress ?? 0,
       tags: i.tags ?? [],
       assignees: i.assignees ?? [],
-      order,                                                   // ★ 採番した順序を保存
+      order,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       links: i.links ?? [],
     });
   }
-  
-// ★ 上へ：直前の order の Issue と入れ替える
-async moveUp(problemId: string, id: string, currentOrder: number): Promise<void> {
-    const colRef = nativeCollection(this.fs as any, `${this.base}/${problemId}/issues`);
-    const q = nativeQuery(
-      colRef,
-      nativeWhere('order', '<', currentOrder),
-      nativeOrderBy('order', 'desc'),
-      nativeLimit(1)
-    );
+
+  // 並べ替え
+  async moveUp(projectId: string, problemId: string, id: string, currentOrder: number): Promise<void> {
+    const colRef = nativeCollection(this.fs as any, `${this.base(projectId)}/${problemId}/issues`);
+    const q = nativeQuery(colRef, nativeWhere('order', '<', currentOrder), nativeOrderBy('order', 'desc'), nativeLimit(1));
     const snap = await nativeGetDocs(q);
-    if (snap.empty) return; // 先頭なら何もしない
-  
+    if (snap.empty) return;
+
     const neighbor = snap.docs[0];
-    const neighborOrder = (neighbor.data() as any).order ?? 0;
-  
     const batch = nativeWriteBatch(this.fs as any);
-    const aRef = nativeDoc(this.fs as any, `${this.base}/${problemId}/issues/${id}`);
-    const bRef = neighbor.ref;
-  
-    batch.update(aRef, { order: neighborOrder, updatedAt: serverTimestamp() });
-    batch.update(bRef, { order: currentOrder, updatedAt: serverTimestamp() });
+    const aRef = nativeDoc(this.fs as any, `${this.base(projectId)}/${problemId}/issues/${id}`);
+    batch.update(aRef, { order: (neighbor.data() as any).order ?? 0, updatedAt: serverTimestamp() });
+    batch.update(neighbor.ref, { order: currentOrder, updatedAt: serverTimestamp() });
     await batch.commit();
   }
-  
-  // ★ 下へ：直後の order の Issue と入れ替える
-  async moveDown(problemId: string, id: string, currentOrder: number): Promise<void> {
-    const colRef = nativeCollection(this.fs as any, `${this.base}/${problemId}/issues`);
-    const q = nativeQuery(
-      colRef,
-      nativeWhere('order', '>', currentOrder),
-      nativeOrderBy('order', 'asc'),
-      nativeLimit(1)
-    );
+
+  async moveDown(projectId: string, problemId: string, id: string, currentOrder: number): Promise<void> {
+    const colRef = nativeCollection(this.fs as any, `${this.base(projectId)}/${problemId}/issues`);
+    const q = nativeQuery(colRef, nativeWhere('order', '>', currentOrder), nativeOrderBy('order', 'asc'), nativeLimit(1));
     const snap = await nativeGetDocs(q);
-    if (snap.empty) return; // 末尾なら何もしない
-  
+    if (snap.empty) return;
+
     const neighbor = snap.docs[0];
-    const neighborOrder = (neighbor.data() as any).order ?? 0;
-  
     const batch = nativeWriteBatch(this.fs as any);
-    const aRef = nativeDoc(this.fs as any, `${this.base}/${problemId}/issues/${id}`);
-    const bRef = neighbor.ref;
-  
-    batch.update(aRef, { order: neighborOrder, updatedAt: serverTimestamp() });
-    batch.update(bRef, { order: currentOrder, updatedAt: serverTimestamp() });
+    const aRef = nativeDoc(this.fs as any, `${this.base(projectId)}/${problemId}/issues/${id}`);
+    batch.update(aRef, { order: (neighbor.data() as any).order ?? 0, updatedAt: serverTimestamp() });
+    batch.update(neighbor.ref, { order: currentOrder, updatedAt: serverTimestamp() });
     await batch.commit();
   }
-  
 
-
-  // 更新
-  async update(problemId: string, id: string, patch: Partial<Issue>) {
-    const ref = nativeDoc(this.fs as any, `${this.base}/${problemId}/issues/${id}`);
-    return nativeUpdateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
+  // --- update ---
+  async update(projectId: string, problemId: string, id: string, patch: Partial<Issue>): Promise<void> {
+    const ref = nativeDoc(this.fs as any, `${this.base(projectId)}/${problemId}/issues/${id}`);
+    return nativeUpdateDoc(ref, { ...patch, updatedAt: serverTimestamp() }) as any;
   }
 
-  // ★ 修正: 削除（Issue 本体の前に配下 tasks を全削除）
-  async remove(problemId: string, id: string) {
-    // 1) tasks サブコレクションを全削除
-    const tasksPath = `${this.base}/${problemId}/issues/${id}/tasks`;
+  // --- remove（tasks 再帰削除→issue削除） ---
+  async remove(projectId: string, problemId: string, id: string): Promise<void> {
+    const tasksPath = `${this.base(projectId)}/${problemId}/issues/${id}/tasks`;
     await this.deleteCollection(tasksPath);
-
-    // 2) issue ドキュメントを削除
-    const issueRef = nativeDoc(this.fs as any, `${this.base}/${problemId}/issues/${id}`);
-    return nativeDeleteDoc(issueRef);
+    const issueRef = nativeDoc(this.fs as any, `${this.base(projectId)}/${problemId}/issues/${id}`);
+    return nativeDeleteDoc(issueRef) as any;
   }
 
-  private async nextOrder(problemId: string): Promise<number> {
-    const colRef = nativeCollection(this.fs as any, `${this.base}/${problemId}/issues`);
+  private async nextOrder(projectId: string, problemId: string): Promise<number> {
+    const colRef = nativeCollection(this.fs as any, `${this.base(projectId)}/${problemId}/issues`);
     const q = nativeQuery(colRef, nativeOrderBy('order', 'desc'), nativeLimit(1));
     const snap = await nativeGetDocs(q);
     if (snap.empty) return 1;
@@ -135,10 +109,9 @@ async moveUp(problemId: string, id: string, currentOrder: number): Promise<void>
     return (Number(max) || 0) + 1;
   }
 
-   // ★ 追加: コレクションをバッチで小分け削除（上限500対策）
-   private async deleteCollection(path: string, batchSize = 300): Promise<void> {
+  // 汎用小分け削除
+  private async deleteCollection(path: string, batchSize = 300): Promise<void> {
     const colRef = nativeCollection(this.fs as any, path);
-    // バッチサイズずつ消していく（削除後に再度クエリして空になるまで繰り返し）
     while (true) {
       const q = nativeQuery(colRef, nativeLimit(batchSize));
       const snap = await nativeGetDocs(q);
@@ -149,6 +122,7 @@ async moveUp(problemId: string, id: string, currentOrder: number): Promise<void>
       await batch.commit();
     }
   }
-
 }
+
+
 

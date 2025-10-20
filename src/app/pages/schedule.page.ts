@@ -1,4 +1,4 @@
-// schedule.page.ts
+// src/app/pages/schedule.page.ts
 import { Component, Input } from '@angular/core';
 import { AsyncPipe, NgFor, NgIf } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -7,13 +7,30 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
-import { Observable, combineLatest } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { Observable, combineLatest, of } from 'rxjs';
+import { map, switchMap, startWith } from 'rxjs/operators';
+
 import { TasksService } from '../services/tasks.service';
+import { CurrentProjectService } from '../services/current-project.service';
 import { Task } from '../models/types';
 
+type Vm = {
+  overdue: Task[];
+  today: Task[];
+  tomorrow: Task[];
+  thisWeekRest: Task[];
+  nextWeek: Task[];
+  later: Task[];
+  nodue: Task[];
+};
+
+const EMPTY_VM: Vm = {
+  overdue: [], today: [], tomorrow: [],
+  thisWeekRest: [], nextWeek: [], later: [], nodue: []
+};
+
 /* =======================
-   行コンポーネント（先に定義）
+   行コンポーネント
    ======================= */
 @Component({
   standalone: true,
@@ -43,7 +60,7 @@ export class ScheduleRow {
 }
 
 /* =======================
-   一覧コンポーネント（リッチ案：排他的セクション）
+   一覧（pid追従・フィルタ有）
    ======================= */
 
 @Component({
@@ -74,11 +91,9 @@ export class ScheduleRow {
         placeholder="#bug #UI（スペース区切り）"
         style="padding:4px 8px; border:1px solid #e5e7eb; border-radius:6px;"/>
     </label>
-
   </div>
 
   <ng-container *ngIf="vm$ | async as vm">
-
     <section>
       <h4 style="margin:12px 0;">⚠️ 期限切れ（{{ vm.overdue.length }}）</h4>
       <div *ngIf="!vm.overdue.length" style="opacity:.6">（なし）</div>
@@ -120,26 +135,24 @@ export class ScheduleRow {
       <div *ngIf="!vm.nodue.length" style="opacity:.6">（なし）</div>
       <ul><li *ngFor="let t of vm.nodue; trackBy: trackTask"><pp-schedule-row [t]="t"></pp-schedule-row></li></ul>
     </section>
-
   </ng-container>
   `
 })
+
 export class SchedulePage {
 
+
+  vm$: Observable<Vm> = of(EMPTY_VM);
+
   openOnly = true;
+  tagQuery = '';
 
-  // ViewModel（重複なし・排他的）
-  vm$!: Observable<{
-    overdue: Task[];
-    today: Task[];
-    tomorrow: Task[];
-    thisWeekRest: Task[];
-    nextWeek: Task[];
-    later: Task[];
-    nodue: Task[];
-  }>;
 
-  constructor(private tasks: TasksService) {}
+
+  constructor(
+    private tasks: TasksService,
+    private currentProject: CurrentProjectService
+  ) {}
 
   ngOnInit() { this.reload(); }
 
@@ -151,11 +164,17 @@ export class SchedulePage {
     const da = d.getDate().toString().padStart(2, '0');
     return `${y}-${m}-${da}`;
   }
-
   private addDays(base: Date, n: number): Date {
     const d = new Date(base);
     d.setDate(d.getDate() + n);
     return d;
+  }
+  private parseTags(q: string): string[] {
+    return (q || '')
+      .split(/\s+/)
+      .map(s => s.replace(/^#/, '').trim())
+      .filter(Boolean)
+      .slice(0, 10);
   }
 
   reload() {
@@ -163,56 +182,49 @@ export class SchedulePage {
     const tomorrow = this.addDays(today, 1);
 
     // 今週（月曜始まり）
-    const day = today.getDay();               // Sun=0
+    const day = today.getDay(); // Sun=0
     const diffToMon = (day === 0 ? -6 : 1 - day);
     const startOfWeek = this.addDays(today, diffToMon);
-    const endOfWeek = this.addDays(startOfWeek, 6);
+    const endOfWeek   = this.addDays(startOfWeek, 6);
 
     // 来週
     const startOfNextWeek = this.addDays(endOfWeek, 1);
-    const endOfNextWeek = this.addDays(startOfNextWeek, 6);
+    const endOfNextWeek   = this.addDays(startOfNextWeek, 6);
 
-    // 今週の残り = 明後日〜今週末（今日・明日を除外）
     const dayAfterTomorrow = this.addDays(tomorrow, 1);
-
-    // 以降（来週末の翌日〜は大きめ上限で縛る）
     const FAR_FUTURE = '9999-12-31';
-
     const tags = this.parseTags(this.tagQuery);
 
-    const overdue$      = this.tasks.listAllOverdue(this.ymd(today), this.openOnly, tags);
-    const today$        = this.tasks.listAllByDueRange(this.ymd(today), this.ymd(today), this.openOnly, tags);
-    const tomorrow$     = this.tasks.listAllByDueRange(this.ymd(tomorrow), this.ymd(tomorrow), this.openOnly, tags);
-  
-    const thisWeekRest$ = this.tasks.listAllByDueRange(
-      this.ymd(dayAfterTomorrow), this.ymd(endOfWeek), this.openOnly, tags
-    );
-  
-    const nextWeek$     = this.tasks.listAllByDueRange(
-      this.ymd(startOfNextWeek), this.ymd(endOfNextWeek), this.openOnly, tags
-    );
-  
-    const later$        = this.tasks.listAllByDueRange(
-      this.ymd(this.addDays(endOfNextWeek, 1)), FAR_FUTURE, this.openOnly, tags
-    );
-  
-    const nodue$        = this.tasks.listAllNoDue(this.openOnly, tags);
-  
-    this.vm$ = combineLatest([overdue$, today$, tomorrow$, thisWeekRest$, nextWeek$, later$, nodue$]).pipe(
-      map(([overdue, today, tomorrow, thisWeekRest, nextWeek, later, nodue]) => ({
-        overdue, today, tomorrow, thisWeekRest, nextWeek, later, nodue
-      }))
+    // openOnly/tagQuery の変更でも即時反映したいので startWith でトリガに
+    const params$ = of(null).pipe(startWith(null));
+
+    this.vm$ = combineLatest([this.currentProject.projectId$, params$]).pipe(
+      switchMap(([pid]) => {
+        if (!pid) {
+          const empty: Vm = {
+            overdue: [], today: [], tomorrow: [],
+            thisWeekRest: [], nextWeek: [], later: [], nodue: []
+          };
+          return of(empty);
+        }
+
+        const overdue$      = this.tasks.listAllOverdue(pid, this.ymd(today), this.openOnly, tags);
+        const today$        = this.tasks.listAllByDueRange(pid, this.ymd(today), this.ymd(today), this.openOnly, tags);
+        const tomorrow$     = this.tasks.listAllByDueRange(pid, this.ymd(tomorrow), this.ymd(tomorrow), this.openOnly, tags);
+
+        const thisWeekRest$ = this.tasks.listAllByDueRange(pid, this.ymd(this.addDays(tomorrow, 1)), this.ymd(endOfWeek), this.openOnly, tags);
+        const nextWeek$     = this.tasks.listAllByDueRange(pid, this.ymd(startOfNextWeek), this.ymd(endOfNextWeek), this.openOnly, tags);
+        const later$        = this.tasks.listAllByDueRange(pid, this.ymd(this.addDays(endOfNextWeek, 1)), FAR_FUTURE, this.openOnly, tags);
+
+        const nodue$        = this.tasks.listAllNoDue(pid, this.openOnly, tags);
+
+        return combineLatest([overdue$, today$, tomorrow$, thisWeekRest$, nextWeek$, later$, nodue$]).pipe(
+          map(([overdue, today, tomorrow, thisWeekRest, nextWeek, later, nodue]) => ({
+            overdue, today, tomorrow, thisWeekRest, nextWeek, later, nodue
+          }))
+        );
+      })
     );
   }
-
-  tagQuery = '';
-
-private parseTags(q: string): string[] {
-  return (q || '')
-    .split(/\s+/)
-    .map(s => s.replace(/^#/, '').trim())
-    .filter(Boolean)
-    .slice(0, 10);
 }
 
-}

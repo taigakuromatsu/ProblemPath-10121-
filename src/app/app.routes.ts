@@ -3,10 +3,11 @@ import { HomePage } from './pages/home.page';
 import { TreePage } from './pages/tree.page';
 import { BoardPage } from './pages/board.page';
 import { SchedulePage } from './pages/schedule.page';
+import { authGuard } from './guards/auth.guard'; // ← 追加
 
 export const routes: Routes = [
-  { path: '', component: HomePage },       // HomePage 用のルート
-  { path: 'tree', component: TreePage },   // TreePage 用のルート
-  { path: 'board', component: BoardPage }, // BoardPage 用のルート
-  { path: 'schedule', component: SchedulePage }, // SchedulePage 用のルート
+  { path: '', component: HomePage },                                   // Home は誰でもOK
+  { path: 'tree', component: TreePage, canActivate: [authGuard] },     // ← ログイン必須
+  { path: 'board', component: BoardPage, canActivate: [authGuard] },   // ← ログイン必須
+  { path: 'schedule', component: SchedulePage, canActivate: [authGuard] } // ← ログイン必須
 ];

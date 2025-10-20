@@ -1,0 +1,96 @@
+// firestore.rules
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- 共通ユーティリティ ----
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isMember(projectId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/projects/$(projectId)/members/$(request.auth.uid));
+    }
+    function role(projectId) {
+      return get(/databases/$(database)/documents/projects/$(projectId)/members/$(request.auth.uid)).data.role;
+    }
+    function isAdmin(projectId) {
+      return role(projectId) == 'admin';
+    }
+    function isEditor(projectId) {
+      return role(projectId) in ['admin', 'member'];
+    }
+    function isValidRole(newRole) {
+      return newRole in ['admin', 'member', 'viewer'];
+    }
+
+    // ---- プロジェクトツリー ----
+    match /projects/{projectId} {
+
+      // 読み取りはメンバーのみ
+      allow read: if isMember(projectId);
+
+      // 【ブートストラップ例外】新規作成（meta だけ）を「作成者=自分」のとき許可
+      // → 初回ログインユーザーが自分のプロジェクトを作成できる
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['meta'])
+        && request.resource.data.meta.keys().hasOnly(['name','createdBy','createdAt'])
+        && request.resource.data.meta.createdBy == request.auth.uid;
+
+      // 既存プロジェクトの更新/削除は admin のみ
+      allow update, delete: if isAdmin(projectId);
+
+      // members 管理
+      match /members/{uid} {
+        // 閲覧はメンバー全員
+        allow read: if isMember(projectId);
+
+        // 【ブートストラップ例外】作成直後に「自分を admin で登録」は本人に許可
+        allow create: if isSignedIn()
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['role','joinedAt'])
+          && request.resource.data.role == 'admin';
+
+        // 以降のメンバー管理は admin のみ
+        allow update, delete: if isAdmin(projectId)
+          && request.resource.data.keys().hasOnly(['role','joinedAt'])
+          && isValidRole(request.resource.data.role);
+      }
+
+      // Problems
+      match /problems/{problemId} {
+        allow read: if isMember(projectId);
+        allow create, update, delete: if isEditor(projectId);
+
+        // Issues
+        match /issues/{issueId} {
+          allow read: if isMember(projectId);
+          allow create, update, delete: if isEditor(projectId);
+
+          // Tasks
+          match /tasks/{taskId} {
+            allow read: if isMember(projectId);
+            allow create, update, delete: if isEditor(projectId);
+          }
+        }
+      }
+    }
+
+    // ---- users コレクション（本人専用）----
+    match /users/{uid} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+
+      match /memberships/{projectId} {
+        allow read, write: if isSignedIn() && request.auth.uid == uid;
+      }
+    }
+    // === collectionGroup('tasks') 用 ===
+    // Schedule 画面は tasks のコレクショングループを読むので、これが無いと PERMISSION DENIED になります。
+    match /{path=**}/tasks/{taskId} {
+    // 各 Task に projectId フィールドが入っている前提（あなたの実装では create 時に入れている）
+    allow read: if isMember(resource.data.projectId);
+    // ※ 読み取りだけで十分。書き込みも通すなら↓を追加（必要なければ入れない方が安全）
+    // allow create, update, delete: if isEditor(request.resource.data.projectId);
+    }
+  }
+}
