@@ -149,46 +149,61 @@ async moveUp(problemId: string, issueId: string, id: string, currentOrder: numbe
     return (Number(max) || 0) + 1;
   }
 
-  /** 期限範囲（YYYY-MM-DD 文字列） */
-listAllByDueRange(startYmd: string, endYmd: string, openOnly = true): Observable<Task[]> {
+// ① 期限レンジ
+listAllByDueRange(
+  startYmd: string,
+  endYmd: string,
+  openOnly = true,
+  tags: string[] = []            // ← 追加（後方互換OK）
+): Observable<Task[]> {
   const base = nativeCollectionGroup(this.fs as any, 'tasks');
+  const tagFilter = (tags && tags.length > 0)
+    ? [nativeWhere('tags', 'array-contains-any', tags.slice(0, 10))] // Firestore制限：最大10
+    : [];
 
-  // 新データ（projectId あり）
   const qScoped = nativeQuery(
     base,
     nativeWhere('projectId', '==', PROJECT_ID),
     nativeWhere('dueDate', '>=', startYmd),
     nativeWhere('dueDate', '<=', endYmd),
     ...(openOnly ? [nativeWhere('status', 'in', OPEN_STATUSES)] : []),
+    ...tagFilter,
     nativeOrderBy('dueDate', 'asc')
   );
 
-  // 旧データ（projectId 無しも拾うため、フィルタを付けない）
   const qLegacy = nativeQuery(
     base,
     nativeWhere('dueDate', '>=', startYmd),
     nativeWhere('dueDate', '<=', endYmd),
     ...(openOnly ? [nativeWhere('status', 'in', OPEN_STATUSES)] : []),
+    ...tagFilter,
     nativeOrderBy('dueDate', 'asc')
   );
 
   const a$ = rxCollectionData(qScoped as any, { idField: 'id' }) as Observable<Task[]>;
   const b$ = rxCollectionData(qLegacy as any, { idField: 'id' }) as Observable<Task[]>;
-
   return combineLatest([a$, b$]).pipe(
     map(([a, b]) => this.dedupeById([...(a ?? []), ...(b ?? [])]))
   );
 }
 
-/** 期限切れ（todayYmd より前、YYYY-MM-DD 文字列） */
-listAllOverdue(todayYmd: string, openOnly = true): Observable<Task[]> {
+// ② 期限切れ
+listAllOverdue(
+  todayYmd: string,
+  openOnly = true,
+  tags: string[] = []            // ← 追加（後方互換OK）
+): Observable<Task[]> {
   const base = nativeCollectionGroup(this.fs as any, 'tasks');
+  const tagFilter = (tags && tags.length > 0)
+    ? [nativeWhere('tags', 'array-contains-any', tags.slice(0, 10))]
+    : [];
 
   const qScoped = nativeQuery(
     base,
     nativeWhere('projectId', '==', PROJECT_ID),
     nativeWhere('dueDate', '<', todayYmd),
     ...(openOnly ? [nativeWhere('status', 'in', OPEN_STATUSES)] : []),
+    ...tagFilter,
     nativeOrderBy('dueDate', 'asc')
   );
 
@@ -196,37 +211,40 @@ listAllOverdue(todayYmd: string, openOnly = true): Observable<Task[]> {
     base,
     nativeWhere('dueDate', '<', todayYmd),
     ...(openOnly ? [nativeWhere('status', 'in', OPEN_STATUSES)] : []),
+    ...tagFilter,
     nativeOrderBy('dueDate', 'asc')
   );
 
   const a$ = rxCollectionData(qScoped as any, { idField: 'id' }) as Observable<Task[]>;
   const b$ = rxCollectionData(qLegacy as any, { idField: 'id' }) as Observable<Task[]>;
-
   return combineLatest([a$, b$]).pipe(
     map(([a, b]) => this.dedupeById([...(a ?? []), ...(b ?? [])]))
   );
 }
 
-/** 期限未設定（null） */
-listAllNoDue(openOnly = true): Observable<Task[]> {
+// ③ 期限未設定
+listAllNoDue(
+  openOnly = true,
+  tags: string[] = []            // ← 追加（後方互換OK）
+): Observable<Task[]> {
   const base = nativeCollectionGroup(this.fs as any, 'tasks');
+  const tagFilter = (tags && tags.length > 0)
+    ? [nativeWhere('tags', 'array-contains-any', tags.slice(0, 10))]
+    : [];
 
   const qScoped = nativeQuery(
     base,
     nativeWhere('projectId', '==', PROJECT_ID),
     nativeWhere('dueDate', '==', null),
     ...(openOnly ? [nativeWhere('status', 'in', OPEN_STATUSES)] : []),
+    ...tagFilter,
     nativeOrderBy('createdAt', 'desc')
   );
-
-  // 旧データは「dueDate フィールド自体が存在しない」可能性があり、
-  // Firestore では「存在しない」を条件で拾えないため、
-  // ここは qScoped のみ（＝null 保存分のみ）を対象にします。
-  // ※どうしても missing も拾いたい場合は backfill で null を入れてください。
 
   const a$ = rxCollectionData(qScoped as any, { idField: 'id' }) as Observable<Task[]>;
   return a$;
 }
+
 
 }
 

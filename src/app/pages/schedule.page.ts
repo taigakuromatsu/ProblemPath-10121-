@@ -66,6 +66,15 @@ export class ScheduleRow {
         <option [ngValue]="false">すべて</option>
       </select>
     </label>
+
+    <label style="margin-left:8px;">タグ:
+      <input
+        [(ngModel)]="tagQuery"
+        (ngModelChange)="reload()"
+        placeholder="#bug #UI（スペース区切り）"
+        style="padding:4px 8px; border:1px solid #e5e7eb; border-radius:6px;"/>
+    </label>
+
   </div>
 
   <ng-container *ngIf="vm$ | async as vm">
@@ -169,30 +178,41 @@ export class SchedulePage {
     // 以降（来週末の翌日〜は大きめ上限で縛る）
     const FAR_FUTURE = '9999-12-31';
 
-    // 各ストリーム（サービスの既存APIだけでOK）
-    const overdue$      = this.tasks.listAllOverdue(this.ymd(today), this.openOnly);                // due < 今日
-    const today$        = this.tasks.listAllByDueRange(this.ymd(today), this.ymd(today), this.openOnly);
-    const tomorrow$     = this.tasks.listAllByDueRange(this.ymd(tomorrow), this.ymd(tomorrow), this.openOnly);
+    const tags = this.parseTags(this.tagQuery);
 
-    // 今週の残り（範囲が反転するケースは、レンジが空になるだけなのでこのままでOK）
+    const overdue$      = this.tasks.listAllOverdue(this.ymd(today), this.openOnly, tags);
+    const today$        = this.tasks.listAllByDueRange(this.ymd(today), this.ymd(today), this.openOnly, tags);
+    const tomorrow$     = this.tasks.listAllByDueRange(this.ymd(tomorrow), this.ymd(tomorrow), this.openOnly, tags);
+  
     const thisWeekRest$ = this.tasks.listAllByDueRange(
-      this.ymd(dayAfterTomorrow), this.ymd(endOfWeek), this.openOnly
+      this.ymd(dayAfterTomorrow), this.ymd(endOfWeek), this.openOnly, tags
     );
-
+  
     const nextWeek$     = this.tasks.listAllByDueRange(
-      this.ymd(startOfNextWeek), this.ymd(endOfNextWeek), this.openOnly
+      this.ymd(startOfNextWeek), this.ymd(endOfNextWeek), this.openOnly, tags
     );
-
+  
     const later$        = this.tasks.listAllByDueRange(
-      this.ymd(this.addDays(endOfNextWeek, 1)), FAR_FUTURE, this.openOnly
+      this.ymd(this.addDays(endOfNextWeek, 1)), FAR_FUTURE, this.openOnly, tags
     );
-
-    const nodue$        = this.tasks.listAllNoDue(this.openOnly);
-
+  
+    const nodue$        = this.tasks.listAllNoDue(this.openOnly, tags);
+  
     this.vm$ = combineLatest([overdue$, today$, tomorrow$, thisWeekRest$, nextWeek$, later$, nodue$]).pipe(
       map(([overdue, today, tomorrow, thisWeekRest, nextWeek, later, nodue]) => ({
         overdue, today, tomorrow, thisWeekRest, nextWeek, later, nodue
       }))
     );
   }
+
+  tagQuery = '';
+
+private parseTags(q: string): string[] {
+  return (q || '')
+    .split(/\s+/)
+    .map(s => s.replace(/^#/, '').trim())
+    .filter(Boolean)
+    .slice(0, 10);
+}
+
 }

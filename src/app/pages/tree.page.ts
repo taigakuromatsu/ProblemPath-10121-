@@ -108,6 +108,18 @@ type TreeNode = { id: string; name: string; kind: 'problem' | 'issue' | 'task';
                     <button mat-button type="button" (click)="moveTaskDown(p.id!, i.id!, t)">▼</button>
                     <button mat-button type="button" (click)="renameTask(p.id!, i.id!, t)">Rename</button>
                     <button mat-button type="button" color="warn" (click)="removeTask(p.id!, i.id!, t)">Delete</button>
+                      <!-- タグ表示 -->
+                      <span style="margin-left:8px; font-size:12px; opacity:.85;">
+                        <ng-container *ngIf="(t.tags?.length ?? 0) > 0; else noTags">
+                          #{{ t.tags!.join(' #') }}
+                        </ng-container>
+                        <ng-template #noTags>（タグなし）</ng-template>
+                      </span>
+
+                      <!-- タグ編集 -->
+                      <button mat-button type="button" (click)="editTaskTags(p.id!, i.id!, t)" style="margin-left:6px;">
+                        Edit Tags
+                      </button>
                     <!-- 追加: 期限入力 -->
                     <span style="margin-left:8px;">
                       <input type="date"
@@ -605,6 +617,26 @@ isOverdue(t: Task): boolean {
   if (t.status === 'done') return false;
   const todayStr = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
   return t.dueDate < todayStr;
+}
+
+/** タグ編集（カンマ/スペース区切り） */
+async editTaskTags(problemId: string, issueId: string, t: Task) {
+  const current = (t.tags ?? []).join(', ');
+  const input = prompt('Tags (カンマ または スペース区切り)\n例: バグ, UI  または  バグ UI', current ?? '');
+  if (input == null) return; // キャンセル
+
+  // "バグ, UI  顧客A" → ["バグ","UI","顧客A"]
+  const tags = input
+    .split(/[, \s]+/)
+    .map(s => s.replace(/^#/, '').trim())
+    .filter(Boolean);
+
+  try {
+    await this.tasks.update(problemId, issueId, t.id!, { tags });
+  } catch (e) {
+    console.error(e);
+    alert('タグの更新に失敗しました');
+  }
 }
 
 
