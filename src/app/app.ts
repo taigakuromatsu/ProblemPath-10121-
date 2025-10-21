@@ -13,6 +13,7 @@ import { RouterOutlet, RouterLink } from '@angular/router';
       <a routerLink="/tree">Tree</a>
       <a routerLink="/board">Board</a>
       <a routerLink="/schedule">Schedule</a>
+      <a routerLink="/my">My</a>
     </header>
     <main style="padding:16px;">
       <router-outlet></router-outlet>

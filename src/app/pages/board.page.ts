@@ -111,6 +111,28 @@ import { MembersService } from '../services/members.service';
                           {{ statusLabel[next] }}
                         </button>
                       </div>
+
+                      <div style="display:flex; gap:6px; margin-top:6px;" *ngIf="auth.loggedIn$ | async">
+                        <button mat-stroked-button
+                                *ngIf="(members.isEditor$ | async) && !(t.assignees || []).includes((auth.uid$ | async) || '')"
+                                [disabled]="isBusy(t.id!)"
+                                (click)="assignToMe(pid, i.id!, t)">
+                          Assign to me
+                        </button>
+                        <button mat-stroked-button
+                                *ngIf="(members.isEditor$ | async) && (t.assignees || []).includes((auth.uid$ | async) || '')"
+                                [disabled]="isBusy(t.id!)"
+                                (click)="unassignMe(pid, i.id!, t)">
+                          Unassign
+                        </button>
+                        <span
+                          style="font-size:12px; opacity:.75; align-self:center;"
+                          *ngIf="(t.assignees?.length || 0) > 0">
+                          👥 {{ t.assignees?.length || 0 }}
+                        </span>
+
+                      </div>
+
                     </div>
 
                     <!-- 空プレースホルダ -->
@@ -166,7 +188,7 @@ export class BoardPage {
     private destroyRef: DestroyRef,
     public auth: AuthService,
     private currentProject: CurrentProjectService,
-    private members: MembersService
+    public members: MembersService
   ) {
     this.isEditor$ = this.members.isEditor$;
   }
@@ -382,5 +404,30 @@ private bucket(s: Task['status'] | undefined): 'not_started'|'in_progress'|'done
 tasksByStatus(tasks: Task[] | null | undefined, status: 'not_started'|'in_progress'|'done'): Task[] {
   return (tasks ?? []).filter(t => this.bucket(t.status) === status);
 }
+
+assignToMe(problemId: string, issueId: string, t: Task) {
+  const sub = this.auth.uid$.pipe(take(1)).subscribe(uid => {
+    if (!uid || !t.id) return;
+    this.withPid(async pid => {
+      this.busyTaskIds.add(t.id!);
+      try { await this.tasks.assignMe(pid, problemId, issueId, t.id!, uid); }
+      catch (e) { console.error(e); alert('Assignに失敗しました'); }
+      finally { this.busyTaskIds.delete(t.id!); }
+    });
+  });
+}
+
+unassignMe(problemId: string, issueId: string, t: Task) {
+  const sub = this.auth.uid$.pipe(take(1)).subscribe(uid => {
+    if (!uid || !t.id) return;
+    this.withPid(async pid => {
+      this.busyTaskIds.add(t.id!);
+      try { await this.tasks.unassignMe(pid, problemId, issueId, t.id!, uid); }
+      catch (e) { console.error(e); alert('Unassignに失敗しました'); }
+      finally { this.busyTaskIds.delete(t.id!); }
+    });
+  });
+}
+
 
 }

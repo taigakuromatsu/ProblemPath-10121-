@@ -18,6 +18,9 @@ import {
   limit as nativeLimit,
   where as nativeWhere,
   writeBatch as nativeWriteBatch,
+  arrayUnion as nativeArrayUnion,
+  arrayRemove as nativeArrayRemove,
+  query,
 } from 'firebase/firestore';
 import { collectionData as rxCollectionData } from 'rxfire/firestore';
 
@@ -289,6 +292,81 @@ export class TasksService {
 
     return rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>;
   }
+
+
+    // --- 自分をアサイン / 解除 ---
+    async assignMe(projectId: string, problemId: string, issueId: string, taskId: string, uid: string): Promise<void> {
+      const ref = nativeDoc(this.fs as any, `${this.base(projectId)}/${problemId}/issues/${issueId}/tasks/${taskId}`);
+      await nativeUpdateDoc(ref, { assignees: nativeArrayUnion(uid), updatedAt: serverTimestamp() } as any);
+    }
+  
+    async unassignMe(projectId: string, problemId: string, issueId: string, taskId: string, uid: string): Promise<void> {
+      const ref = nativeDoc(this.fs as any, `${this.base(projectId)}/${problemId}/issues/${issueId}/tasks/${taskId}`);
+      await nativeUpdateDoc(ref, { assignees: nativeArrayRemove(uid), updatedAt: serverTimestamp() } as any);
+    }
+  
+    // --- 自分のタスク横断取得（個人ToDo統合ビュー用） ---
+    listMine(
+      projectId: string,
+      uid: string,
+      openOnly: boolean = true,
+      startYmd: string = '0000-01-01',
+      endYmd: string = '9999-12-31',
+      tags: string[] = []
+    ): Observable<Task[]> {
+      const base = nativeCollectionGroup(this.fs as any, 'tasks');
+      const tagFilter = (tags && tags.length > 0)
+        ? [nativeWhere('tags', 'array-contains-any', tags.slice(0, 10))]
+        : [];
+  
+      const q = nativeQuery(
+        base,
+        nativeWhere('projectId', '==', projectId),
+        nativeWhere('assignees', 'array-contains', uid),
+        nativeWhere('dueDate', '>=', startYmd),
+        nativeWhere('dueDate', '<=', endYmd),
+        ...(openOnly ? [nativeWhere('status', 'in', OPEN_STATUSES)] : []),
+        ...tagFilter,
+        nativeOrderBy('dueDate', 'asc')
+      );
+  
+      return rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>;
+    }
+
+
+    // 追加：自分にアサインされ、かつ dueDate == null のタスクを取得
+listMineNoDue(
+  projectId: string,
+  uid: string,
+  openOnly: boolean = true,
+  tags: string[] = []
+): Observable<Task[]> {
+  const base = nativeCollectionGroup(this.fs as any, 'tasks');
+
+  // サーバー側では due==null / アサイン / プロジェクト のみに限定
+  const q = nativeQuery(
+    base,
+    nativeWhere('projectId', '==', projectId),
+    nativeWhere('assignees', 'array-contains', uid),
+    nativeWhere('dueDate', '==', null),
+    nativeOrderBy('createdAt', 'desc') // 任意
+  );
+
+  return (
+    rxCollectionData(q as any, { idField: 'id' }) as unknown as Observable<Task[]>
+  ).pipe(
+    map((xs) => {
+      let ys = xs;
+      if (openOnly) ys = ys.filter(t => t.status !== 'done');
+      if (tags?.length) {
+        const set = new Set(tags.slice(0, 10).map(s => s.trim()));
+        ys = ys.filter(t => (t.tags ?? []).some(tag => set.has(tag)));
+      }
+      return ys;
+    })
+  );
+}
+
 }
 
 
