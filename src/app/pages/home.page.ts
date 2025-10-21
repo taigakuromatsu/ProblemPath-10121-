@@ -185,6 +185,24 @@ import { map } from 'rxjs/operators';
 {{ (prefs.prefs$ | async) | json }}
         </pre>
       </section>
+      
+      <!-- 追加：テーマ設定 UI -->
+      <section style="margin-top:16px;">
+        <h3>テーマ設定</h3>
+
+        <!-- 2行目：選択UI（はっきりした枠とラベル） -->
+        <mat-form-field appearance="outline" style="min-width:240px; width:100%; max-width:360px; margin-top:8px;">
+          <mat-label>テーマを選択</mat-label>
+          <mat-select [(ngModel)]="themeMode" (selectionChange)="onThemeChange($event.value)">
+            <mat-option value="light">ライト</mat-option>
+            <mat-option value="dark">ダーク</mat-option>
+            <mat-option value="system">システムに合わせる</mat-option>
+          </mat-select>
+          <mat-icon matSuffix>expand_more</mat-icon>
+        </mat-form-field>
+
+      </section>
+
     </ng-template>
   `
 })
@@ -214,11 +232,16 @@ export class HomePage {
     private invites: InvitesService
   ) {}
 
+
+  themeMode: 'light' | 'dark' | 'system' = 'system';
+
   ngOnInit() {
     // テーマ反映（既存）
     this.prefs.prefs$
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(p => this.theme.apply(p.theme, p.accentColor));
+      .subscribe(p => {
+        this.themeMode = (p?.theme ?? 'system') as any;   // ← UIへ反映
+        });
 
     // サインアウト時の掃除だけ（プロジェクトIDは AuthService.ensureOnboard がセット）
     this.auth.loggedIn$
@@ -391,6 +414,39 @@ export class HomePage {
   copyInviteUrl() {
     if (this.inviteUrl) navigator.clipboard.writeText(this.inviteUrl);
   }
+
+    // 選択されたときに即適用＋永続化
+  onThemeChange(mode: 'light' | 'dark' | 'system') {
+    // 即時反映
+    this.theme.setTheme(mode);
+
+    // 永続化（PrefsService に setter があるならそちらを優先）
+    // 1) PrefsService に update メソッドがある場合（例）
+    if ((this.prefs as any).update) {
+      (this.prefs as any).update({ theme: mode });
+    } else {
+      // 2) 一時的に localStorage に保存（次回起動用のフォールバック）
+      localStorage.setItem('pp.theme', mode);
+    }
+
+    // UI も更新
+    this.themeMode = mode;
+  }
+
+  // HomePage クラス内に追加
+  get systemPrefersDark(): boolean {
+    return typeof window !== 'undefined'
+      && !!window.matchMedia
+      && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+
+  get themeModeLabel(): string {
+    if (this.themeMode === 'system') {
+      return this.systemPrefersDark ? 'システム（ダーク）' : 'システム（ライト）';
+    }
+    return this.themeMode === 'dark' ? 'ダーク' : 'ライト';
+  }
+
 
 }
 

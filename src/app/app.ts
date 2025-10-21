@@ -2,6 +2,7 @@
 import { Component } from '@angular/core';
 import { RouterOutlet, RouterLink } from '@angular/router';
 import { ProjectSwitcher } from './project-switcher';
+import { ThemeService } from './services/theme.service';
 
 @Component({
   standalone: true,
@@ -27,6 +28,11 @@ import { ProjectSwitcher } from './project-switcher';
     </main>
   `
 })
-export class App {}
+export class App {
+  constructor(private theme: ThemeService) {}
+  ngOnInit() {
+    this.theme.init();
+  }
+}
 
 

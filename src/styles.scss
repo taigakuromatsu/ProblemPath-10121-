@@ -1,39 +1,185 @@
+/* =========================================
+   Global Styles (Angular Material v17)
+   Light / Dark theming with html.dark toggle
+   ========================================= */
 
-// Include theming for Angular Material with `mat.theme()`.
-// This Sass mixin will define CSS variables that are used for styling Angular Material
-// components according to the Material 3 design spec.
-// Learn more about theming and how to use it for your application's
-// custom components at https://material.angular.dev/guide/theming
-@use '@angular/material' as mat;
+   @use '@angular/material' as mat;
 
-html {
-  @include mat.theme((
-    color: (
-      primary: mat.$azure-palette,
-      tertiary: mat.$blue-palette,
-    ),
-    typography: Roboto,
-    density: 0,
-  ));
-}
-
-body {
-  // Default the application to a light color theme. This can be changed to
-  // `dark` to enable the dark color theme, or to `light dark` to defer to the
-  // user's system settings.
-  color-scheme: light;
-
-  // Set a default background, font and text colors for the application using
-  // Angular Material's system-level CSS variables. Learn more about these
-  // variables at https://material.angular.dev/guide/system-variables
-  background-color: var(--mat-sys-surface);
-  color: var(--mat-sys-on-surface);
-  font: var(--mat-sys-body-medium);
-
-  // Reset the user agent margin.
-  margin: 0;
-}
-/* You can add global styles to this file, and also import other style files */
-
-html, body { height: 100%; }
-body { margin: 0; font-family: Roboto, "Helvetica Neue", sans-serif; }
+   /* ---------------------------
+      1) Angular Material Theme
+      - html  … light
+      - html.dark … dark
+      --------------------------- */
+   
+   /* Light theme */
+   html {
+     @include mat.theme((
+       color: (
+         theme-type: light,
+         primary: mat.$azure-palette,
+         tertiary: mat.$blue-palette,
+       ),
+       typography: Roboto,
+       density: 0
+     ));
+   }
+   
+   /* Dark theme */
+   html.dark {
+     @include mat.theme((
+       color: (
+         theme-type: dark,
+         primary: mat.$azure-palette,
+         tertiary: mat.$blue-palette,
+       ),
+       typography: Roboto,
+       density: 0
+     ));
+   }
+   
+   /* ---------------------------
+      2) App Color Tokens (CSS variables)
+      - Light / Dark surface set
+      --------------------------- */
+   
+   :root {
+     /* Light */
+     --bg:       #ffffff;
+     --surface:  #272424;
+     --fg:       #111111;
+     --muted:    #666666;
+     --border:   #e5e7eb;
+     --accent:   #1f6feb; /* link/hover, optional */
+   }
+   
+   :root.dark {
+     /* Dark (ChatGPT っぽい深いグレー寄せ) */
+     --bg:       #222425; /* page background */
+     --surface:  #4d5257; /* cards / panels */
+     --fg:       #e6eaf0; /* text */
+     --muted:    #a2a9b3; /* secondary text */
+     --border:   #242a32; /* thin dividers */
+     --accent:   #6aa9ff; /* link/hover */
+     color-scheme: dark;  /* OS にヒントを渡す */
+   }
+   
+   /* ---------------------------
+      3) Base
+      --------------------------- */
+   
+   * { box-sizing: border-box; }
+   html, body {
+     height: 100%;
+     background: var(--bg);
+     color: var(--fg);
+     margin: 0;
+     -webkit-font-smoothing: antialiased;
+     -moz-osx-font-smoothing: grayscale;
+   }
+   
+   /* ほんのりトランジション（重いと感じたら消してOK） */
+   body, .mat-mdc-card, .mat-mdc-menu-panel, .mat-mdc-dialog-container .mdc-dialog__surface {
+     transition: background-color 120ms linear, color 120ms linear, border-color 120ms linear;
+   }
+   
+   /* Links */
+   a, a:visited {
+     color: var(--accent);
+     text-decoration: none;
+   }
+   a:hover { text-decoration: underline; }
+   
+   /* Headings */
+   h1, h2, h3, h4, h5, h6 { margin: 0 0 .5rem; }
+   
+   /* ---------------------------
+      4) Common Surfaces
+      --------------------------- */
+   
+   .card, .mat-mdc-card {
+     background: var(--surface);
+     color: var(--fg);
+     border: 1px solid var(--border);
+     border-radius: 12px;
+   }
+   
+   /* Material overlays (menu/select/dialog/snackbar) */
+   .mat-mdc-menu-panel,
+   .mat-mdc-select-panel,
+   .mat-mdc-dialog-container .mdc-dialog__surface,
+   .mat-mdc-snack-bar-container {
+     background: var(--surface);
+     color: var(--fg);
+     border: 1px solid var(--border);
+   }
+   
+   /* chips / table / list (軽く色合わせ) */
+   .mat-mdc-standard-chip, .mat-mdc-chip-set {
+     background: var(--surface);
+     color: var(--fg);
+   }
+   
+   .mat-mdc-table, .mat-mdc-row, .mat-mdc-cell, .mat-mdc-header-row, .mat-mdc-header-cell {
+     background: var(--surface);
+     color: var(--fg);
+     border-color: var(--border);
+   }
+   
+   /* divider */
+   .mat-divider, hr {
+     border-color: var(--border) !important;
+     opacity: .9;
+   }
+   
+   /* ---------------------------
+      5) Form controls (軽い調整)
+      --------------------------- */
+   
+   .mdc-text-field, .mat-mdc-form-field-subscript-wrapper {
+     color: var(--fg);
+   }
+   .mdc-text-field--filled {
+     background: color-mix(in oklab, var(--surface) 92%, black 8%) !important;
+   }
+   .mdc-line-ripple::after {
+     border-bottom-color: var(--accent) !important;
+   }
+   
+   /* placeholder / helper */
+   ::placeholder { color: var(--muted); opacity: .9; }
+   
+   /* ---------------------------
+      6) Buttons (微調整)
+      --------------------------- */
+   
+   /* Text buttons の hover を少し見やすく */
+   .mdc-button:hover .mdc-button__label { opacity: .9; }
+   
+   /* Stroked button の枠色 */
+   .mat-mdc-outlined-button:not(:disabled) {
+     border-color: var(--border);
+   }
+   
+   /* ---------------------------
+      7) Scrollbar (optional)
+      --------------------------- */
+   
+   * {
+     scrollbar-width: thin;
+     scrollbar-color: #2a313a transparent;
+   }
+   *::-webkit-scrollbar { height: 10px; width: 10px; }
+   *::-webkit-scrollbar-thumb { background: #2a313a; border-radius: 8px; }
+   *::-webkit-scrollbar-track { background: transparent; }
+   
+   /* ---------------------------
+      8) Utilities
+      --------------------------- */
+   
+   .muted { color: var(--muted); }
+   .bordered { border: 1px solid var(--border); border-radius: 8px; }
+   .surface { background: var(--surface); }
+   
+   /* Sticky header がある場合の保険（必要なら） */
+   /* .cdk-overlay-container { z-index: 2000; } */
+   
