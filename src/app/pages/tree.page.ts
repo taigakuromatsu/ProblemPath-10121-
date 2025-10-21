@@ -20,6 +20,7 @@ import { ChartConfiguration } from 'chart.js';
 
 import { Observable, combineLatest, of } from 'rxjs';
 import { map, switchMap, take, tap } from 'rxjs/operators';
+import { MembersService } from '../services/members.service';
 
 type Status = 'not_started' | 'in_progress' | 'done';
 
@@ -126,8 +127,8 @@ function dlog(...args: any[]) {
           </button>
           <span style="font-weight:600">{{ node.name }}</span>
           <span style="flex:1 1 auto"></span>
-          <button mat-button type="button" (click)="renameProblemNode(node)" *ngIf="auth.loggedIn$ | async">Rename</button>
-          <button mat-button type="button" color="warn" (click)="removeProblemNode(node)" *ngIf="auth.loggedIn$ | async">Delete</button>
+          <button mat-button type="button" (click)="renameProblemNode(node)" *ngIf="isEditor$ | async">Rename</button>
+          <button mat-button type="button" color="warn" (click)="removeProblemNode(node)" *ngIf="isEditor$ | async">Delete</button>
         </div>
         <div *ngIf="tree.isExpanded(node)"><ng-container matTreeNodeOutlet></ng-container></div>
       </mat-nested-tree-node>
@@ -140,8 +141,8 @@ function dlog(...args: any[]) {
           </button>
           <span>{{ node.name }}</span>
           <span style="flex:1 1 auto"></span>
-          <button mat-button type="button" (click)="renameIssueNode(node)" *ngIf="auth.loggedIn$ | async">Rename</button>
-          <button mat-button type="button" color="warn" (click)="removeIssueNode(node)" *ngIf="auth.loggedIn$ | async">Delete</button>
+          <button mat-button type="button" (click)="renameIssueNode(node)" *ngIf="isEditor$ | async">Rename</button>
+          <button mat-button type="button" color="warn" (click)="removeIssueNode(node)" *ngIf="isEditor$ | async">Delete</button>
         </div>
         <div *ngIf="tree.isExpanded(node)"><ng-container matTreeNodeOutlet></ng-container></div>
       </mat-nested-tree-node>
@@ -164,8 +165,8 @@ function dlog(...args: any[]) {
           </span>
 
           <span style="flex:1 1 auto"></span>
-          <button mat-button type="button" (click)="renameTaskNode(node)" *ngIf="auth.loggedIn$ | async">Rename</button>
-          <button mat-button type="button" color="warn" (click)="removeTaskNode(node)" *ngIf="auth.loggedIn$ | async">Delete</button>
+          <button mat-button type="button" (click)="renameTaskNode(node)" *ngIf="isEditor$ | async">Rename</button>
+          <button mat-button type="button" color="warn" (click)="removeTaskNode(node)" *ngIf="isEditor$ | async">Delete</button>
         </div>
       </mat-nested-tree-node>
 
@@ -218,14 +219,19 @@ export class TreePage {
   isLoadingProblems = true;
   loadError: string | null = null;
 
+  isEditor$!: Observable<boolean>;
+
   // MatTreeのノード操作（CRUDはすべてpid明示）
   constructor(
     private problems: ProblemsService,
     private issues: IssuesService,
     private tasks: TasksService,
     public auth: AuthService,
-    private currentProject: CurrentProjectService
-  ) {}
+    private currentProject: CurrentProjectService,
+    private members: MembersService
+  ) {
+    this.isEditor$ = this.members.isEditor$;
+  }
 
   renameProblemNode(node: { id: string; name: string }) {
     const t = prompt('New Problem title', node.name);

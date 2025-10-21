@@ -16,6 +16,7 @@ import { DragDropModule, CdkDragDrop, moveItemInArray, transferArrayItem, CdkDra
 import { Router, ActivatedRoute, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AuthService } from '../services/auth.service';
+import { MembersService } from '../services/members.service';
 
 @Component({
   standalone: true,
@@ -103,7 +104,7 @@ import { AuthService } from '../services/auth.service';
 
                       <div>{{ t.title }}</div>
 
-                      <div style="display:flex; gap:6px; margin-top:6px;" *ngIf="auth.loggedIn$ | async">
+                      <div style="display:flex; gap:6px; margin-top:6px;" *ngIf="isEditor$ | async">
                         <button mat-button *ngFor="let next of statusCols"
                                 [disabled]="next===t.status || isBusy(t.id!)"
                                 (click)="setTaskStatus(pid, i.id!, t, next)">
@@ -145,6 +146,8 @@ export class BoardPage {
     not_started: 0, in_progress: 0, done: 0
   };
 
+  isEditor$!: Observable<boolean>;
+
   // DnD中のタスク制御
   busyTaskIds = new Set<string>();
   isBusy(id: string | undefined | null): boolean { return !!id && this.busyTaskIds.has(id); }
@@ -162,8 +165,11 @@ export class BoardPage {
     private route: ActivatedRoute,
     private destroyRef: DestroyRef,
     public auth: AuthService,
-    private currentProject: CurrentProjectService
-  ) {}
+    private currentProject: CurrentProjectService,
+    private members: MembersService
+  ) {
+    this.isEditor$ = this.members.isEditor$;
+  }
 
   allowDnD = false;
 
@@ -174,7 +180,7 @@ export class BoardPage {
     );
 
     // ログインでDnD有効/無効
-    this.auth.loggedIn$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(v => {
+    this.isEditor$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(v => {
       this.allowDnD = !!v;
     });
 
@@ -262,6 +268,7 @@ export class BoardPage {
     t: Task,
     status: 'not_started'|'in_progress'|'done'
   ) {
+    if (!this.allowDnD) return;
     if (!t.id || this.isBusy(t.id)) return;
     const progress = status === 'done' ? 100 : status === 'not_started' ? 0 : 50;
 
@@ -278,6 +285,7 @@ export class BoardPage {
     problemId: string,
     issueId: string
   ) {
+    if (!this.allowDnD) return;
     // ID -> status を復元（dl-<status>-<issueId>）
     const parse = (id: string) => id.split('-')[1] as 'not_started'|'in_progress'|'done';
     const srcStatus  = parse(ev.previousContainer.id);

@@ -15,6 +15,7 @@ import { IssuesService } from '../services/issues.service';
 import { TasksService } from '../services/tasks.service';
 import { CurrentProjectService } from '../services/current-project.service';
 import { AuthService } from '../services/auth.service';
+import { MembersService } from '../services/members.service'; // ★ 追加
 
 import { Problem, Issue, Task } from '../models/types';
 import { Observable, BehaviorSubject, of, combineLatest } from 'rxjs';
@@ -40,8 +41,13 @@ import { map } from 'rxjs/operators';
       <ng-template #signin>
         <button mat-raised-button color="primary" type="button" (click)="auth.signInWithGoogle()">Sign in with Google</button>
         <button mat-stroked-button type="button" (click)="switchAccount()">Switch account</button>
+      </ng-template>
+    </div>
 
-        </ng-template>
+    <!-- ビューアーモードのバッジ -->
+    <div *ngIf="(auth.loggedIn$ | async) && !(members.isEditor$ | async)"
+         style="padding:8px 10px; border:1px solid #e5e7eb; border-radius:8px; background:#fafafa; margin:8px 0; font-size:12px;">
+      現在のプロジェクトでは <strong>閲覧のみ（Viewer）</strong> です。編集ボタンは非表示になります。
     </div>
 
     <p>ここで Problem を選んで、その配下の Issue / Task を編集します。</p>
@@ -62,20 +68,22 @@ import { map } from 'rxjs/operators';
         <a routerLink="/schedule">📆 Schedule</a>
       </nav>
 
-      <!-- Problem セレクト（＋新規作成… を内包） -->
+      <!-- Problem セレクト（＋新規作成… は Editor のみ表示） -->
       <div style="display:flex; align-items:center; gap:12px; margin:8px 0 12px;">
         <label>Problem:
           <select [(ngModel)]="selectedProblemId" (ngModelChange)="onSelectProblem($event)">
             <option [ngValue]="null">-- 選択してください --</option>
             <option *ngFor="let p of (problems$ | async)" [ngValue]="p.id">{{ p.title }}</option>
-            <option [ngValue]="NEW_OPTION_VALUE">＋ 新規作成…</option>
+            <option *ngIf="members.isEditor$ | async" [ngValue]="NEW_OPTION_VALUE">＋ 新規作成…</option>
           </select>
         </label>
 
         <span style="flex:1 1 auto"></span>
 
-        <button *ngIf="selectedProblemId" mat-stroked-button (click)="renameSelected()">Rename</button>
-        <button *ngIf="selectedProblemId" mat-stroked-button color="warn" (click)="removeSelected()">Delete</button>
+        <ng-container *ngIf="members.isEditor$ | async">
+          <button *ngIf="selectedProblemId" mat-stroked-button (click)="renameSelected()">Rename</button>
+          <button *ngIf="selectedProblemId" mat-stroked-button color="warn" (click)="removeSelected()">Delete</button>
+        </ng-container>
       </div>
 
       <!-- 選択中 Problem の編集パネル -->
@@ -83,8 +91,10 @@ import { map } from 'rxjs/operators';
         <div style="padding:12px; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:16px;">
           <h3 style="margin:0 0 8px;">Issues</h3>
 
-          <!-- Issue 追加 -->
-          <form (ngSubmit)="createIssue(pid)" style="display:flex; gap:8px; align-items:center; margin:8px 0;">
+          <!-- Issue 追加（Editor のみ） -->
+          <form *ngIf="members.isEditor$ | async"
+                (ngSubmit)="createIssue(pid)"
+                style="display:flex; gap:8px; align-items:center; margin:8px 0;">
             <input [(ngModel)]="issueTitle" name="issueTitle" placeholder="New Issue title" required />
             <button mat-raised-button color="primary" type="submit">＋ Add Issue</button>
           </form>
@@ -95,17 +105,21 @@ import { map } from 'rxjs/operators';
               <div style="display:flex; align-items:center; gap:8px;">
                 <strong>{{ i.title }}</strong>
                 <span style="flex:1 1 auto"></span>
-                <button mat-button (click)="renameIssue(pid, i)">Rename</button>
-                <button mat-button color="warn" (click)="removeIssue(pid, i)">Delete</button>
+                <ng-container *ngIf="members.isEditor$ | async">
+                  <button mat-button (click)="renameIssue(pid, i)">Rename</button>
+                  <button mat-button color="warn" (click)="removeIssue(pid, i)">Delete</button>
+                </ng-container>
               </div>
 
-              <!-- Task 追加（Issueごと） -->
-              <form (ngSubmit)="createTask(pid, i.id!)" style="display:flex; gap:6px; margin:6px 0 4px 0;">
+              <!-- Task 追加（Issueごと・Editor のみ） -->
+              <form *ngIf="members.isEditor$ | async"
+                    (ngSubmit)="createTask(pid, i.id!)"
+                    style="display:flex; gap:6px; margin:6px 0 4px 0;">
                 <input [(ngModel)]="taskTitle[i.id!]" name="taskTitle-{{i.id}}" placeholder="New Task title" required />
                 <button mat-stroked-button type="submit">＋ Add Task</button>
               </form>
 
-              <!-- Task 一覧（最小の編集：タイトル/期限/タグ/削除） -->
+              <!-- Task 一覧 -->
               <ul *ngIf="tasksMap[i.id!] | async as tasks" style="margin:0; padding-left:1rem;">
                 <li *ngFor="let t of tasks" style="margin:3px 0;">
                   <div style="display:flex; align-items:center; gap:8px;">
@@ -120,10 +134,12 @@ import { map } from 'rxjs/operators';
                       </span>
                     </span>
 
-                    <button mat-button (click)="renameTask(pid, i.id!, t)">Rename</button>
-                    <button mat-button (click)="editTaskDue(pid, i.id!, t)">Due</button>
-                    <button mat-button (click)="editTaskTags(pid, i.id!, t)">Tags</button>
-                    <button mat-button color="warn" (click)="removeTask(pid, i.id!, t)">Delete</button>
+                    <ng-container *ngIf="members.isEditor$ | async">
+                      <button mat-button (click)="renameTask(pid, i.id!, t)">Rename</button>
+                      <button mat-button (click)="editTaskDue(pid, i.id!, t)">Due</button>
+                      <button mat-button (click)="editTaskTags(pid, i.id!, t)">Tags</button>
+                      <button mat-button color="warn" (click)="removeTask(pid, i.id!, t)">Delete</button>
+                    </ng-container>
                   </div>
                 </li>
                 <li *ngIf="tasks.length === 0" style="opacity:.7">（Taskはまだありません）</li>
@@ -169,7 +185,8 @@ export class HomePage {
     private tasks: TasksService,
     private destroyRef: DestroyRef,
     public auth: AuthService,
-    private currentProject: CurrentProjectService
+    private currentProject: CurrentProjectService,
+    public members: MembersService // ★ 追加（template から参照するため public）
   ) {}
 
   ngOnInit() {
@@ -178,7 +195,7 @@ export class HomePage {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(p => this.theme.apply(p.theme, p.accentColor));
 
-         // サインアウト時の掃除だけ（プロジェクトIDは AuthService.ensureOnboard がセット）
+    // サインアウト時の掃除だけ（プロジェクトIDは AuthService.ensureOnboard がセット）
     this.auth.loggedIn$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(isIn => {
@@ -202,7 +219,7 @@ export class HomePage {
       this.currentProject.projectId$
     ]).pipe(
       switchMap(([pidProblem, isIn, pid]) =>
-               (isIn && pid && pid !== 'default' && pidProblem) ? this.issues.listByProblem(pid, pidProblem) : of([])
+        (isIn && pid && pid !== 'default' && pidProblem) ? this.issues.listByProblem(pid, pidProblem) : of([])
       )
     );
 
@@ -218,7 +235,7 @@ export class HomePage {
         for (const i of issues ?? []) {
           const id = i.id!;
           nextMap[id] = this.tasksMap[id] ?? this.currentProject.projectId$.pipe(
-                      switchMap(pid => (pid && pid !== 'default') ? this.tasks.listByIssue(pid, this.selectedProblemId!, id) : of([]))
+            switchMap(pid => (pid && pid !== 'default') ? this.tasks.listByIssue(pid, this.selectedProblemId!, id) : of([]))
           );
         }
         this.tasksMap = nextMap;
@@ -310,6 +327,10 @@ export class HomePage {
     const nxt = prompt('Due (YYYY-MM-DD、空で解除)', cur ?? '');
     if (nxt === null) return;
     const dueDate = (nxt.trim() === '') ? null : nxt.trim();
+    if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+      alert('日付は YYYY-MM-DD 形式で入力してください');
+      return;
+    }
     this.withPid(pid => this.tasks.update(pid, problemId, issueId, t.id!, { dueDate }));
   }
   editTaskTags(problemId: string, issueId: string, t: Task) {
@@ -320,10 +341,9 @@ export class HomePage {
     this.withPid(pid => this.tasks.update(pid, problemId, issueId, t.id!, { tags }));
   }
 
-  // HomePage などのコンポーネント
-async switchAccount() {
-  await this.auth.signOut();              // まずアプリ側のセッションを終了
-  await this.auth.signInWithGoogle(true); // 選択ダイアログを強制表示
+  async switchAccount() {
+    await this.auth.signOut();
+    await this.auth.signInWithGoogle(true);
+  }
 }
 
-}
