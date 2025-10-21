@@ -1,3 +1,4 @@
+// auth.service.ts
 import { Injectable, inject } from '@angular/core';
 import { Auth, GoogleAuthProvider, signInWithPopup, signOut, user as afUser } from '@angular/fire/auth';
 import { map, shareReplay } from 'rxjs/operators';

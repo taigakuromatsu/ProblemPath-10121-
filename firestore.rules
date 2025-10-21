@@ -55,7 +55,36 @@ service cloud.firestore {
         allow update, delete: if isAdmin(projectId)
           && request.resource.data.keys().hasOnly(['role','joinedAt'])
           && isValidRole(request.resource.data.role);
+
+        // ★ 招待リンク経由の参加を許可（本人のみ / member or viewer）
+        // クライアントは create 時に { role, joinedAt, inviteId, invitedBy } を書く。
+        // ルールは projects/{pid}/invites/{inviteId} の email と本人の email を照合。
+        allow create, update: if isSignedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['role','joinedAt','inviteId','invitedBy'])
+        && (request.resource.data.role in ['member','viewer'])
+        && request.auth.token.email != null
+        && exists(/databases/$(database)/documents/projects/$(projectId)/invites/$(request.resource.data.inviteId))
+        && get(/databases/$(database)/documents/projects/$(projectId)/invites/$(request.resource.data.inviteId)).data.email
+           == request.auth.token.email;
+    }
+
+      // invites （トークン=docId を前提に “知っている人だけ読める” 方式）
+      match /invites/{token} {
+        allow get: if true; // ランダムID前提で公開GET可（推測困難）
+        allow list: if false;
+        allow create: if isAdmin(projectId);
+        // 招待された本人が「未使用の招待」を使用済みにできる
+        allow update: if isSignedIn()
+        && request.auth.token.email != null
+        && resource.data.email == request.auth.token.email
+        && resource.data.redeemedBy == null
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['redeemedBy','redeemedAt'])
+        && request.resource.data.redeemedBy == request.auth.uid;
+        // delete は従来どおり admin のみ
+        allow delete: if isAdmin(projectId);
       }
+
 
       // Problems
       match /problems/{problemId} {

@@ -16,6 +16,7 @@ import { TasksService } from '../services/tasks.service';
 import { CurrentProjectService } from '../services/current-project.service';
 import { AuthService } from '../services/auth.service';
 import { MembersService } from '../services/members.service'; // ★ 追加
+import { InvitesService, InviteRole } from '../services/invites.service';
 
 import { Problem, Issue, Task } from '../models/types';
 import { Observable, BehaviorSubject, of, combineLatest } from 'rxjs';
@@ -151,6 +152,29 @@ import { map } from 'rxjs/operators';
         </div>
       </ng-container>
 
+      <!-- === 招待（Adminのみ） === -->
+      <div *ngIf="(members.isAdmin$ | async)" style="padding:12px; border:1px solid #e5e7eb; border-radius:10px; margin:12px 0;">
+        <h3 style="margin:0 0 8px;">Invite by Email</h3>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <input [(ngModel)]="inviteEmail" placeholder="email@example.com"
+                style="padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; min-width:240px;">
+          <select [(ngModel)]="inviteRole">
+            <option value="admin">admin</option>
+            <option value="member" selected>member</option>
+            <option value="viewer">viewer</option>
+          </select>
+          <button mat-raised-button color="primary" (click)="createInvite()" [disabled]="isCreatingInvite">
+            {{ isCreatingInvite ? 'Creating...' : 'Create invite link' }}
+          </button>
+          <ng-container *ngIf="inviteUrl">
+            <input [value]="inviteUrl" readonly
+                  style="flex:1 1 auto; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px;">
+            <button mat-stroked-button (click)="copyInviteUrl()">Copy</button>
+          </ng-container>
+        </div>
+        <p style="opacity:.7; margin-top:6px;">生成されたURLをメールで送ってください。相手は開いてログイン→「参加する」でメンバーになります。</p>
+      </div>
+
       <!-- --- Settings 表示（従来のまま） --- -->
       <section style="margin-top:16px;">
         <h3>Settings (準備のみ／表示)</h3>
@@ -186,7 +210,8 @@ export class HomePage {
     private destroyRef: DestroyRef,
     public auth: AuthService,
     private currentProject: CurrentProjectService,
-    public members: MembersService // ★ 追加（template から参照するため public）
+    public members: MembersService, // ★ 追加（template から参照するため public）
+    private invites: InvitesService
   ) {}
 
   ngOnInit() {
@@ -345,5 +370,27 @@ export class HomePage {
     await this.auth.signOut();
     await this.auth.signInWithGoogle(true);
   }
+
+  inviteEmail = '';
+  inviteRole: InviteRole = 'member';
+  inviteUrl: string | null = null;
+  isCreatingInvite = false;
+
+  async createInvite() {
+    if (!this.inviteEmail.trim()) return;
+    const pid = this.currentProject.getSync();
+    if (!pid) { alert('プロジェクト未選択'); return; }
+    this.isCreatingInvite = true;
+    try {
+      const url = await this.invites.create(pid, this.inviteEmail.trim(), this.inviteRole);
+      this.inviteUrl = url;
+    } finally {
+      this.isCreatingInvite = false;
+    }
+  }
+  copyInviteUrl() {
+    if (this.inviteUrl) navigator.clipboard.writeText(this.inviteUrl);
+  }
+
 }
 
