@@ -3,6 +3,8 @@ import { Firestore } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
 import { Issue } from '../models/types';
 
+const DEBUG_ISSUES = false; // ← 必要な時だけ true に
+
 // 読み取りは rxfire、参照は Firebase SDK (native)
 import {
   collection as nativeCollection,
@@ -28,9 +30,13 @@ export class IssuesService {
     return `projects/${projectId}/problems`;
   }
 
+  private dlog(...args: any[]) {
+    if (DEBUG_ISSUES) console.debug(...args);
+  }
+
   // --- listByProblem ---
   listByProblem(projectId: string, problemId: string): Observable<Issue[]> {
-    console.log('[IssuesService.listByProblem]', {
+    this.dlog('[IssuesService.listByProblem]', {
       pid: projectId, problemId,
       path: `${this.base(projectId)}/${problemId}/issues`
     });

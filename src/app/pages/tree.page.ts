@@ -34,6 +34,14 @@ type TreeNode = {
   children?: TreeNode[];
 };
 
+// tree.page.ts
+const DEBUG_TREE = false; // ← 必要なときだけ true に
+
+function dlog(...args: any[]) {
+  if (DEBUG_TREE) console.debug(...args);
+}
+
+
 @Component({
   standalone: true,
   selector: 'pp-tree',
@@ -276,7 +284,7 @@ export class TreePage {
 
     this.subForTree?.unsubscribe();
     this.subForTree = combineLatest([this.currentProject.projectId$, this.auth.loggedIn$]).pipe(
-      tap(([pid, isIn]) => console.log('[Tree] subscribe Problems with', { pid, isIn })),
+      tap(([pid, isIn]) => dlog('[Tree] subscribe Problems with', { pid, isIn })),
       // ★ default は購読しない（実pidになるまで空配列）
       switchMap(([pid, isIn]) => {
         const safePid = (pid && pid !== 'default') ? pid : null;
@@ -327,7 +335,7 @@ export class TreePage {
     this.issueSubs.get(pNode.id)?.unsubscribe();
 
     const sub = combineLatest([this.currentProject.projectId$, this.auth.loggedIn$]).pipe(
-      tap(([pid, isIn]) => console.log('[Tree] subscribe Issues with', { pid, isIn, problemId: pNode.id })),
+      tap(([pid, isIn]) => dlog('[Tree] subscribe Issues with', { pid, isIn, problemId: pNode.id })),
       switchMap(([pid, isIn]) => {
         const safePid = (pid && pid !== 'default') ? pid : null;
         return (isIn && safePid) ? this.issues.listByProblem(safePid, pNode.id) : of([]);
@@ -378,7 +386,7 @@ export class TreePage {
     this.taskSubs.get(key)?.unsubscribe();
 
     const sub = combineLatest([this.currentProject.projectId$, this.auth.loggedIn$]).pipe(
-      tap(([pid, isIn]) => console.log('[Tree] subscribe Tasks with', { pid, isIn, problemId, issueId: issueNode.id })),
+      tap(([pid, isIn]) => dlog('[Tree] subscribe Tasks with', { pid, isIn, problemId, issueId: issueNode.id })),
       switchMap(([pid, isIn]) => {
         const safePid = (pid && pid !== 'default') ? pid : null;
         return (isIn && safePid) ? this.tasks.listByIssue(safePid, problemId, issueNode.id) : of([]);

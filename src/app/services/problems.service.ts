@@ -3,6 +3,8 @@ import { Firestore } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
 import { Problem } from '../models/types';
 
+const DEBUG_PROBLEMS = false; // ← 必要な時だけ true に
+
 // Firebase SDK (native) ＋ rxfire
 import {
   collection as nativeCollection,
@@ -28,10 +30,14 @@ export class ProblemsService {
     if (!projectId) throw new Error('[ProblemsService] projectId is required');
     return `projects/${projectId}/problems`;
   }
+  
+  private dlog(...args: any[]) {
+    if (DEBUG_PROBLEMS) console.debug(...args);
+  }
 
   // -------- list --------
   list(projectId: string): Observable<Problem[]> {
-    console.log('[ProblemsService.list]', { pid: projectId, path: this.colPath(projectId) });
+    this.dlog('[ProblemsService.list]', { pid: projectId, path: this.colPath(projectId) });
     const colRef = nativeCollection(this.fs as any, this.colPath(projectId));
     const q = nativeQuery(
       colRef,
@@ -40,6 +46,7 @@ export class ProblemsService {
     );
     return rxCollectionData(q as any, { idField: 'id' }) as Observable<Problem[]>;
   }
+
 
   // -------- nextOrder（内部ユーティリティ） --------
   private async nextOrder(projectId: string): Promise<number> {
