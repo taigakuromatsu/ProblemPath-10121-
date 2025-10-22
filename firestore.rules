@@ -100,15 +100,50 @@ service cloud.firestore {
         allow read: if isMember(projectId);
         allow create, update, delete: if isEditor(projectId);
 
+      // Problem comments
+      match /comments/{commentId} {
+        allow read: if isMember(projectId);
+        allow create: if isEditor(projectId)
+                      && request.resource.data.authorId == request.auth.uid;
+        allow update, delete: if (
+          // 自分のコメント
+          (request.auth != null && resource.data.authorId == request.auth.uid)
+          // もしくは Admin
+          || isAdmin(projectId)
+        );
+      }
+
         // Issues
         match /issues/{issueId} {
           allow read: if isMember(projectId);
           allow create, update, delete: if isEditor(projectId);
 
+         // Issue comments
+        match /comments/{commentId} {
+          allow read: if isMember(projectId);
+          allow create: if isEditor(projectId)
+                        && request.resource.data.authorId == request.auth.uid;
+          allow update, delete: if (
+            (request.auth != null && resource.data.authorId == request.auth.uid)
+            || isAdmin(projectId)
+          );
+        }
+
           // Tasks
           match /tasks/{taskId} {
             allow read: if isMember(projectId);
             allow create, update, delete: if isEditor(projectId);
+
+           // Task comments
+           match /comments/{commentId} {
+            allow read: if isMember(projectId);
+            allow create: if isEditor(projectId)
+                          && request.resource.data.authorId == request.auth.uid;
+            allow update, delete: if (
+              (request.auth != null && resource.data.authorId == request.auth.uid)
+              || isAdmin(projectId)
+            );
+           }
           }
         }
       }
