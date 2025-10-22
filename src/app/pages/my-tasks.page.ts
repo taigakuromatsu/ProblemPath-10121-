@@ -14,6 +14,8 @@ import { CurrentProjectService } from '../services/current-project.service';
 import { AuthService } from '../services/auth.service';
 import { Task } from '../models/types';
 import { take } from 'rxjs/operators';
+import { Firestore } from '@angular/fire/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 
 type Vm = {
   overdue: Task[]; today: Task[]; tomorrow: Task[];
@@ -103,7 +105,8 @@ export class MyTasksPage {
   constructor(
     private tasks: TasksService,
     private current: CurrentProjectService,
-    private auth: AuthService
+    private auth: AuthService,
+    private fs: Firestore
   ) {}
 
   ngOnInit(){ this.reload(); }
@@ -161,37 +164,65 @@ export class MyTasksPage {
     ];
   }
   
-  private toCsv(tasks: Task[]): string {
+  private toJson(tasks: Task[], nameMap: Map<string,string>): string {
+    const mapped = tasks.map(t => ({
+      id: t.id,
+      title: t.title,
+      status: t.status,
+      priority: t.priority ?? null,
+      dueDate: t.dueDate ?? null,
+      assignees: t.assignees ?? [],
+      project: t.projectId ? (nameMap.get(`project:${t.projectId}`) ?? t.projectId) : null,
+      problem: (t.projectId && t.problemId) ? (nameMap.get(`problem:${t.projectId}:${t.problemId}`) ?? t.problemId) : null,
+      issue: (t.projectId && t.problemId && t.issueId) ? (nameMap.get(`issue:${t.projectId}:${t.problemId}:${t.issueId}`) ?? t.issueId) : null,
+      tags: t.tags ?? [],
+      progress: (t as any).progress ?? null,
+      createdAt: (t as any).createdAt?.toDate?.() ?? null,
+      updatedAt: (t as any).updatedAt?.toDate?.() ?? null,
+      // 必要なら ID も残す:
+      projectId: t.projectId ?? null,
+      problemId: t.problemId ?? null,
+      issueId: t.issueId ?? null,
+    }));
+    return JSON.stringify(mapped, null, 2);
+  }  
+
+  private toCsv(tasks: Task[], nameMap: Map<string,string>): string {
     const headers = [
-      'ID','タイトル','状態','優先度','期日','担当者','プロジェクトID',
-      'ProblemID','IssueID','タグ','進捗(%)','作成日時','更新日時'
+      'ID','タイトル','状態','優先度','期日','担当者',
+      'プロジェクト','Problem','Issue',
+      'タグ','進捗(%)','作成日時','更新日時'
     ];
     const esc = (v: any) => `"${(v ?? '').toString().replace(/"/g,'""')}"`;
     const fmtTs = (x: any) => {
-      // Firestore Timestamp → ISO8601 / その他は空 or 文字列
       const d = x?.toDate?.() ?? (typeof x === 'string' ? new Date(x) : null);
       return d && !isNaN(d as any) ? new Date(d).toISOString().replace('T',' ').replace('Z','') : '';
     };
     const join = (xs: any) => Array.isArray(xs) ? xs.join(', ') : (xs ?? '');
   
-    const rows = tasks.map(t => [
-      t.id,
-      t.title,
-      t.status,           // 必要ならここでラベル化: map {in_progress:'対応中',...}
-      t.priority ?? '',
-      t.dueDate ?? '',
-      join(t.assignees),
-      t.projectId ?? '',
-      t.problemId ?? '',
-      t.issueId ?? '',
-      join(t.tags),
-      (t as any).progress ?? '',
-      fmtTs((t as any).createdAt),
-      fmtTs((t as any).updatedAt),
-    ].map(esc).join(','));
+    const rows = tasks.map(t => {
+      const pj = t.projectId ? (nameMap.get(`project:${t.projectId}`) ?? t.projectId) : '';
+      const pr = (t.projectId && t.problemId) ? (nameMap.get(`problem:${t.projectId}:${t.problemId}`) ?? t.problemId) : '';
+      const is = (t.projectId && t.problemId && t.issueId) ? (nameMap.get(`issue:${t.projectId}:${t.problemId}:${t.issueId}`) ?? t.issueId) : '';
+  
+      return [
+        t.id,
+        t.title,
+        t.status,
+        t.priority ?? '',
+        t.dueDate ?? '',
+        join(t.assignees),
+        pj, pr, is,
+        join(t.tags),
+        (t as any).progress ?? '',
+        fmtTs((t as any).createdAt),
+        fmtTs((t as any).updatedAt),
+      ].map(esc).join(',');
+    });
   
     return [headers.join(','), ...rows].join('\n');
   }
+  
   
   private download(filename: string, content: string, mime = 'text/plain') {
     const bom = mime === 'text/csv' ? '\uFEFF' : ''; // Excel対策（CSVのみBOM付与）
@@ -204,15 +235,61 @@ export class MyTasksPage {
   }
   
   exportCurrent(kind: 'csv'|'json') {
-    this.vm$.pipe(take(1)).subscribe(vm => {
+    this.vm$.pipe(take(1)).subscribe(async vm => {
       const data = this.flattenVm(vm);
+      const nameMap = await this.resolveNames(data);
+  
       if (kind === 'csv') {
-        const csv = this.toCsv(data);
+        const csv = this.toCsv(data, nameMap);
         this.download('my-tasks.csv', csv, 'text/csv');
       } else {
-        this.download('my-tasks.json', JSON.stringify(data, null, 2), 'application/json');
+        const json = this.toJson(data, nameMap);
+        this.download('my-tasks.json', json, 'application/json');
       }
     });
+  }
+  
+  
+
+
+  private async resolveNames(tasks: Task[]): Promise<Map<string, string>> {
+    const nameMap = new Map<string,string>();
+    const needProject = new Set<string>();
+    const needProblem: Array<{pid:string; problemId:string}> = [];
+    const needIssue: Array<{pid:string; problemId:string; issueId:string}> = [];
+  
+    for (const t of tasks) {
+      if (t.projectId) needProject.add(t.projectId);
+      if (t.projectId && t.problemId) needProblem.push({ pid: t.projectId, problemId: t.problemId });
+      if (t.projectId && t.problemId && t.issueId) needIssue.push({ pid: t.projectId, problemId: t.problemId, issueId: t.issueId });
+    }
+  
+    // projects
+    await Promise.all(Array.from(needProject).map(async pid => {
+      const snap = await getDoc(doc(this.fs as any, `projects/${pid}`));
+      const name = snap.exists() ? (snap.data() as any)?.meta?.name ?? pid : pid;
+      nameMap.set(`project:${pid}`, name);
+    }));
+  
+    // problems
+    await Promise.all(needProblem.map(async x => {
+      const key = `problem:${x.pid}:${x.problemId}`;
+      if (nameMap.has(key)) return;
+      const snap = await getDoc(doc(this.fs as any, `projects/${x.pid}/problems/${x.problemId}`));
+      const title = snap.exists() ? (snap.data() as any)?.title ?? x.problemId : x.problemId;
+      nameMap.set(key, title);
+    }));
+  
+    // issues
+    await Promise.all(needIssue.map(async x => {
+      const key = `issue:${x.pid}:${x.problemId}:${x.issueId}`;
+      if (nameMap.has(key)) return;
+      const snap = await getDoc(doc(this.fs as any, `projects/${x.pid}/problems/${x.problemId}/issues/${x.issueId}`));
+      const title = snap.exists() ? (snap.data() as any)?.title ?? x.issueId : x.issueId;
+      nameMap.set(key, title);
+    }));
+  
+    return nameMap;
   }
   
 }
