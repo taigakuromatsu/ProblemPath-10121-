@@ -13,6 +13,7 @@ import { map, switchMap, startWith } from 'rxjs/operators';
 import { TasksService } from '../services/tasks.service';
 import { CurrentProjectService } from '../services/current-project.service';
 import { Task } from '../models/types';
+import { take } from 'rxjs/operators';
 
 type Vm = {
   overdue: Task[];
@@ -76,6 +77,9 @@ export class ScheduleRow {
     <a mat-stroked-button routerLink="/tree">← Treeへ</a>
     <h3 style="margin:0;">Schedule</h3>
     <span style="flex:1 1 auto;"></span>
+
+    <button mat-stroked-button (click)="exportCurrent('csv')">CSV</button>
+    <button mat-stroked-button style="margin-left:6px;" (click)="exportCurrent('json')">JSON</button>
 
     <label>表示:
       <select [(ngModel)]="openOnly" (ngModelChange)="reload()">
@@ -226,5 +230,68 @@ export class SchedulePage {
       })
     );
   }
+
+  private flattenVm(vm: Vm){
+    return [
+      ...vm.overdue, ...vm.today, ...vm.tomorrow,
+      ...vm.thisWeekRest, ...vm.nextWeek, ...vm.later, ...vm.nodue
+    ];
+  }
+  
+  private toCsv(tasks: Task[]): string {
+    const headers = [
+      'ID','タイトル','状態','優先度','期日','担当者','プロジェクトID',
+      'ProblemID','IssueID','タグ','進捗(%)','作成日時','更新日時'
+    ];
+    const esc = (v: any) => `"${(v ?? '').toString().replace(/"/g,'""')}"`;
+    const fmtTs = (x: any) => {
+      // Firestore Timestamp → ISO8601 / その他は空 or 文字列
+      const d = x?.toDate?.() ?? (typeof x === 'string' ? new Date(x) : null);
+      return d && !isNaN(d as any) ? new Date(d).toISOString().replace('T',' ').replace('Z','') : '';
+    };
+    const join = (xs: any) => Array.isArray(xs) ? xs.join(', ') : (xs ?? '');
+  
+    const rows = tasks.map(t => [
+      t.id,
+      t.title,
+      t.status,           // 必要ならここでラベル化: map {in_progress:'対応中',...}
+      t.priority ?? '',
+      t.dueDate ?? '',
+      join(t.assignees),
+      t.projectId ?? '',
+      t.problemId ?? '',
+      t.issueId ?? '',
+      join(t.tags),
+      (t as any).progress ?? '',
+      fmtTs((t as any).createdAt),
+      fmtTs((t as any).updatedAt),
+    ].map(esc).join(','));
+  
+    return [headers.join(','), ...rows].join('\n');
+  }
+  
+  
+  private download(filename: string, content: string, mime = 'text/plain') {
+    const bom = mime === 'text/csv' ? '\uFEFF' : '';
+    const blob = new Blob([bom + content], { type: mime + ';charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+  
+  exportCurrent(kind: 'csv'|'json') {
+    this.vm$.pipe(take(1)).subscribe(vm => {
+      const data = this.flattenVm(vm);
+      if (kind === 'csv') {
+        const csv = this.toCsv(data);
+        this.download('schedule-tasks.csv', csv, 'text/csv');
+      } else {
+        this.download('schedule-tasks.json', JSON.stringify(data, null, 2), 'application/json');
+      }
+    });
+  }
+
 }
 
