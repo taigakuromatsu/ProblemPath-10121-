@@ -19,6 +19,7 @@ import { ThemeService } from './services/theme.service';
       <a routerLink="/tree">Tree</a>
       <a routerLink="/board">Board</a>
       <a routerLink="/schedule">Schedule</a>
+      <a routerLink="/my">My</a>
       <span style="flex:1 1 auto;"></span>
       <pp-project-switcher></pp-project-switcher>
     </header>
