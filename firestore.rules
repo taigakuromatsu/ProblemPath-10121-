@@ -48,20 +48,20 @@ service cloud.firestore {
         // 【ブートストラップ例外】作成直後に「自分を admin で登録」は本人に許可
         allow create: if isSignedIn()
           && request.auth.uid == uid
-          && request.resource.data.keys().hasOnly(['role','joinedAt'])
+          && request.resource.data.keys().hasOnly(['role','joinedAt','displayName','email'])
           && request.resource.data.role == 'admin';
 
         // 以降のメンバー管理は admin のみ
         allow update, delete: if isAdmin(projectId)
-          && request.resource.data.keys().hasOnly(['role','joinedAt'])
-          && isValidRole(request.resource.data.role);
+          && request.resource.data.keys().hasOnly(['role','joinedAt','displayName','email'])
+          && (!('role' in request.resource.data) || isValidRole(request.resource.data.role));
 
         // ★ 招待リンク経由の参加を許可（本人のみ / member or viewer）
         // クライアントは create 時に { role, joinedAt, inviteId, invitedBy } を書く。
         // ルールは projects/{pid}/invites/{inviteId} の email と本人の email を照合。
         allow create, update: if isSignedIn()
         && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['role','joinedAt','inviteId','invitedBy'])
+        && request.resource.data.keys().hasOnly(['role','joinedAt','inviteId','invitedBy','displayName','email'])
         && (request.resource.data.role in ['member','viewer'])
         && request.auth.token.email != null
         && exists(/databases/$(database)/documents/projects/$(projectId)/invites/$(request.resource.data.inviteId))

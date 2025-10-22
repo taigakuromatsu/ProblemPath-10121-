@@ -15,7 +15,7 @@ import { CurrentProjectService } from '../services/current-project.service';
 import { Task } from '../models/types';
 import { take } from 'rxjs/operators';
 import { Firestore } from '@angular/fire/firestore';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
 
 type Vm = {
   overdue: Task[];
@@ -241,65 +241,62 @@ export class SchedulePage {
     ];
   }
 
-  private toJson(tasks: Task[], nameMap: Map<string,string>): string {
-    const mapped = tasks.map(t => ({
-      id: t.id,
-      title: t.title,
-      status: t.status,
-      priority: t.priority ?? null,
-      dueDate: t.dueDate ?? null,
-      assignees: t.assignees ?? [],
-      project: t.projectId ? (nameMap.get(`project:${t.projectId}`) ?? t.projectId) : null,
-      problem: (t.projectId && t.problemId) ? (nameMap.get(`problem:${t.projectId}:${t.problemId}`) ?? t.problemId) : null,
-      issue: (t.projectId && t.problemId && t.issueId) ? (nameMap.get(`issue:${t.projectId}:${t.problemId}:${t.issueId}`) ?? t.issueId) : null,
-      tags: t.tags ?? [],
-      progress: (t as any).progress ?? null,
-      createdAt: (t as any).createdAt?.toDate?.() ?? null,
-      updatedAt: (t as any).updatedAt?.toDate?.() ?? null,
-      // 必要なら ID も残す:
-      projectId: t.projectId ?? null,
-      problemId: t.problemId ?? null,
-      issueId: t.issueId ?? null,
-    }));
-    return JSON.stringify(mapped, null, 2);
-  }
-  
-  private toCsv(tasks: Task[], nameMap: Map<string,string>): string {
-    const headers = [
-      'ID','タイトル','状態','優先度','期日','担当者',
-      'プロジェクト','Problem','Issue',
-      'タグ','進捗(%)','作成日時','更新日時'
-    ];
-    const esc = (v: any) => `"${(v ?? '').toString().replace(/"/g,'""')}"`;
-    const fmtTs = (x: any) => {
-      const d = x?.toDate?.() ?? (typeof x === 'string' ? new Date(x) : null);
-      return d && !isNaN(d as any) ? new Date(d).toISOString().replace('T',' ').replace('Z','') : '';
-    };
-    const join = (xs: any) => Array.isArray(xs) ? xs.join(', ') : (xs ?? '');
-  
-    const rows = tasks.map(t => {
-      const pj = t.projectId ? (nameMap.get(`project:${t.projectId}`) ?? t.projectId) : '';
-      const pr = (t.projectId && t.problemId) ? (nameMap.get(`problem:${t.projectId}:${t.problemId}`) ?? t.problemId) : '';
-      const is = (t.projectId && t.problemId && t.issueId) ? (nameMap.get(`issue:${t.projectId}:${t.problemId}:${t.issueId}`) ?? t.issueId) : '';
-  
-      return [
-        t.id,
-        t.title,
-        t.status,
-        t.priority ?? '',
-        t.dueDate ?? '',
-        join(t.assignees),
-        pj, pr, is,
-        join(t.tags),
-        (t as any).progress ?? '',
-        fmtTs((t as any).createdAt),
-        fmtTs((t as any).updatedAt),
-      ].map(esc).join(',');
-    });
-  
-    return [headers.join(','), ...rows].join('\n');
-  }
-  
+// 置き換え版：toCsv（第3引数 dir を追加）
+private toCsv(tasks: Task[], nameMap: Map<string,string>, dir: Map<string,string>): string {
+  const headers = ['ID','タイトル','状態','優先度','期日','担当者','プロジェクト','Problem','Issue','タグ','進捗(%)','作成日時','更新日時'];
+  const esc = (v: any) => `"${(v ?? '').toString().replace(/"/g,'""')}"`;
+  const fmtTs = (x: any) => {
+    const d = x?.toDate?.() ?? (typeof x === 'string' ? new Date(x) : null);
+    return d && !isNaN(d as any) ? new Date(d).toISOString().replace('T',' ').replace('Z','') : '';
+  };
+  const joinAssignees = (xs: any) =>
+    Array.isArray(xs) ? xs.map((u: string) => dir.get(u) ?? u).join(', ') : (xs ?? '');
+
+  const rows = tasks.map(t => {
+    const pj = t.projectId ? (nameMap.get(`project:${t.projectId}`) ?? t.projectId) : '';
+    const pr = (t.projectId && t.problemId) ? (nameMap.get(`problem:${t.projectId}:${t.problemId}`) ?? t.problemId) : '';
+    const is = (t.projectId && t.problemId && t.issueId) ? (nameMap.get(`issue:${t.projectId}:${t.problemId}:${t.issueId}`) ?? t.issueId) : '';
+    return [
+      t.id,
+      t.title,
+      t.status,
+      t.priority ?? '',
+      t.dueDate ?? '',
+      joinAssignees(t.assignees),
+      pj, pr, is,
+      Array.isArray(t.tags) ? t.tags.join(', ') : (t.tags ?? ''),
+      (t as any).progress ?? '',
+      fmtTs((t as any).createdAt),
+      fmtTs((t as any).updatedAt),
+    ].map(esc).join(',');
+  });
+
+  return [headers.join(','), ...rows].join('\n');
+}
+
+// 置き換え版：toJson（第3引数 dir を追加）
+private toJson(tasks: Task[], nameMap: Map<string,string>, dir: Map<string,string>): string {
+  const mapped = tasks.map(t => ({
+    id: t.id,
+    title: t.title,
+    status: t.status,
+    priority: t.priority ?? null,
+    dueDate: t.dueDate ?? null,
+    assignees: Array.isArray(t.assignees) ? t.assignees.map(u => dir.get(u) ?? u) : [],
+    project: t.projectId ? (nameMap.get(`project:${t.projectId}`) ?? t.projectId) : null,
+    problem: (t.projectId && t.problemId) ? (nameMap.get(`problem:${t.projectId}:${t.problemId}`) ?? t.problemId) : null,
+    issue: (t.projectId && t.problemId && t.issueId) ? (nameMap.get(`issue:${t.projectId}:${t.problemId}:${t.issueId}`) ?? t.issueId) : null,
+    tags: t.tags ?? [],
+    progress: (t as any).progress ?? null,
+    createdAt: (t as any).createdAt?.toDate?.() ?? null,
+    updatedAt: (t as any).updatedAt?.toDate?.() ?? null,
+    // IDも残すなら:
+    projectId: t.projectId ?? null,
+    problemId: t.problemId ?? null,
+    issueId: t.issueId ?? null,
+  }));
+  return JSON.stringify(mapped, null, 2);
+}
   
   
   private download(filename: string, content: string, mime = 'text/plain') {
@@ -315,18 +312,19 @@ export class SchedulePage {
   exportCurrent(kind: 'csv'|'json') {
     this.vm$.pipe(take(1)).subscribe(async vm => {
       const data = this.flattenVm(vm);
+  
       const nameMap = await this.resolveNames(data);
+      const assigneeDir = await this.resolveAssigneeDirectory(data);
   
       if (kind === 'csv') {
-        const csv = this.toCsv(data, nameMap);
+        const csv = this.toCsv(data, nameMap, assigneeDir);
         this.download('schedule-tasks.csv', csv, 'text/csv');
       } else {
-        const json = this.toJson(data, nameMap);
+        const json = this.toJson(data, nameMap, assigneeDir);
         this.download('schedule-tasks.json', json, 'application/json');
       }
     });
   }
-
 
   private async resolveNames(tasks: Task[]): Promise<Map<string, string>> {
     const nameMap = new Map<string,string>();
@@ -367,6 +365,24 @@ export class SchedulePage {
   
     return nameMap;
   }
+
+  /** 各プロジェクトの members を読み、uid -> 表示名(なければemail) の辞書を作る */
+private async resolveAssigneeDirectory(tasks: Task[]): Promise<Map<string,string>> {
+  const byUid = new Map<string,string>();
+  const pids = Array.from(new Set(tasks.map(t => t.projectId).filter(Boolean))) as string[];
+
+  for (const pid of pids) {
+    const col = collection(this.fs as any, `projects/${pid}/members`);
+    const snap = await getDocs(col);
+    snap.forEach(docSnap => {
+      const d: any = docSnap.data();
+      const label = d?.displayName || d?.email || docSnap.id; // 表示名 > email > UID
+      byUid.set(docSnap.id, label);
+    });
+  }
+  return byUid;
+}
+
   
 }
 

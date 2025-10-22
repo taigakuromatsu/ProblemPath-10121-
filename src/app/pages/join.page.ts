@@ -95,7 +95,9 @@ export class JoinPage {
           role: this.invite!.role,
           joinedAt: serverTimestamp(),
           inviteId: this.token,
-          invitedBy: (u.email ?? 'unknown') // 文字列ならOK（ルールは値内容を強制していない）
+          invitedBy: (u.email ?? 'unknown'),  // 文字列ならOK（ルールは値内容を強制していない）
+          displayName: u.displayName ?? 'User',
+          email: u.email ?? null, 
         },
         { merge: true } // 既に doc が存在しても update 許可により通る
       );

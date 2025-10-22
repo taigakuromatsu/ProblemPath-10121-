@@ -79,9 +79,11 @@ async signInWithGoogle(forceChoose = false): Promise<void> {
 
     // members/{uid}
     await setDoc(doc(this.fs as any, `projects/${projectId}/members/${uid}`), {
-      role: 'admin',
-      joinedAt: serverTimestamp(),
-    });
+        role: 'admin',
+        joinedAt: serverTimestamp(),
+        displayName: displayName,
+        email: this.auth.currentUser?.email ?? null,
+      }, { merge: true });
 
     // users/{uid}/memberships/{projectId}
     await setDoc(doc(this.fs as any, `users/${uid}/memberships/${projectId}`), {
