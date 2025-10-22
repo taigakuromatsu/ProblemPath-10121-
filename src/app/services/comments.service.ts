@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Firestore } from '@angular/fire/firestore';
+import { getCountFromServer } from 'firebase/firestore';
 import {
   collection as nativeCollection,
   addDoc as nativeAddDoc,
@@ -69,4 +70,12 @@ export class CommentsService {
     const ref = nativeDoc(this.fs as any, `${this.colPath(t)}/${id}`);
     return nativeDeleteDoc(ref);
   }
+
+  async count(t: CommentTarget): Promise<number> {
+    const colRef = nativeCollection(this.fs as any, this.colPath(t));
+    const q = nativeQuery(colRef); // フィルタ不要、サブコレ全件の件数
+    const snap = await getCountFromServer(q as any);
+    return snap.data().count || 0;
+  }
+  
 }

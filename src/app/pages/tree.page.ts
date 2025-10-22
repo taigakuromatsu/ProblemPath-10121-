@@ -135,8 +135,10 @@ function dlog(...args: any[]) {
               <span style="font-weight:600">{{ node.name }}</span>
               <span style="flex:1 1 auto"></span>
 
-              <!-- 💬 コメント -->
-              <button mat-button type="button" (click)="openComments(node)">💬 Comments</button>
+              <!-- 💬 コメント（件数バッジ付き） -->
+              <button mat-button type="button" (click)="openComments(node)">
+                💬 Comments ({{ commentCounts[node.id] ?? 0 }})
+              </button>
 
               <button mat-button type="button" (click)="renameProblemNode(node)" *ngIf="isEditor$ | async">Rename</button>
               <button mat-button type="button" color="warn" (click)="removeProblemNode(node)" *ngIf="isEditor$ | async">Delete</button>
@@ -153,8 +155,10 @@ function dlog(...args: any[]) {
               <span>{{ node.name }}</span>
               <span style="flex:1 1 auto"></span>
 
-              <!-- 💬 コメント -->
-              <button mat-button type="button" (click)="openComments(node)">💬 Comments</button>
+              <!-- 💬 コメント（件数バッジ付き） -->
+              <button mat-button type="button" (click)="openComments(node)">
+                💬 Comments ({{ commentCounts[node.id] ?? 0 }})
+              </button>
 
               <button mat-button type="button" (click)="renameIssueNode(node)" *ngIf="isEditor$ | async">Rename</button>
               <button mat-button type="button" color="warn" (click)="removeIssueNode(node)" *ngIf="isEditor$ | async">Delete</button>
@@ -181,8 +185,10 @@ function dlog(...args: any[]) {
 
               <span style="flex:1 1 auto"></span>
 
-              <!-- 💬 コメント -->
-              <button mat-button type="button" (click)="openComments(node)">💬 Comments</button>
+              <!-- 💬 コメント（件数バッジ付き） -->
+              <button mat-button type="button" (click)="openComments(node)">
+                💬 Comments ({{ commentCounts[node.id] ?? 0 }})
+              </button>
 
               <button mat-button type="button" (click)="renameTaskNode(node)" *ngIf="isEditor$ | async">Rename</button>
               <button mat-button type="button" color="warn" (click)="removeTaskNode(node)" *ngIf="isEditor$ | async">Delete</button>
@@ -289,6 +295,9 @@ export class TreePage {
   newBody = '';
   editingId: string | null = null;
 
+  // コメント件数バッジ（node.id -> count）
+  commentCounts: Partial<Record<string, number>> = {};
+
   data: TreeNode[] = [];
   tree = new NestedTreeControl<TreeNode>(n => n.children ?? []);
   private subForTree?: import('rxjs').Subscription;
@@ -355,7 +364,7 @@ export class TreePage {
 
   private startProblemsSubscription() {
     this.isLoadingProblems = true;
-       this.loadError = null;
+    this.loadError = null;
 
     this.subForTree?.unsubscribe();
     this.subForTree = combineLatest([this.currentProject.projectId$, this.auth.loggedIn$]).pipe(
@@ -365,7 +374,7 @@ export class TreePage {
         return (isIn && safePid) ? this.problems.list(safePid) : of([]);
       })
     ).subscribe({
-      next: rows => {
+      next: async rows => {
         this.data = rows.map(r => ({
           id: r.id!,
           name: r.title,
@@ -376,6 +385,11 @@ export class TreePage {
 
         this.tree.dataNodes = [...this.data];
         this.dataSource.data = [...this.data];
+
+        // 件数をProblem単位で先にロード
+        try {
+          await Promise.all(this.data.map(n => this.loadCountFor(n)));
+        } catch {}
 
         // Issue購読を貼り直し
         this.issueSubs.forEach(s => s.unsubscribe());
@@ -414,7 +428,7 @@ export class TreePage {
         const safePid = (pid && pid !== 'default') ? pid : null;
         return (isIn && safePid) ? this.issues.listByProblem(safePid, pNode.id) : of([]);
       })
-    ).subscribe(issues => {
+    ).subscribe(async issues => {
       const kids: TreeNode[] = issues.map(i => ({
         id: i.id!,
         name: i.title,
@@ -446,6 +460,14 @@ export class TreePage {
       this.tree.dataNodes = [...this.data];
       this.dataSource.data = [...this.data];
 
+      // 件数ロード：親Problem自身＋子Issue
+      try {
+        await Promise.all([
+          this.loadCountFor(pNode),
+          ...kids.map(k => this.loadCountFor(k))
+        ]);
+      } catch {}
+
       this.recomputeProblemStatus(pNode.id);
 
       // 各 Issue に Task 購読
@@ -465,7 +487,7 @@ export class TreePage {
         const safePid = (pid && pid !== 'default') ? pid : null;
         return (isIn && safePid) ? this.tasks.listByIssue(safePid, problemId, issueNode.id) : of([]);
       })
-    ).subscribe(tasks => {
+    ).subscribe(async tasks => {
       const kids: TreeNode[] = tasks.map(t => ({
         id: t.id!,
         name: t.title,
@@ -494,6 +516,14 @@ export class TreePage {
 
           this.tree.dataNodes = [...this.data];
           this.dataSource.data = [...this.data];
+
+          // 件数ロード：当該Issue＋子Task
+          try {
+            await Promise.all([
+              this.loadCountFor(issueNode),
+              ...kids.map(k => this.loadCountFor(k))
+            ]);
+          } catch {}
 
           this.recomputeProblemStatus(problemId);
         }
@@ -662,6 +692,9 @@ export class TreePage {
     const name = await firstValueFrom(this.auth.displayName$);
     await this.comments.create(t, this.newBody.trim(), uid!, name || undefined);
     this.newBody = '';
+
+    // バッジ即時反映
+    this.bumpCount(this.selectedNode, +1);
   }
 
   async saveEdit(){
@@ -681,5 +714,25 @@ export class TreePage {
     const node = this.selectedNode; if (!node) return;
     const t = await this.toTarget(node); if (!t) return;
     await this.comments.delete(t, id);
+
+    // バッジ即時反映
+    this.bumpCount(node, -1);
+  }
+
+  // ===== コメント件数ロード／即時反映 =====
+  private async loadCountFor(node: TreeNode) {
+    const t = await this.toTarget(node);
+    if (!t) return;
+    try {
+      const n = await this.comments.count(t);
+      this.commentCounts[node.id] = n;
+    } catch {}
+  }
+
+  private bumpCount(node: TreeNode | null, delta: number) {
+    if (!node) return;
+    const prev = this.commentCounts[node.id] ?? 0;
+    this.commentCounts[node.id] = Math.max(0, prev + delta);
   }
 }
+
