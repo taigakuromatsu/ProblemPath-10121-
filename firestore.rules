@@ -15,10 +15,10 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/projects/$(projectId)/members/$(request.auth.uid)).data.role;
     }
     function isAdmin(projectId) {
-      return role(projectId) == 'admin';
+      return isSignedIn() && role(projectId) == 'admin';
     }
     function isEditor(projectId) {
-      return role(projectId) in ['admin', 'member'];
+      return isSignedIn() && (role(projectId) in ['admin','member']);
     }
     function isValidRole(newRole) {
       return newRole in ['admin', 'member', 'viewer'];
@@ -31,7 +31,6 @@ service cloud.firestore {
       allow read: if isMember(projectId);
 
       // 【ブートストラップ例外】新規作成（meta だけ）を「作成者=自分」のとき許可
-      // → 初回ログインユーザーが自分のプロジェクトを作成できる
       allow create: if isSignedIn()
         && request.resource.data.keys().hasOnly(['meta'])
         && request.resource.data.meta.keys().hasOnly(['name','createdBy','createdAt'])
@@ -51,37 +50,47 @@ service cloud.firestore {
           && request.resource.data.keys().hasOnly(['role','joinedAt','displayName','email'])
           && request.resource.data.role == 'admin';
 
-        // 以降のメンバー管理は admin のみ
-        allow update, delete: if isAdmin(projectId)
-          && request.resource.data.keys().hasOnly(['role','joinedAt','displayName','email'])
-          && (!('role' in request.resource.data) || isValidRole(request.resource.data.role));
-
         // ★ 招待リンク経由の参加を許可（本人のみ / member or viewer）
-        // クライアントは create 時に { role, joinedAt, inviteId, invitedBy } を書く。
-        // ルールは projects/{pid}/invites/{inviteId} の email と本人の email を照合。
+        // クライアントは create 時に { role, joinedAt, inviteId, invitedBy, displayName, email } を書く
         allow create, update: if isSignedIn()
-        && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['role','joinedAt','inviteId','invitedBy','displayName','email'])
-        && (request.resource.data.role in ['member','viewer'])
-        && request.auth.token.email != null
-        && exists(/databases/$(database)/documents/projects/$(projectId)/invites/$(request.resource.data.inviteId))
-        && get(/databases/$(database)/documents/projects/$(projectId)/invites/$(request.resource.data.inviteId)).data.email
-           == request.auth.token.email;
-    }
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['role','joinedAt','inviteId','invitedBy','displayName','email'])
+          && (request.resource.data.role in ['member','viewer'])
+          && request.auth.token.email != null
+          && exists(/databases/$(database)/documents/projects/$(projectId)/invites/$(request.resource.data.inviteId))
+          && get(/databases/$(database)/documents/projects/$(projectId)/invites/$(request.resource.data.inviteId)).data.email
+             == request.auth.token.email;
 
-      // invites （トークン=docId を前提に “知っている人だけ読める” 方式）
+        // 以降のメンバー管理は admin（更新フィールド制約付き）
+        allow update: if isAdmin(projectId)
+          && request.resource.data.keys().hasOnly(['role','joinedAt'])
+          && isValidRole(request.resource.data.role);
+
+        // 削除：admin または「本人が自分の membership を削除（退出）」可
+        allow delete: if (isSignedIn() && request.auth.uid == uid && resource.data.role in ['member','viewer'])
+                      || isAdmin(projectId);
+      }
+
+    // invites （トークン=docId を前提に “知っている人だけ読める” 方式）
       match /invites/{token} {
-        allow get: if true; // ランダムID前提で公開GET可（推測困難）
-        allow list: if false;
+        // ランダムID前提で公開GET可（推測困難）※get は可、list は通常不可
+        allow get: if true;
+
+        // ★ Admin に限り list を許可（プロジェクト削除時の一括削除で必要）
+        allow list: if isAdmin(projectId);
+
+        // 生成は Admin のみ
         allow create: if isAdmin(projectId);
+
         // 招待された本人が「未使用の招待」を使用済みにできる
         allow update: if isSignedIn()
-        && request.auth.token.email != null
-        && resource.data.email == request.auth.token.email
-        && resource.data.redeemedBy == null
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['redeemedBy','redeemedAt'])
-        && request.resource.data.redeemedBy == request.auth.uid;
-        // delete は従来どおり admin のみ
+          && request.auth.token.email != null
+          && resource.data.email == request.auth.token.email
+          && resource.data.redeemedBy == null
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly(['redeemedBy','redeemedAt'])
+          && request.resource.data.redeemedBy == request.auth.uid;
+
+        // 削除は Admin のみ
         allow delete: if isAdmin(projectId);
       }
 
@@ -107,19 +116,27 @@ service cloud.firestore {
 
     // ---- users コレクション（本人専用）----
     match /users/{uid} {
+      // 本人のみ
       allow read, write: if isSignedIn() && request.auth.uid == uid;
 
       match /memberships/{projectId} {
-        allow read, write: if isSignedIn() && request.auth.uid == uid;
+        // 既定は本人のみ
+        allow read:   if isSignedIn() && request.auth.uid == uid;
+        allow create: if isSignedIn() && request.auth.uid == uid;
+        allow update: if isSignedIn() && request.auth.uid == uid;
+        // 削除のみ、admin による掃除を許可（プロジェクトが存在する間）
+        allow delete: if isSignedIn() && (request.auth.uid == uid || isAdmin(projectId));
       }
     }
+
     // === collectionGroup('tasks') 用 ===
     // Schedule 画面は tasks のコレクショングループを読むので、これが無いと PERMISSION DENIED になります。
     match /{path=**}/tasks/{taskId} {
-    // 各 Task に projectId フィールドが入っている前提（あなたの実装では create 時に入れている）
-    allow read: if isMember(resource.data.projectId);
-    // ※ 読み取りだけで十分。書き込みも通すなら↓を追加（必要なければ入れない方が安全）
-    // allow create, update, delete: if isEditor(request.resource.data.projectId);
+      // 各 Task に projectId フィールドが入っている前提
+      allow read: if isMember(resource.data.projectId);
+      // 書き込みも通すなら以下を有効化（不要なら安全のため無効のまま）
+      // allow create, update, delete: if isEditor(request.resource.data.projectId);
     }
   }
 }
+
