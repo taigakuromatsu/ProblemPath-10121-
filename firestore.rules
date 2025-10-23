@@ -3,6 +3,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ---- stats（Functions が書く読み取り専用集計）----
+     match /projects/{pid}/stats/{doc=**} {
+     allow read: if isMember(pid);   // 既存の isMember ヘルパーを再利用
+     allow write: if false;          // 書込みは Admin SDK（Functions）のみ
+    }
+
     // ---- 共通ユーティリティ ----
     function isSignedIn() {
       return request.auth != null;

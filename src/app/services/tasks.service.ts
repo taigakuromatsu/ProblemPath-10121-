@@ -1,7 +1,9 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject, runInInjectionContext, Injector } from '@angular/core';
 import { Firestore } from '@angular/fire/firestore';
 import { Task, Status } from '../models/types';
-import { Observable, combineLatest, map } from 'rxjs';
+import { Observable, combineLatest, map, switchMap, of, from } from 'rxjs';
+import { doc, docData } from '@angular/fire/firestore';
+import { Timestamp } from 'firebase/firestore';
 
 // 読み取りは rxfire、CRUD は Firebase SDK (native)
 import {
@@ -29,7 +31,7 @@ const OPEN_STATUSES: Status[] = ['not_started','in_progress','review_wait','fixi
 @Injectable({ providedIn: 'root' })
 export class TasksService {
 
-  constructor(private fs: Firestore) {}
+  constructor(private fs: Firestore, private injector: Injector) {}
 
   private base(projectId: string) { return `projects/${projectId}/problems`; }
 
@@ -367,6 +369,34 @@ listMineNoDue(
   );
 }
 
+
+  // --- 集計読み出し（projects/{pid}/stats/summary）---
+  statsSummary$(projectId: string): Observable<{
+    openCount: number;
+    inProgressCount: number;
+    doneCount: number;
+    overdueCount: number;
+    dueTodayCount: number;
+    dueThisWeekCount: number;
+    noDueCount: number;
+    updatedAt: Timestamp;
+  } | null> {
+    return runInInjectionContext(this.injector, () => {
+      const fs = inject(Firestore);
+      const ref = doc(fs, `projects/${projectId}/stats/summary`);
+      return docData(ref) as Observable<{
+        openCount: number;
+        inProgressCount: number;
+        doneCount: number;
+        overdueCount: number;
+        dueTodayCount: number;
+        dueThisWeekCount: number;
+        noDueCount: number;
+        updatedAt: Timestamp;
+      } | null>;
+    });
+  }
+  
 }
 
 

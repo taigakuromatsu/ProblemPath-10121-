@@ -20,7 +20,7 @@ import { NgChartsModule } from 'ng2-charts';
 import { ChartConfiguration } from 'chart.js';
 
 import { Observable, combineLatest, of, firstValueFrom } from 'rxjs';
-import { map, switchMap, take, tap } from 'rxjs/operators';
+import { map, switchMap, take, tap, catchError } from 'rxjs/operators';
 import { MembersService } from '../services/members.service';
 import { CommentsService, CommentDoc, CommentTarget } from '../services/comments.service';
 
@@ -579,7 +579,7 @@ export class TreePage {
     } as ChartConfiguration<'bar'>['data'];
   }
 
-  // --- 日付ユーティリティ ---
+  // --- 日付ユーティリティ（今は未使用だが残しておく） ---
   private ymd(d: Date): string {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -592,46 +592,49 @@ export class TreePage {
     return d;
   }
 
-  // --- ダッシュボード（pidに追従）
+  // --- ダッシュボード（pidに追従）: stats/summary を読むだけに変更 ---
   private buildDash$(): Observable<{
     overdue: number; today: number; thisWeek: number; nodue: number;
     openTotal: number; doneTotal: number; progressPct: number;
   }> {
-    const today = new Date(); today.setHours(0,0,0,0);
-    const tomorrow = this.addDays(today, 1);
-
-    // 今週（月曜始まり）
-    const dow = today.getDay(); // Sun=0
-    const diffToMon = (dow === 0 ? -6 : 1 - dow);
-    const startOfWeek = this.addDays(today, diffToMon);
-    const endOfWeek   = this.addDays(startOfWeek, 6);
-
     return this.currentProject.projectId$.pipe(
       switchMap(pid => {
-        if (!pid) return of({
-          overdue: 0, today: 0, thisWeek: 0, nodue: 0,
-          openTotal: 0, doneTotal: 0, progressPct: 0
-        });
-
-        const overdue$  = this.tasks.listAllOverdue(pid, this.ymd(today), true);
-        const today$    = this.tasks.listAllByDueRange(pid, this.ymd(today), this.ymd(today), true);
-        const thisWeek$ = this.tasks.listAllByDueRange(pid, this.ymd(tomorrow), this.ymd(endOfWeek), true);
-        const nodue$    = this.tasks.listAllNoDue(pid, true);
-        const all$      = this.tasks.listAllByDueRange(pid, '0000-01-01', '9999-12-31', false);
-
-        return combineLatest([overdue$, today$, thisWeek$, nodue$, all$]).pipe(
-          map(([ov, td, wk, nd, all]) => {
-            const overdue = ov?.length ?? 0;
-            const today   = td?.length ?? 0;
-            const thisWeek= wk?.length ?? 0;
-            const nodue   = nd?.length ?? 0;
-
-            const total     = all?.length ?? 0;
-            const doneTotal = (all ?? []).filter(t => t.status === 'done').length;
-            const openTotal = total - doneTotal;
+        if (!pid) {
+          return of({
+            overdue: 0, today: 0, thisWeek: 0, nodue: 0,
+            openTotal: 0, doneTotal: 0, progressPct: 0
+          });
+        }
+        return this.tasks.statsSummary$(pid).pipe(
+          map(s => {
+            // ドキュメントが存在しない場合はデフォルト値を返す
+            if (!s) {
+              return {
+                overdue: 0, today: 0, thisWeek: 0, nodue: 0,
+                openTotal: 0, doneTotal: 0, progressPct: 0
+              };
+            }
+            const openTotal = (s.openCount ?? 0) + (s.inProgressCount ?? 0);
+            const doneTotal = s.doneCount ?? 0;
+            const total = openTotal + doneTotal;
             const progressPct = total > 0 ? Math.round((doneTotal / total) * 100) : 0;
-
-            return { overdue, today, thisWeek, nodue, openTotal, doneTotal, progressPct };
+            return {
+              overdue: s.overdueCount ?? 0,
+              today: s.dueTodayCount ?? 0,
+              thisWeek: s.dueThisWeekCount ?? 0,
+              nodue: s.noDueCount ?? 0,
+              openTotal,
+              doneTotal,
+              progressPct
+            };
+          }),
+          catchError(error => {
+            console.warn('Failed to load stats summary:', error);
+            // エラーの場合はデフォルト値を返す
+            return of({
+              overdue: 0, today: 0, thisWeek: 0, nodue: 0,
+              openTotal: 0, doneTotal: 0, progressPct: 0
+            });
           })
         );
       })
@@ -735,4 +738,3 @@ export class TreePage {
     this.commentCounts[node.id] = Math.max(0, prev + delta);
   }
 }
-

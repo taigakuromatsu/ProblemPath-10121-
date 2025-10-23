@@ -16,5 +16,10 @@
     "rewrites": [
       { "source": "**", "destination": "/index.html" }
     ]
+  },
+  "functions": {
+    "source": "functions",
+    "region": "asia-northeast1"
   }
 }
+  
