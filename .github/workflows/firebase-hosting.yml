@@ -1,10 +1,8 @@
-name: Deploy to Firebase Hosting
+# Deploy to Firebase Hosting (manual only)
+name: Deploy to Firebase Hosting (manual)
 
 on:
-  push:
-    branches: [ "main" ]      # 本番デプロイするブランチ
-  pull_request:
-    branches: [ "main" ]      # PR時はプレビューURL
+  workflow_dispatch:
 
 jobs:
   build_and_deploy:
@@ -12,8 +10,6 @@ jobs:
 
     permissions:
       contents: read
-      id-token: write
-      pull-requests: write
 
     steps:
       - name: Checkout
@@ -31,19 +27,7 @@ jobs:
       - name: Build (Angular)
         run: npm run build --if-present
 
-      # PR → プレビュー（preview channel）
-      - name: Deploy Preview (on PR)
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: FirebaseExtended/action-hosting-deploy@v0
-        with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KENSYU10121 }}
-          projectId: kensyu10121
-          expires: 7d
-
-      # main へ push → 本番（live）
-      - name: Deploy Production (on main)
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      - name: Deploy Production (manual)
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
