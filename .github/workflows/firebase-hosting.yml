@@ -2,9 +2,7 @@ name: Deploy to Firebase Hosting
 
 on:
   push:
-    branches: [ "main" ]      # 本番デプロイするブランチ
-  pull_request:
-    branches: [ "main" ]      # PR時はプレビューURL
+    workflow_dispatch:    # PR時はプレビューURL
 
 jobs:
   build_and_deploy:
