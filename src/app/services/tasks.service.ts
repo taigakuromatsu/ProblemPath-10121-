@@ -86,7 +86,9 @@ export class TasksService {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       recurrenceRule: t.recurrenceRule ?? null,
-      problemId, issueId, projectId: pid,
+      problemId,
+      issueId,
+      projectId: pid,
     });
   }
 
