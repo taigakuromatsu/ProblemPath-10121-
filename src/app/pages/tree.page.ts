@@ -653,12 +653,16 @@ export class TreePage {
   }  
 
   // ---- ヘルパー ----
-  private withPid(run: (pid: string) => void) {
-    this.currentProject.projectId$.pipe(take(1)).subscribe(pid => {
-      if (!pid) { alert('プロジェクト未選択'); return; }
-      run(pid);
-    });
-  }
+// 共通パターン（TreePage / HomePage 両方）
+private withPid(run: (pid: string) => void) {
+  this.currentProject.projectId$.pipe(take(1)).subscribe(pid => {
+    if (!pid || pid === 'default') {
+      alert('プロジェクト未選択');
+      return;
+    }
+    run(pid);
+  });
+}
 
   // コメントターゲットを算出
   private async toTarget(node: TreeNode): Promise<CommentTarget | null> {

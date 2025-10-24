@@ -1,3 +1,4 @@
+
 // firestore.rules
 rules_version = '2';
 service cloud.firestore {
@@ -143,8 +144,12 @@ service cloud.firestore {
             return arr is list && arr.size() <= 200;
           }
 
-          allow create, update, delete: if isEditor(projectId)
+          // ★ create/update のみ request.resource を検証
+          allow create, update: if isEditor(projectId)
             && (!('links' in request.resource.data) || validIssueLinks(request.resource.data.links));
+
+          // ★ delete は request.resource が null なので分離
+          allow delete: if isEditor(projectId);
 
           // Issue comments
           match /comments/{commentId} {
@@ -202,5 +207,4 @@ service cloud.firestore {
     }
   }
 }
-
 

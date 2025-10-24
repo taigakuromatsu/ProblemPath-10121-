@@ -386,13 +386,16 @@ export class BoardPage {
     this.taskCountSubs.clear();
   }
 
-  // ---- ヘルパー：一度だけ pid を取り出して実行 ----
-  private withPid(run: (pid: string) => void) {
-    this.currentProject.projectId$.pipe(take(1)).subscribe(pid => {
-      if (!pid) { alert('プロジェクト未選択'); return; }
-      run(pid);
-    });
-  }
+// 共通パターン（TreePage / HomePage 両方）
+private withPid(run: (pid: string) => void) {
+  this.currentProject.projectId$.pipe(take(1)).subscribe(pid => {
+    if (!pid || pid === 'default') {
+      alert('プロジェクト未選択');
+      return;
+    }
+    run(pid);
+  });
+}
 
   // BoardPage クラス内に追加
 private bucket(s: Task['status'] | undefined): 'not_started'|'in_progress'|'done' {
