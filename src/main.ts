@@ -8,6 +8,9 @@ import { provideFirebaseApp, initializeApp, getApp } from '@angular/fire/app';
 import { provideFirestore, getFirestore } from '@angular/fire/firestore';
 import { provideAuth, getAuth } from '@angular/fire/auth';
 import { provideStorage, getStorage } from '@angular/fire/storage';
+import { provideServiceWorker } from '@angular/service-worker';
+import { APP_INITIALIZER } from '@angular/core';
+import { SwUpdate } from '@angular/service-worker';
 
 import {
   provideAppCheck,
@@ -32,6 +35,30 @@ bootstrapApplication(App, {
   ...appConfig,
   providers: [
     ...(appConfig.providers ?? []),
+
+        /**
+     * Service Worker を production のときだけ有効化。
+     * ngsw-worker.js は angular.json の "serviceWorker": true とセットで配信されます。
+     */
+    provideServiceWorker('ngsw-worker.js', { enabled: environment.production }),
+    /**
+     * 新バージョン検知時のリロード案内（簡易版）
+     * - PWA キャッシュで古いUIが残る問題のユーザー体験を改善
+     */
+        {
+            provide: APP_INITIALIZER,
+            multi: true,
+            deps: [SwUpdate],
+            useFactory: (sw: SwUpdate) => () => {
+              // Service Workerが無効なら何もしない
+              if (!sw.isEnabled) return;
+              sw.versionUpdates.subscribe(() => {
+                if (confirm('新しいバージョンがあります。ページを更新しますか？')) {
+                  location.reload();
+                }
+              });
+            },
+          },
 
     // Firebase App
     provideFirebaseApp(() => initializeApp(environment.firebase)),

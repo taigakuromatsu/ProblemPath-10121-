@@ -12,7 +12,17 @@
   },
   "hosting": {
     "site": "kensyu10121",
-    "public": "dist/browser",
+    "public": "dist/problem-path/browser",
+    "headers": [
+      { "source": "/index.html",
+        "headers": [ { "key": "Cache-Control", "value": "no-cache" } ] },
+      { "source": "/ngsw-worker.js",
+        "headers": [ { "key": "Cache-Control", "value": "no-cache" } ] },
+      { "source": "/safety-worker.js",
+        "headers": [ { "key": "Cache-Control", "value": "no-cache" } ] },
+      { "source": "/worker-basic.min.js",
+        "headers": [ { "key": "Cache-Control", "value": "no-cache" } ] }
+      ],
     "ignore": [
       "firebase.json",
       "**/.*",
