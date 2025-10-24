@@ -5,6 +5,15 @@ import { Issue, IssueLink, LinkType } from '../models/types';
 
 const DEBUG_ISSUES = false; // ← 必要な時だけ true に
 
+
+function commitIfAny(batch: ReturnType<typeof nativeWriteBatch>) {
+  // Firestore の batched writes は 0 件 commit を許容しないケースがあるため
+  // try/catch で包むより「何も積まれてなければ return」しておく。
+  // @ts-ignore（内部APIに依存しないため単純に呼ぶだけ）
+  if ((batch as any)._mutations?.length === 0) return Promise.resolve();
+  return batch.commit();
+}
+
 // Firebase SDK (native) ＋ rxfire
 import {
   collection as nativeCollection,
@@ -164,28 +173,30 @@ export class IssuesService {
     fromIssueId: string,
     toIssueId: string,
     type: LinkType,
-    _createdBy: string // 受け取るが MVP では保存しない
+    _createdBy: string
   ): Promise<void> {
     if (fromIssueId === toIssueId) return;
-
-    const batch = nativeWriteBatch(this.fs as any);
+  
     const fromRef = nativeDoc(this.fs as any, this.issueDocPath(projectId, problemId, fromIssueId));
     const toRef   = nativeDoc(this.fs as any, this.issueDocPath(projectId, problemId, toIssueId));
+  
+    // どちらかが無ければ対称性を保つため何もしない（レース対策）
+    const [fromSnap, toSnap] = await Promise.all([nativeGetDoc(fromRef), nativeGetDoc(toRef)]);
+    if (!fromSnap.exists() || !toSnap.exists()) return;
+  
+    const batch = nativeWriteBatch(this.fs as any);
     const now = serverTimestamp();
-
+  
     const fwd: IssueLink = { issueId: toIssueId, type };
     const rev: IssueLink = { issueId: fromIssueId, type: IssuesService.INVERSE[type] };
-
+  
     batch.update(fromRef, { links: arrayUnion(fwd), updatedAt: now } as any);
     batch.update(toRef,   { links: arrayUnion(rev), updatedAt: now } as any);
-
-    await batch.commit();
+  
+    await commitIfAny(batch);
   }
-
-  /**
-   * 相互リンクを削除（同一 Problem 内）
-   * 最小構成 {issueId,type} なので arrayRemove で確実に消せる。
-   */
+  
+  /** 相互リンクを削除（同一 Problem 内・片側だけでも必ず外す） */
   async removeLink(
     projectId: string,
     problemId: string,
@@ -193,18 +204,24 @@ export class IssuesService {
     toIssueId: string,
     type: LinkType
   ): Promise<void> {
-    const batch = nativeWriteBatch(this.fs as any);
     const fromRef = nativeDoc(this.fs as any, this.issueDocPath(projectId, problemId, fromIssueId));
     const toRef   = nativeDoc(this.fs as any, this.issueDocPath(projectId, problemId, toIssueId));
+  
+    const [fromSnap, toSnap] = await Promise.all([nativeGetDoc(fromRef), nativeGetDoc(toRef)]);
+  
+    // どちらも無ければ何もしない
+    if (!fromSnap.exists() && !toSnap.exists()) return;
+  
+    const batch = nativeWriteBatch(this.fs as any);
     const now = serverTimestamp();
-
+  
     const fwd: IssueLink = { issueId: toIssueId, type };
     const rev: IssueLink = { issueId: fromIssueId, type: IssuesService.INVERSE[type] };
-
-    batch.update(fromRef, { links: arrayRemove(fwd), updatedAt: now } as any);
-    batch.update(toRef,   { links: arrayRemove(rev), updatedAt: now } as any);
-
-    await batch.commit();
+  
+    if (fromSnap.exists()) batch.update(fromRef, { links: arrayRemove(fwd), updatedAt: now } as any);
+    if (toSnap.exists())   batch.update(toRef,   { links: arrayRemove(rev), updatedAt: now } as any);
+  
+    await commitIfAny(batch);
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -232,6 +249,7 @@ export class IssuesService {
       await batch.commit();
     }
   }
+
 }
 
 

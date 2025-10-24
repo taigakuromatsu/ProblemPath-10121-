@@ -276,12 +276,12 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
               <!-- Link list -->
               <div style="margin:6px 0 2px 0; font-size:13px;">
                 <span style="font-weight:600;">Links：</span>
-                <ng-container *ngIf="(i.links?.length ?? 0) > 0; else noLinks">
+                <ng-container *ngIf="(visibleLinks(i.links, issues).length) > 0; else noLinks">
                   <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:4px;">
-                    <ng-container *ngFor="let lk of normalizeLinks(i.links)">
+                    <ng-container *ngFor="let lk of visibleLinks(i.links, issues)">
                       <span style="border:1px solid #e5e7eb; border-radius:999px; padding:2px 8px; background:#fafafa;">
                         <span style="opacity:.85;">[{{ linkLabel(lk.type) }}]</span>
-                        <span> {{ titleByIssueId(issues, lk.issueId) || ('#' + lk.issueId) }} </span>
+                        <span> {{ titleByIssueId(issues, lk.issueId) }} </span>
                         <button *ngIf="members.isEditor$ | async"
                                 mat-icon-button
                                 aria-label="Remove link"
@@ -295,6 +295,7 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
                 </ng-container>
                 <ng-template #noLinks><span style="opacity:.7;">（リンクなし）</span></ng-template>
               </div>
+
 
               <!-- Link add form (Editor only) -->
               <form *ngIf="members.isEditor$ | async"
@@ -564,14 +565,6 @@ private withPid(run: (pid: string) => void) {
   // === Link 操作 ===
   linkLabel(t: LinkType) { return LINK_TYPE_LABEL[t] || t; }
 
-  normalizeLinks(raw: any): { issueId: string, type: LinkType }[] {
-    // 旧仕様（string[]）は無視／新仕様のみ描画
-    if (!Array.isArray(raw)) return [];
-    return raw
-      .filter(v => v && typeof v === 'object' && v.issueId && v.type)
-      .map(v => ({ issueId: String(v.issueId), type: v.type as LinkType }));
-  }
-
   titleByIssueId(all: Issue[], id?: string | null): string | null {
     if (!id) return null;
     const hit = all?.find(x => x.id === id);
@@ -827,6 +820,17 @@ private withPid(run: (pid: string) => void) {
 
     this.closeEditProblemDialog();
   }
+
+  // クラス内メソッドとして追加
+visibleLinks(raw: any, all: Issue[] | null | undefined): { issueId: string, type: LinkType }[] {
+  if (!Array.isArray(raw) || !Array.isArray(all)) return [];
+  const set = new Set(all.map(i => i.id));
+  return raw
+    .filter(v => v && typeof v === 'object' && v.issueId && v.type)
+    .filter(v => set.has(String(v.issueId)))          // ← 相手が存在するものだけ
+    .map(v => ({ issueId: String(v.issueId), type: v.type as LinkType }));
+}
+
 }
 
 
