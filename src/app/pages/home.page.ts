@@ -1,7 +1,7 @@
 // src/app/pages/home.page.ts
 import { Component, DestroyRef } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { AsyncPipe, NgFor, NgIf, JsonPipe } from '@angular/common';
+import { AsyncPipe, NgFor, NgIf, JsonPipe, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSelectModule } from '@angular/material/select';
@@ -15,19 +15,30 @@ import { IssuesService } from '../services/issues.service';
 import { TasksService } from '../services/tasks.service';
 import { CurrentProjectService } from '../services/current-project.service';
 import { AuthService } from '../services/auth.service';
-import { MembersService } from '../services/members.service'; // ★ 追加
+import { MembersService } from '../services/members.service';
 import { InvitesService, InviteRole } from '../services/invites.service';
 
 import { Problem, Issue, Task } from '../models/types';
-import { Observable, BehaviorSubject, of, combineLatest } from 'rxjs';
-import { switchMap, tap, take } from 'rxjs/operators';
-import { map } from 'rxjs/operators';
+import { Observable, BehaviorSubject, of, combineLatest, firstValueFrom } from 'rxjs';
+import { switchMap, take, map, startWith } from 'rxjs/operators';
+
+// ---- このページ専用の拡張型（ProblemにproblemDefをオプションで持たせる）----
+type ProblemWithDef = Problem & {
+  problemDef?: {
+    phenomenon: string;
+    goal: string;
+    cause?: string;
+    solution?: string;
+    updatedAt?: any;   // Firestore Timestamp を想定
+    updatedBy?: string;
+  };
+};
 
 @Component({
   standalone: true,
   selector: 'pp-home',
   imports: [
-    RouterLink, AsyncPipe, NgFor, NgIf, JsonPipe, FormsModule,
+    RouterLink, AsyncPipe, NgFor, NgIf, JsonPipe, DatePipe, FormsModule,
     MatButtonModule, MatSelectModule, MatIconModule
   ],
   template: `
@@ -45,7 +56,6 @@ import { map } from 'rxjs/operators';
       </ng-template>
     </div>
 
-    <!-- ビューアーモードのバッジ -->
     <div *ngIf="(auth.loggedIn$ | async) && !(members.isEditor$ | async)"
          style="padding:8px 10px; border:1px solid #e5e7eb; border-radius:8px; background:#fafafa; margin:8px 0; font-size:12px;">
       現在のプロジェクトでは <strong>閲覧のみ（Viewer）</strong> です。編集ボタンは非表示になります。
@@ -79,6 +89,68 @@ import { map } from 'rxjs/operators';
           </select>
         </label>
 
+        <!-- 新規 Problem 作成モーダル -->
+        <div *ngIf="newProblemOpen"
+            style="position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,.35); z-index:1000;">
+          <div style="width:min(720px, 92vw); background:#fff; color:#111; border-radius:12px; padding:14px 16px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+              <h3 style="margin:0; font-size:16px;">Problem を作成</h3>
+              <span style="flex:1 1 auto"></span>
+              <button mat-icon-button (click)="closeNewProblemDialog()"><mat-icon>close</mat-icon></button>
+            </div>
+
+            <div style="display:grid; gap:10px;">
+              <div>
+                <label>タイトル（必須）</label>
+                <input [(ngModel)]="newProblem.title" style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;" />
+              </div>
+
+              <div style="display:flex; gap:8px; align-items:center;">
+                <label>テンプレ</label>
+                <select [(ngModel)]="newProblem.template" (ngModelChange)="applyProblemTemplate($event)">
+                  <option value="bug">バグ/不具合</option>
+                  <option value="improve">改善/パフォーマンス</option>
+                </select>
+              </div>
+
+              <div>
+                <label>現象（必須）</label>
+                <textarea rows="3" [(ngModel)]="newProblem.phenomenon"
+                          style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
+                <div style="opacity:.7; font-size:12px; margin-top:4px;">
+                  何が起きている？再現手順・ユーザー影響・発生率 など
+                </div>
+              </div>
+
+              <div>
+                <label>原因（任意）</label>
+                <textarea rows="3" [(ngModel)]="newProblem.cause"
+                          style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
+              </div>
+
+              <div>
+                <label>解決策（任意）</label>
+                <textarea rows="3" [(ngModel)]="newProblem.solution"
+                          style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
+              </div>
+
+              <div>
+                <label>目標（必須）</label>
+                <textarea rows="2" [(ngModel)]="newProblem.goal"
+                          style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
+                <div style="opacity:.7; font-size:12px; margin-top:4px;">
+                  どうなればOK？KPI・条件（例：p50 1.5秒 / エラー率0.1%未満）
+                </div>
+              </div>
+
+              <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:4px;">
+                <button mat-stroked-button (click)="closeNewProblemDialog()">キャンセル</button>
+                <button mat-raised-button color="primary" (click)="createProblemWithDefinition()">作成</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <span style="flex:1 1 auto"></span>
 
         <ng-container *ngIf="members.isEditor$ | async">
@@ -87,12 +159,34 @@ import { map } from 'rxjs/operators';
         </ng-container>
       </div>
 
-      <!-- 選択中 Problem の編集パネル -->
+      <!-- 選択中 Problem の情報（problemDef） -->
       <ng-container *ngIf="selectedProblemId as pid">
+        <div *ngIf="selectedProblemDoc$ | async as p"
+             style="padding:12px; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:12px;">
+          <h3 style="margin:0 0 8px;">Problem 定義</h3>
+          <div style="display:grid; gap:6px; font-size:14px;">
+            <div><span style="font-weight:600;">現象：</span>
+              <span>{{ p.problemDef?.phenomenon || '—' }}</span>
+            </div>
+            <div *ngIf="p.problemDef?.cause"><span style="font-weight:600;">原因：</span>
+              <span>{{ p.problemDef?.cause }}</span>
+            </div>
+            <div *ngIf="p.problemDef?.solution"><span style="font-weight:600;">解決策：</span>
+              <span>{{ p.problemDef?.solution }}</span>
+            </div>
+            <div><span style="font-weight:600;">目標：</span>
+              <span>{{ p.problemDef?.goal || '—' }}</span>
+            </div>
+            <div style="opacity:.65; font-size:12px; margin-top:4px;"
+                *ngIf="getUpdatedAtDate(p) as d">
+              最終更新：{{ d | date:'yyyy/MM/dd HH:mm' }}
+            </div>
+          </div>
+        </div>
+
         <div style="padding:12px; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:16px;">
           <h3 style="margin:0 0 8px;">Issues</h3>
 
-          <!-- Issue 追加（Editor のみ） -->
           <form *ngIf="members.isEditor$ | async"
                 (ngSubmit)="createIssue(pid)"
                 style="display:flex; gap:8px; align-items:center; margin:8px 0;">
@@ -100,7 +194,6 @@ import { map } from 'rxjs/operators';
             <button mat-raised-button color="primary" type="submit">＋ Add Issue</button>
           </form>
 
-          <!-- Issue 一覧 -->
           <ul *ngIf="issues$ | async as issues; else loadingIssues" style="margin:0; padding-left:1rem;">
             <li *ngFor="let i of issues" style="margin-bottom:10px;">
               <div style="display:flex; align-items:center; gap:8px;">
@@ -112,7 +205,6 @@ import { map } from 'rxjs/operators';
                 </ng-container>
               </div>
 
-              <!-- Task 追加（Issueごと・Editor のみ） -->
               <form *ngIf="members.isEditor$ | async"
                     (ngSubmit)="createTask(pid, i.id!)"
                     style="display:flex; gap:6px; margin:6px 0 4px 0;">
@@ -120,7 +212,6 @@ import { map } from 'rxjs/operators';
                 <button mat-stroked-button type="submit">＋ Add Task</button>
               </form>
 
-              <!-- Task 一覧 -->
               <ul *ngIf="tasksMap[i.id!] | async as tasks" style="margin:0; padding-left:1rem;">
                 <li *ngFor="let t of tasks" style="margin:3px 0;">
                   <div style="display:flex; align-items:center; gap:8px;">
@@ -190,7 +281,6 @@ import { map } from 'rxjs/operators';
       <section style="margin-top:16px;">
         <h3>テーマ設定</h3>
 
-        <!-- 2行目：選択UI（はっきりした枠とラベル） -->
         <mat-form-field appearance="outline" style="min-width:240px; width:100%; max-width:360px; margin-top:8px;">
           <mat-label>テーマを選択</mat-label>
           <mat-select [(ngModel)]="themeMode" (selectionChange)="onThemeChange($event.value)">
@@ -215,6 +305,9 @@ export class HomePage {
   private selectedProblem$ = new BehaviorSubject<string | null>(null);
   issues$: Observable<Issue[] | null> = of(null);
 
+  // Problem 定義表示用
+  selectedProblemDoc$!: Observable<ProblemWithDef | null>;
+
   issueTitle = '';
   taskTitle: Record<string, string> = {}; // key = issueId
   tasksMap: Record<string, Observable<Task[]>> = {};
@@ -228,10 +321,9 @@ export class HomePage {
     private destroyRef: DestroyRef,
     public auth: AuthService,
     private currentProject: CurrentProjectService,
-    public members: MembersService, // ★ 追加（template から参照するため public）
+    public members: MembersService,
     private invites: InvitesService
   ) {}
-
 
   themeMode: 'light' | 'dark' | 'system' = 'system';
 
@@ -240,10 +332,10 @@ export class HomePage {
     this.prefs.prefs$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(p => {
-        this.themeMode = (p?.theme ?? 'system') as any;   // ← UIへ反映
-        });
+        this.themeMode = (p?.theme ?? 'system') as any;
+      });
 
-    // サインアウト時の掃除だけ（プロジェクトIDは AuthService.ensureOnboard がセット）
+    // サインアウト時の掃除
     this.auth.loggedIn$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(isIn => {
@@ -260,6 +352,12 @@ export class HomePage {
       switchMap(([isIn, pid]) => (isIn && pid && pid !== 'default') ? this.problems.list(pid) : of([]))
     );
 
+    // 選択中 Problem の Doc（problemDef 表示用）
+    this.selectedProblemDoc$ = combineLatest([
+      this.problems$.pipe(startWith([] as Problem[])),
+      this.selectedProblem$
+    ]).pipe(map(([list, sel]) => (list as ProblemWithDef[]).find(p => p.id === sel) ?? null));
+
     // Issues（選択 Problem × pid）
     this.issues$ = combineLatest([
       this.selectedProblem$,
@@ -271,7 +369,7 @@ export class HomePage {
       )
     );
 
-    // Issue → Task購読キャッシュ（pid 追従、未ログイン/未選択時は掃除）
+    // Issue → Task購読キャッシュ
     this.issues$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(issues => {
@@ -300,17 +398,9 @@ export class HomePage {
 
   onSelectProblem(val: string | null) {
     if (val === this.NEW_OPTION_VALUE) {
-      const t = prompt('New Problem title');
-      if (!t?.trim()) {
-        this.selectedProblemId = null;
-        this.selectedProblem$.next(null);
-        return;
-      }
-      this.withPid(async pid => {
-        const ref = await this.problems.create(pid, { title: t.trim() });
-        this.selectedProblemId = (ref as any)?.id ?? null;
-        this.selectedProblem$.next(this.selectedProblemId);
-      });
+      this.selectedProblemId = null;
+      this.selectedProblem$.next(null);
+      this.openNewProblemDialog();
       return;
     }
     this.selectedProblemId = val;
@@ -394,6 +484,7 @@ export class HomePage {
     await this.auth.signInWithGoogle(true);
   }
 
+  // 招待
   inviteEmail = '';
   inviteRole: InviteRole = 'member';
   inviteUrl: string | null = null;
@@ -415,25 +506,17 @@ export class HomePage {
     if (this.inviteUrl) navigator.clipboard.writeText(this.inviteUrl);
   }
 
-    // 選択されたときに即適用＋永続化
+  // テーマ
   onThemeChange(mode: 'light' | 'dark' | 'system') {
-    // 即時反映
     this.theme.setTheme(mode);
-
-    // 永続化（PrefsService に setter があるならそちらを優先）
-    // 1) PrefsService に update メソッドがある場合（例）
     if ((this.prefs as any).update) {
       (this.prefs as any).update({ theme: mode });
     } else {
-      // 2) 一時的に localStorage に保存（次回起動用のフォールバック）
       localStorage.setItem('pp.theme', mode);
     }
-
-    // UI も更新
     this.themeMode = mode;
   }
 
-  // HomePage クラス内に追加
   get systemPrefersDark(): boolean {
     return typeof window !== 'undefined'
       && !!window.matchMedia
@@ -447,6 +530,89 @@ export class HomePage {
     return this.themeMode === 'dark' ? 'ダーク' : 'ライト';
   }
 
+  // 新規Problemダイアログ用状態
+  newProblemOpen = false;
+  newProblem = {
+    title: '',
+    phenomenon: '',
+    cause: '',
+    solution: '',
+    goal: '',
+    template: 'bug' as 'bug' | 'improve'
+  };
+
+  applyProblemTemplate(kind: 'bug' | 'improve') {
+    this.newProblem.template = kind;
+    if (kind === 'bug') {
+      this.newProblem.phenomenon ||= '（例）保存ボタンを押してもトーストが出ず、再読み込みで初めて反映される';
+      this.newProblem.goal      ||= '（例）保存操作は1秒以内にユーザーへ成功が伝わる（トースト表示／二重送信防止）';
+    } else {
+      this.newProblem.phenomenon ||= '（例）ダッシュボード初回表示が5秒以上かかる';
+      this.newProblem.goal        ||= '（例）p50 1.5秒 / p95 3秒以下';
+    }
+  }
+
+  openNewProblemDialog() {
+    this.newProblemOpen = true;
+    this.applyProblemTemplate(this.newProblem.template);
+  }
+  closeNewProblemDialog() {
+    this.newProblemOpen = false;
+    this.newProblem = { title: '', phenomenon: '', cause: '', solution: '', goal: '', template: 'bug' };
+  }
+
+  // 追加：保存処理（validation → Firestore へ）
+  async createProblemWithDefinition() {
+    const p = this.newProblem;
+
+    const errs: string[] = [];
+    if (!p.title.trim()) errs.push('タイトルは必須です');
+    if (!p.phenomenon.trim()) errs.push('現象は必須です');
+    if (!p.goal.trim()) errs.push('目標は必須です');
+    const over = (s: string, n: number) => s && s.length > n;
+    if (over(p.title, 200)) errs.push('タイトルは200文字以内にしてください');
+    if (over(p.phenomenon, 1000)) errs.push('現象は1000文字以内にしてください');
+    if (over(p.cause, 1000)) errs.push('原因は1000文字以内にしてください');
+    if (over(p.solution, 1000)) errs.push('解決策は1000文字以内にしてください');
+    if (over(p.goal, 500)) errs.push('目標は500文字以内にしてください');
+
+    if (errs.length) { alert(errs.join('\n')); return; }
+
+    const pid = this.currentProject.getSync();
+    if (!pid) { alert('プロジェクト未選択'); return; }
+
+    const uid = await firstValueFrom(this.auth.uid$);
+    const payload: any = {
+      title: p.title.trim(),
+      template: { kind: p.template },
+      problemDef: {
+        phenomenon: p.phenomenon.trim(),
+        goal: p.goal.trim(),
+        updatedBy: uid || ''
+      }
+    };
+    const cause = p.cause.trim();
+    const solution = p.solution.trim();
+    if (cause) payload.problemDef.cause = cause;         // 空なら送らない
+    if (solution) payload.problemDef.solution = solution;
+    
+    const ref = await this.problems.create(pid, payload);  
+
+    this.selectedProblemId = (ref as any)?.id ?? null;
+    this.selectedProblem$.next(this.selectedProblemId);
+    this.closeNewProblemDialog();
+  }
+
+  // Firestore Timestamp / Date / null を安全に Date|null へ
+  getUpdatedAtDate(p: ProblemWithDef): Date | null {
+    const ts: any = p?.problemDef?.updatedAt;
+    if (!ts) return null;
+    try {
+      if (typeof ts.toDate === 'function') return ts.toDate(); // Firestore Timestamp
+      if (ts instanceof Date) return ts;                       // 既に Date
+    } catch {}
+    return null;
+  }
 
 }
 

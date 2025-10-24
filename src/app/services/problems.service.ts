@@ -59,22 +59,42 @@ export class ProblemsService {
   }
 
   // -------- create --------
-  async create(projectId: string, p: Partial<Problem>): Promise<any> {
-    const colRef = nativeCollection(this.fs as any, this.colPath(projectId));
-    const order = p.order ?? await this.nextOrder(projectId);
-    return nativeAddDoc(colRef, {
-      title: p.title ?? 'Untitled',
-      description: p.description ?? '',
-      status: p.status ?? 'not_started',
-      progress: p.progress ?? 0,
-      tags: p.tags ?? [],
-      assignees: p.assignees ?? [],
-      order,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      template: p.template ?? {}
-    });
+// -------- create --------
+async create(projectId: string, p: Partial<Problem>): Promise<any> {
+  const colRef = nativeCollection(this.fs as any, this.colPath(projectId));
+  const order = p.order ?? await this.nextOrder(projectId);
+
+  const rawDef = (p as any).problemDef;
+  let problemDef: any | undefined;
+  if (rawDef) {
+    const phenomenon = (rawDef.phenomenon ?? '').trim();
+    const goal = (rawDef.goal ?? '').trim();
+    const updatedBy = rawDef.updatedBy ?? '';
+  
+    problemDef = { phenomenon, goal, updatedBy, updatedAt: serverTimestamp() };
+  
+    const cause = (rawDef.cause ?? '').trim();
+    const solution = (rawDef.solution ?? '').trim();
+    if (cause) problemDef.cause = cause;           // 空なら付けない
+    if (solution) problemDef.solution = solution;  // 空なら付けない
   }
+  
+
+  return nativeAddDoc(colRef, {
+    title: p.title ?? 'Untitled',
+    description: p.description ?? '',
+    status: p.status ?? 'not_started',
+    progress: p.progress ?? 0,
+    tags: p.tags ?? [],
+    assignees: p.assignees ?? [],
+    order,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    template: p.template ?? {},
+    ...(problemDef ? { problemDef } : {})
+  });
+}
+
 
   // -------- update --------
   async update(projectId: string, id: string, patch: Partial<Problem>): Promise<void> {

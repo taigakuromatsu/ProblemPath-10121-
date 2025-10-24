@@ -98,7 +98,30 @@ service cloud.firestore {
       // Problems
       match /problems/{problemId} {
         allow read: if isMember(projectId);
-        allow create, update, delete: if isEditor(projectId);
+
+        function validProblemDef(def) {
+          // 許可キーのみ
+          return def.keys().hasOnly(['phenomenon','cause','solution','goal','updatedAt','updatedBy'])
+            // 型（必須2項目）
+            && (def.phenomenon is string) && (def.goal is string)
+            // 長さ（[\s\S] で改行含む）
+            && def.phenomenon.matches('^[\\s\\S]{1,1000}$')
+            && def.goal.matches('^[\\s\\S]{1,500}$')
+            // 任意項目は存在すれば型・長さチェック
+            && (!('cause' in def) || (def.cause is string && def.cause.matches('^[\\s\\S]{0,1000}$')))
+            && (!('solution' in def) || (def.solution is string && def.solution.matches('^[\\s\\S]{0,1000}$')))
+            // 作成者は自分（更新時も自分）※必要なければこの行は外せます
+            && (!('updatedBy' in def) || def.updatedBy == request.auth.uid);
+        }
+
+        allow create, update: if isEditor(projectId)
+          && (
+            // problemDef 無しも許可（後から追記できる）
+            !('problemDef' in request.resource.data)
+            || validProblemDef(request.resource.data.problemDef)
+          );
+
+        allow delete: if isEditor(projectId);
 
       // Problem comments
       match /comments/{commentId} {
