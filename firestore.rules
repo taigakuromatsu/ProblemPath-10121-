@@ -31,6 +31,13 @@ service cloud.firestore {
       // 読み取りはメンバーのみ
       allow read: if isMember(projectId);
 
+      // 監査ログ（Functions が onWrite で"追記のみ"する領域）
+      // クライアントからは"読み取りのみ"許可。create/update/delete は不可。
+      match /auditLogs/{logId} {
+        allow read: if isMember(projectId);
+        allow create, update, delete: if false;
+      }
+
       // 【ブートストラップ例外】新規作成（meta だけ）を「作成者=自分」のとき許可
       allow create: if isSignedIn()
         && request.resource.data.keys().hasOnly(['meta'])
