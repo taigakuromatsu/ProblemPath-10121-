@@ -105,6 +105,8 @@ function dlog(...args: any[]) {
           <span>Overdue: {{ d.overdue }}</span>
           <span>Today: {{ d.today }}</span>
           <span>This week: {{ d.thisWeek }}</span>
+          <span>Next week: {{ d.nextWeek }}</span>
+          <span>Later: {{ d.later }}</span>
           <span>No due: {{ d.nodue }}</span>
         </div>
       </div>
@@ -536,7 +538,7 @@ export class TreePage {
   // --- Dashboard state ---
   showDash = false;
   dash$!: Observable<{
-    overdue: number; today: number; thisWeek: number; nodue: number;
+    overdue: number; today: number; thisWeek: number; nextWeek: number; later: number; nodue: number;
     openTotal: number; doneTotal: number; progressPct: number;
   }>;
 
@@ -572,13 +574,13 @@ export class TreePage {
       datasets: [{ data: [open, done] }]
     } as ChartConfiguration<'doughnut'>['data'];
   }
-  barData(d: { overdue: number; today: number; thisWeek: number; nodue: number; }) {
+  barData(d: { overdue: number; today: number; thisWeek: number; nextWeek: number; later: number; nodue: number; }) {
     return {
-      labels: ['Overdue', 'Today', 'This week', 'No due'],
-      datasets: [{ data: [d.overdue, d.today, d.thisWeek, d.nodue], maxBarThickness: 22 }]
+      labels: ['Overdue', 'Today', 'This week', 'Next week', 'Later', 'No due'],
+      datasets: [{ data: [d.overdue, d.today, d.thisWeek, d.nextWeek, d.later, d.nodue], maxBarThickness: 22 }]
     } as ChartConfiguration<'bar'>['data'];
   }
-
+  
   // --- 日付ユーティリティ ---
   private ymd(d: Date): string {
     const y = d.getFullYear();
@@ -594,49 +596,61 @@ export class TreePage {
 
   // --- ダッシュボード（pidに追従）
   private buildDash$(): Observable<{
-    overdue: number; today: number; thisWeek: number; nodue: number;
+    overdue: number; today: number; thisWeek: number; nextWeek: number; later: number; nodue: number;
     openTotal: number; doneTotal: number; progressPct: number;
   }> {
     const today = new Date(); today.setHours(0,0,0,0);
     const tomorrow = this.addDays(today, 1);
-
+  
     // 今週（月曜始まり）
-    const dow = today.getDay(); // Sun=0
+    const dow = today.getDay();
     const diffToMon = (dow === 0 ? -6 : 1 - dow);
     const startOfWeek = this.addDays(today, diffToMon);
     const endOfWeek   = this.addDays(startOfWeek, 6);
-
+  
+    // 来週
+    const startOfNextWeek = this.addDays(endOfWeek, 1);
+    const endOfNextWeek   = this.addDays(startOfNextWeek, 6);
+  
+    const FAR = '9999-12-31';
+  
     return this.currentProject.projectId$.pipe(
       switchMap(pid => {
-        if (!pid) return of({
-          overdue: 0, today: 0, thisWeek: 0, nodue: 0,
-          openTotal: 0, doneTotal: 0, progressPct: 0
-        });
-
-        const overdue$  = this.tasks.listAllOverdue(pid, this.ymd(today), true);
-        const today$    = this.tasks.listAllByDueRange(pid, this.ymd(today), this.ymd(today), true);
-        const thisWeek$ = this.tasks.listAllByDueRange(pid, this.ymd(tomorrow), this.ymd(endOfWeek), true);
-        const nodue$    = this.tasks.listAllNoDue(pid, true);
-        const all$      = this.tasks.listAllByDueRange(pid, '0000-01-01', '9999-12-31', false);
-
-        return combineLatest([overdue$, today$, thisWeek$, nodue$, all$]).pipe(
-          map(([ov, td, wk, nd, all]) => {
-            const overdue = ov?.length ?? 0;
-            const today   = td?.length ?? 0;
-            const thisWeek= wk?.length ?? 0;
-            const nodue   = nd?.length ?? 0;
-
+        if (!pid) {
+          return of({
+            overdue: 0, today: 0, thisWeek: 0, nextWeek: 0, later: 0, nodue: 0,
+            openTotal: 0, doneTotal: 0, progressPct: 0
+          });
+        }
+  
+        const overdue$   = this.tasks.listAllOverdue(pid, this.ymd(today), true);
+        const today$     = this.tasks.listAllByDueRange(pid, this.ymd(today), this.ymd(today), true);
+        const thisWeek$  = this.tasks.listAllByDueRange(pid, this.ymd(tomorrow), this.ymd(endOfWeek), true);
+        const nextWeek$  = this.tasks.listAllByDueRange(pid, this.ymd(startOfNextWeek), this.ymd(endOfNextWeek), true);
+        const later$     = this.tasks.listAllByDueRange(pid, this.ymd(this.addDays(endOfNextWeek,1)), FAR, true);
+        const nodue$     = this.tasks.listAllNoDue(pid, true);
+        const all$       = this.tasks.listAllByDueRange(pid, '0000-01-01', FAR, false);
+  
+        return combineLatest([overdue$, today$, thisWeek$, nextWeek$, later$, nodue$, all$]).pipe(
+          map(([ov, td, wk, nw, lt, nd, all]) => {
+            const overdue   = ov?.length ?? 0;
+            const today     = td?.length ?? 0;
+            const thisWeek  = wk?.length ?? 0;
+            const nextWeek  = nw?.length ?? 0;
+            const later     = lt?.length ?? 0;
+            const nodue     = nd?.length ?? 0;
+  
             const total     = all?.length ?? 0;
             const doneTotal = (all ?? []).filter(t => t.status === 'done').length;
             const openTotal = total - doneTotal;
             const progressPct = total > 0 ? Math.round((doneTotal / total) * 100) : 0;
-
-            return { overdue, today, thisWeek, nodue, openTotal, doneTotal, progressPct };
+  
+            return { overdue, today, thisWeek, nextWeek, later, nodue, openTotal, doneTotal, progressPct };
           })
         );
       })
     );
-  }
+  }  
 
   // ---- ヘルパー ----
   private withPid(run: (pid: string) => void) {
