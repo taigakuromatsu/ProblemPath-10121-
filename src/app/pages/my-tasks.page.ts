@@ -307,6 +307,5 @@ private async resolveAssigneeDirectory(tasks: Task[]): Promise<Map<string,string
     return byUid;
   }
   
-
 }
 
