@@ -181,4 +181,33 @@ async create(projectId: string, p: Partial<Problem>): Promise<any> {
     const problemRef = nativeDoc(this.fs as any, `${this.colPath(projectId)}/${id}`);
     return nativeDeleteDoc(problemRef) as any;
   }
+
+  async updateProblemDef(
+    projectId: string,
+    id: string,
+    def: {
+      phenomenon: string;
+      goal: string;
+      cause?: string;
+      solution?: string;
+      updatedBy: string;
+    }
+  ): Promise<void> {
+    const ref = nativeDoc(this.fs as any, `${this.colPath(projectId)}/${id}`);
+
+    const body: any = {
+      problemDef: {
+        phenomenon: def.phenomenon,
+        goal: def.goal,
+        updatedBy: def.updatedBy || '',
+        updatedAt: serverTimestamp(),
+      }
+    };
+    if (def.cause && def.cause.trim()) body.problemDef.cause = def.cause.trim();
+    if (def.solution && def.solution.trim()) body.problemDef.solution = def.solution.trim();
+
+    // ルートの updatedAt も更新しておく
+    return nativeUpdateDoc(ref, { ...body, updatedAt: serverTimestamp() }) as any;
+  }
+
 }

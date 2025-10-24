@@ -151,6 +151,56 @@ type ProblemWithDef = Problem & {
           </div>
         </div>
 
+        <!-- Problem 定義：編集モーダル -->
+        <div *ngIf="editProblemOpen"
+            style="position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,.35); z-index:1000;">
+          <div style="width:min(720px, 92vw); background:#fff; color:#111; border-radius:12px; padding:14px 16px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+              <h3 style="margin:0; font-size:16px;">Problem 定義を編集</h3>
+              <span style="flex:1 1 auto"></span>
+              <button mat-icon-button (click)="closeEditProblemDialog()"><mat-icon>close</mat-icon></button>
+            </div>
+
+            <div style="display:grid; gap:10px;">
+              <div>
+                <label>タイトル（参照）</label>
+                <input [value]="editProblem.title" readonly
+                      style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px; background:#f7f7f7;">
+              </div>
+
+              <div>
+                <label>現象（必須）</label>
+                <textarea rows="3" [(ngModel)]="editProblem.phenomenon"
+                          style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
+              </div>
+
+              <div>
+                <label>原因（任意）</label>
+                <textarea rows="3" [(ngModel)]="editProblem.cause"
+                          style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
+              </div>
+
+              <div>
+                <label>解決策（任意）</label>
+                <textarea rows="3" [(ngModel)]="editProblem.solution"
+                          style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
+              </div>
+
+              <div>
+                <label>目標（必須）</label>
+                <textarea rows="2" [(ngModel)]="editProblem.goal"
+                          style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
+              </div>
+
+              <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:4px;">
+                <button mat-stroked-button (click)="closeEditProblemDialog()">キャンセル</button>
+                <button mat-raised-button color="primary" (click)="saveEditedProblemDef()">保存</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+
         <span style="flex:1 1 auto"></span>
 
         <ng-container *ngIf="members.isEditor$ | async">
@@ -163,7 +213,15 @@ type ProblemWithDef = Problem & {
       <ng-container *ngIf="selectedProblemId as pid">
         <div *ngIf="selectedProblemDoc$ | async as p"
              style="padding:12px; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:12px;">
-          <h3 style="margin:0 0 8px;">Problem 定義</h3>
+          <h3 style="margin:0 0 8px; display:flex; align-items:center; gap:8px;">
+            <span>Problem 定義</span>
+            <span style="flex:1 1 auto;"></span>
+            <button *ngIf="members.isEditor$ | async"
+                    mat-stroked-button
+                    (click)="openEditProblemDef(p)">
+              Edit
+            </button>
+          </h3>
           <div style="display:grid; gap:6px; font-size:14px;">
             <div><span style="font-weight:600;">現象：</span>
               <span>{{ p.problemDef?.phenomenon || '—' }}</span>
@@ -541,6 +599,16 @@ export class HomePage {
     template: 'bug' as 'bug' | 'improve'
   };
 
+  // 編集ダイアログ用
+  editProblemOpen = false;
+  editProblem = {
+    title: '',        // 表示用（編集はしない）
+    phenomenon: '',
+    cause: '',
+    solution: '',
+    goal: ''
+  };
+
   applyProblemTemplate(kind: 'bug' | 'improve') {
     this.newProblem.template = kind;
     if (kind === 'bug') {
@@ -613,6 +681,54 @@ export class HomePage {
     } catch {}
     return null;
   }
+
+  // Problem 定義 編集モーダルを開く
+  openEditProblemDef(p: ProblemWithDef) {
+    this.editProblemOpen = true;
+    this.editProblem = {
+      title: p.title ?? '',
+      phenomenon: p.problemDef?.phenomenon ?? '',
+      cause: p.problemDef?.cause ?? '',
+      solution: p.problemDef?.solution ?? '',
+      goal: p.problemDef?.goal ?? '',
+    };
+  }
+
+  // 閉じる
+  closeEditProblemDialog() {
+    this.editProblemOpen = false;
+  }
+
+  // 保存
+  async saveEditedProblemDef() {
+    const pid = this.currentProject.getSync();
+    if (!pid || !this.selectedProblemId) { alert('プロジェクト/Problem未選択'); return; }
+
+    const d = this.editProblem;
+
+    // 簡易バリデーション（作成時と同等）
+    const errs: string[] = [];
+    if (!d.phenomenon.trim()) errs.push('現象は必須です');
+    if (!d.goal.trim()) errs.push('目標は必須です');
+    const over = (s: string, n: number) => s && s.length > n;
+    if (over(d.phenomenon, 1000)) errs.push('現象は1000文字以内にしてください');
+    if (over(d.cause, 1000)) errs.push('原因は1000文字以内にしてください');
+    if (over(d.solution, 1000)) errs.push('解決策は1000文字以内にしてください');
+    if (over(d.goal, 500)) errs.push('目標は500文字以内にしてください');
+    if (errs.length) { alert(errs.join('\n')); return; }
+
+    const uid = await firstValueFrom(this.auth.uid$);
+    await this.problems.updateProblemDef(pid, this.selectedProblemId, {
+      phenomenon: d.phenomenon.trim(),
+      goal: d.goal.trim(),
+      cause: d.cause.trim(),
+      solution: d.solution.trim(),
+      updatedBy: uid || '',
+    });
+
+    this.closeEditProblemDialog();
+  }
+
 
 }
 
