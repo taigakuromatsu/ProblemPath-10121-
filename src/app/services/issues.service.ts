@@ -1,11 +1,11 @@
 import { Injectable } from '@angular/core';
 import { Firestore } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
-import { Issue } from '../models/types';
+import { Issue, IssueLink, LinkType } from '../models/types';
 
 const DEBUG_ISSUES = false; // ← 必要な時だけ true に
 
-// 読み取りは rxfire、参照は Firebase SDK (native)
+// Firebase SDK (native) ＋ rxfire
 import {
   collection as nativeCollection,
   doc as nativeDoc,
@@ -16,25 +16,37 @@ import {
   query as nativeQuery,
   orderBy as nativeOrderBy,
   getDocs as nativeGetDocs,
+  getDoc as nativeGetDoc,
   limit as nativeLimit,
   where as nativeWhere,
   writeBatch as nativeWriteBatch,
+  arrayUnion,
+  arrayRemove,
 } from 'firebase/firestore';
 import { collectionData as rxCollectionData } from 'rxfire/firestore';
 
 @Injectable({ providedIn: 'root' })
 export class IssuesService {
   constructor(private fs: Firestore) {}
+
   private base(projectId: string) {
     if (!projectId) throw new Error('[IssuesService] projectId is required');
     return `projects/${projectId}/problems`;
+  }
+
+  private issueDocPath(projectId: string, problemId: string, issueId: string) {
+    if (!problemId) throw new Error('[IssuesService] problemId is required');
+    if (!issueId) throw new Error('[IssuesService] issueId is required');
+    return `${this.base(projectId)}/${problemId}/issues/${issueId}`;
   }
 
   private dlog(...args: any[]) {
     if (DEBUG_ISSUES) console.debug(...args);
   }
 
-  // --- listByProblem ---
+  // ──────────────────────────────────────────────────────────────
+  // listByProblem
+  // ──────────────────────────────────────────────────────────────
   listByProblem(projectId: string, problemId: string): Observable<Issue[]> {
     this.dlog('[IssuesService.listByProblem]', {
       pid: projectId, problemId,
@@ -45,10 +57,18 @@ export class IssuesService {
     return rxCollectionData(q as any, { idField: 'id' }) as Observable<Issue[]>;
   }
 
-  // --- create ---
+  // ──────────────────────────────────────────────────────────────
+  // create
+  // ──────────────────────────────────────────────────────────────
   async create(projectId: string, problemId: string, i: Partial<Issue>): Promise<any> {
     const colRef = nativeCollection(this.fs as any, `${this.base(projectId)}/${problemId}/issues`);
     const order = i.order ?? await this.nextOrder(projectId, problemId);
+
+    // links は最小構成 { issueId, type } のみに正規化して保存
+    const normLinks: IssueLink[] = Array.isArray(i.links)
+      ? i.links.map(l => ({ issueId: (l as any).issueId, type: (l as any).type })).filter(l => l.issueId && l.type)
+      : [];
+
     return nativeAddDoc(colRef, {
       title: i.title ?? 'Untitled Issue',
       description: i.description ?? '',
@@ -59,11 +79,13 @@ export class IssuesService {
       order,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      links: i.links ?? [],
+      links: normLinks,
     });
   }
 
+  // ──────────────────────────────────────────────────────────────
   // 並べ替え
+  // ──────────────────────────────────────────────────────────────
   async moveUp(projectId: string, problemId: string, id: string, currentOrder: number): Promise<void> {
     const colRef = nativeCollection(this.fs as any, `${this.base(projectId)}/${problemId}/issues`);
     const q = nativeQuery(colRef, nativeWhere('order', '<', currentOrder), nativeOrderBy('order', 'desc'), nativeLimit(1));
@@ -72,7 +94,7 @@ export class IssuesService {
 
     const neighbor = snap.docs[0];
     const batch = nativeWriteBatch(this.fs as any);
-    const aRef = nativeDoc(this.fs as any, `${this.base(projectId)}/${problemId}/issues/${id}`);
+    const aRef = nativeDoc(this.fs as any, this.issueDocPath(projectId, problemId, id));
     batch.update(aRef, { order: (neighbor.data() as any).order ?? 0, updatedAt: serverTimestamp() });
     batch.update(neighbor.ref, { order: currentOrder, updatedAt: serverTimestamp() });
     await batch.commit();
@@ -86,26 +108,108 @@ export class IssuesService {
 
     const neighbor = snap.docs[0];
     const batch = nativeWriteBatch(this.fs as any);
-    const aRef = nativeDoc(this.fs as any, `${this.base(projectId)}/${problemId}/issues/${id}`);
+    const aRef = nativeDoc(this.fs as any, this.issueDocPath(projectId, problemId, id));
     batch.update(aRef, { order: (neighbor.data() as any).order ?? 0, updatedAt: serverTimestamp() });
     batch.update(neighbor.ref, { order: currentOrder, updatedAt: serverTimestamp() });
     await batch.commit();
   }
 
-  // --- update ---
+  // ──────────────────────────────────────────────────────────────
+  // update
+  // ──────────────────────────────────────────────────────────────
   async update(projectId: string, problemId: string, id: string, patch: Partial<Issue>): Promise<void> {
-    const ref = nativeDoc(this.fs as any, `${this.base(projectId)}/${problemId}/issues/${id}`);
-    return nativeUpdateDoc(ref, { ...patch, updatedAt: serverTimestamp() }) as any;
+    const ref = nativeDoc(this.fs as any, this.issueDocPath(projectId, problemId, id));
+
+    // links が入ってきた場合は安全のため最小構成へ正規化
+    let body: any = { ...patch, updatedAt: serverTimestamp() };
+    if (patch.links) {
+      body.links = (patch.links as any[]).map(l => ({ issueId: (l as any).issueId, type: (l as any).type }))
+        .filter(l => l.issueId && l.type);
+    }
+
+    return nativeUpdateDoc(ref, body) as any;
   }
 
-  // --- remove（tasks 再帰削除→issue削除） ---
+  // ──────────────────────────────────────────────────────────────
+  // remove（tasks 再帰削除→issue削除）
+  // ──────────────────────────────────────────────────────────────
   async remove(projectId: string, problemId: string, id: string): Promise<void> {
     const tasksPath = `${this.base(projectId)}/${problemId}/issues/${id}/tasks`;
     await this.deleteCollection(tasksPath);
-    const issueRef = nativeDoc(this.fs as any, `${this.base(projectId)}/${problemId}/issues/${id}`);
+
+    const issueRef = nativeDoc(this.fs as any, this.issueDocPath(projectId, problemId, id));
     return nativeDeleteDoc(issueRef) as any;
   }
 
+  // ──────────────────────────────────────────────────────────────
+  // 相互リンク（同一 Problem 内）: 追加 / 削除
+  // ──────────────────────────────────────────────────────────────
+
+  // 逆方向マップ
+  private static readonly INVERSE: Record<LinkType, LinkType> = {
+    relates: 'relates',
+    duplicate: 'duplicate',
+    blocks: 'depends_on',
+    depends_on: 'blocks',
+    same_cause: 'same_cause',
+  };
+
+  /**
+   * 相互リンクを追加（同一 Problem 内）
+   * createdBy は MVP では保存しない（arrayUnion/arrayRemove の一意性を保つため）。
+   */
+  async addLink(
+    projectId: string,
+    problemId: string,
+    fromIssueId: string,
+    toIssueId: string,
+    type: LinkType,
+    _createdBy: string // 受け取るが MVP では保存しない
+  ): Promise<void> {
+    if (fromIssueId === toIssueId) return;
+
+    const batch = nativeWriteBatch(this.fs as any);
+    const fromRef = nativeDoc(this.fs as any, this.issueDocPath(projectId, problemId, fromIssueId));
+    const toRef   = nativeDoc(this.fs as any, this.issueDocPath(projectId, problemId, toIssueId));
+    const now = serverTimestamp();
+
+    const fwd: IssueLink = { issueId: toIssueId, type };
+    const rev: IssueLink = { issueId: fromIssueId, type: IssuesService.INVERSE[type] };
+
+    batch.update(fromRef, { links: arrayUnion(fwd), updatedAt: now } as any);
+    batch.update(toRef,   { links: arrayUnion(rev), updatedAt: now } as any);
+
+    await batch.commit();
+  }
+
+  /**
+   * 相互リンクを削除（同一 Problem 内）
+   * 最小構成 {issueId,type} なので arrayRemove で確実に消せる。
+   */
+  async removeLink(
+    projectId: string,
+    problemId: string,
+    fromIssueId: string,
+    toIssueId: string,
+    type: LinkType
+  ): Promise<void> {
+    const batch = nativeWriteBatch(this.fs as any);
+    const fromRef = nativeDoc(this.fs as any, this.issueDocPath(projectId, problemId, fromIssueId));
+    const toRef   = nativeDoc(this.fs as any, this.issueDocPath(projectId, problemId, toIssueId));
+    const now = serverTimestamp();
+
+    const fwd: IssueLink = { issueId: toIssueId, type };
+    const rev: IssueLink = { issueId: fromIssueId, type: IssuesService.INVERSE[type] };
+
+    batch.update(fromRef, { links: arrayRemove(fwd), updatedAt: now } as any);
+    batch.update(toRef,   { links: arrayRemove(rev), updatedAt: now } as any);
+
+    await batch.commit();
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // 内部ユーティリティ
+  // ──────────────────────────────────────────────────────────────
   private async nextOrder(projectId: string, problemId: string): Promise<number> {
     const colRef = nativeCollection(this.fs as any, `${this.base(projectId)}/${problemId}/issues`);
     const q = nativeQuery(colRef, nativeOrderBy('order', 'desc'), nativeLimit(1));

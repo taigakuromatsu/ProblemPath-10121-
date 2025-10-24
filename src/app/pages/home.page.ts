@@ -34,6 +34,16 @@ type ProblemWithDef = Problem & {
   };
 };
 
+// ---- リンク種別（types.ts を更新していなくても使えるようローカル定義）----
+type LinkType = 'relates' | 'duplicate' | 'blocks' | 'depends_on' | 'same_cause';
+const LINK_TYPE_LABEL: Record<LinkType, string> = {
+  relates: '関連',
+  duplicate: '重複',
+  blocks: 'ブロック',
+  depends_on: '依存',
+  same_cause: '同一原因',
+};
+
 @Component({
   standalone: true,
   selector: 'pp-home',
@@ -200,7 +210,6 @@ type ProblemWithDef = Problem & {
           </div>
         </div>
 
-
         <span style="flex:1 1 auto"></span>
 
         <ng-container *ngIf="members.isEditor$ | async">
@@ -242,6 +251,7 @@ type ProblemWithDef = Problem & {
           </div>
         </div>
 
+        <!-- Issues + Link UI -->
         <div style="padding:12px; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:16px;">
           <h3 style="margin:0 0 8px;">Issues</h3>
 
@@ -253,7 +263,7 @@ type ProblemWithDef = Problem & {
           </form>
 
           <ul *ngIf="issues$ | async as issues; else loadingIssues" style="margin:0; padding-left:1rem;">
-            <li *ngFor="let i of issues" style="margin-bottom:10px;">
+            <li *ngFor="let i of issues" style="margin-bottom:12px;">
               <div style="display:flex; align-items:center; gap:8px;">
                 <strong>{{ i.title }}</strong>
                 <span style="flex:1 1 auto"></span>
@@ -263,6 +273,46 @@ type ProblemWithDef = Problem & {
                 </ng-container>
               </div>
 
+              <!-- Link list -->
+              <div style="margin:6px 0 2px 0; font-size:13px;">
+                <span style="font-weight:600;">Links：</span>
+                <ng-container *ngIf="(i.links?.length ?? 0) > 0; else noLinks">
+                  <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:4px;">
+                    <ng-container *ngFor="let lk of normalizeLinks(i.links)">
+                      <span style="border:1px solid #e5e7eb; border-radius:999px; padding:2px 8px; background:#fafafa;">
+                        <span style="opacity:.85;">[{{ linkLabel(lk.type) }}]</span>
+                        <span> {{ titleByIssueId(issues, lk.issueId) || ('#' + lk.issueId) }} </span>
+                        <button *ngIf="members.isEditor$ | async"
+                                mat-icon-button
+                                aria-label="Remove link"
+                                (click)="onRemoveLink(pid, i.id!, lk.issueId, lk.type)"
+                                style="vertical-align:middle; margin-left:2px;">
+                          <mat-icon style="font-size:16px;">close</mat-icon>
+                        </button>
+                      </span>
+                    </ng-container>
+                  </div>
+                </ng-container>
+                <ng-template #noLinks><span style="opacity:.7;">（リンクなし）</span></ng-template>
+              </div>
+
+              <!-- Link add form (Editor only) -->
+              <form *ngIf="members.isEditor$ | async"
+                    (ngSubmit)="onAddLink(pid, i.id!)"
+                    style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:6px 0 4px 0;">
+                <select [(ngModel)]="linkTarget[i.id!]" name="linkTarget-{{i.id}}" style="min-width:180px;">
+                  <option [ngValue]="null">-- 対象 Issue を選択 --</option>
+                  <option *ngFor="let j of issues" [ngValue]="j.id" [disabled]="j.id===i.id">
+                    {{ j.title }}
+                  </option>
+                </select>
+                <select [(ngModel)]="linkTypeSel[i.id!]" name="linkType-{{i.id}}" style="min-width:140px;">
+                  <option *ngFor="let t of linkTypes" [ngValue]="t">{{ linkLabel(t) }}</option>
+                </select>
+                <button mat-stroked-button type="submit">＋ Link</button>
+              </form>
+
+              <!-- Tasks -->
               <form *ngIf="members.isEditor$ | async"
                     (ngSubmit)="createTask(pid, i.id!)"
                     style="display:flex; gap:6px; margin:6px 0 4px 0;">
@@ -370,6 +420,11 @@ export class HomePage {
   taskTitle: Record<string, string> = {}; // key = issueId
   tasksMap: Record<string, Observable<Task[]>> = {};
 
+  // --- Link UI state ---
+  linkTypes: LinkType[] = ['relates','duplicate','blocks','depends_on','same_cause'];
+  linkTarget: Record<string, string | null> = {};      // issueId -> targetIssueId
+  linkTypeSel: Record<string, LinkType> = {};          // issueId -> selected type
+
   constructor(
     public prefs: PrefsService,
     private theme: ThemeService,
@@ -441,6 +496,10 @@ export class HomePage {
           nextMap[id] = this.tasksMap[id] ?? this.currentProject.projectId$.pipe(
             switchMap(pid => (pid && pid !== 'default') ? this.tasks.listByIssue(pid, this.selectedProblemId!, id) : of([]))
           );
+
+          // link UI 初期値
+          if (!this.linkTypeSel[id]) this.linkTypeSel[id] = 'relates';
+          if (!(id in this.linkTarget)) this.linkTarget[id] = null;
         }
         this.tasksMap = nextMap;
       });
@@ -497,6 +556,43 @@ export class HomePage {
   removeIssue(problemId: string, i: Issue) {
     if (!confirm(`Delete Issue "${i.title}"?`)) return;
     this.withPid(pid => this.issues.remove(pid, problemId, i.id!));
+  }
+
+  // === Link 操作 ===
+  linkLabel(t: LinkType) { return LINK_TYPE_LABEL[t] || t; }
+
+  normalizeLinks(raw: any): { issueId: string, type: LinkType }[] {
+    // 旧仕様（string[]）は無視／新仕様のみ描画
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .filter(v => v && typeof v === 'object' && v.issueId && v.type)
+      .map(v => ({ issueId: String(v.issueId), type: v.type as LinkType }));
+  }
+
+  titleByIssueId(all: Issue[], id?: string | null): string | null {
+    if (!id) return null;
+    const hit = all?.find(x => x.id === id);
+    return hit?.title ?? null;
+  }
+
+  async onAddLink(problemId: string, fromIssueId: string) {
+    const toIssueId = this.linkTarget[fromIssueId];
+    const type = this.linkTypeSel[fromIssueId] || 'relates';
+    if (!toIssueId) { alert('対象 Issue を選んでください'); return; }
+    if (toIssueId === fromIssueId) { alert('同一 Issue にはリンクできません'); return; }
+    const pid = this.currentProject.getSync();
+    if (!pid) { alert('プロジェクト未選択'); return; }
+    const uid = await firstValueFrom(this.auth.uid$);
+    await this.issues.addLink(pid, problemId, fromIssueId, toIssueId, type, uid || '');
+    // フォームをリセット
+    this.linkTarget[fromIssueId] = null;
+    this.linkTypeSel[fromIssueId] = 'relates';
+  }
+
+  async onRemoveLink(problemId: string, fromIssueId: string, toIssueId: string, type: LinkType) {
+    const pid = this.currentProject.getSync();
+    if (!pid) { alert('プロジェクト未選択'); return; }
+    await this.issues.removeLink(pid, problemId, fromIssueId, toIssueId, type);
   }
 
   // --- Task 操作 ---
@@ -728,7 +824,6 @@ export class HomePage {
 
     this.closeEditProblemDialog();
   }
-
-
 }
+
 

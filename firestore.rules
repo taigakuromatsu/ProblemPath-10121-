@@ -50,7 +50,7 @@ service cloud.firestore {
           && request.resource.data.keys().hasOnly(['role','joinedAt','displayName','email'])
           && request.resource.data.role == 'admin';
 
-        // ★ 招待リンク経由の参加を許可（本人のみ / member or viewer）
+        // ★ 招待リンク経由の参加（本人のみ / member or viewer）
         // クライアントは create 時に { role, joinedAt, inviteId, invitedBy, displayName, email } を書く
         allow create, update: if isSignedIn()
           && request.auth.uid == uid
@@ -71,7 +71,7 @@ service cloud.firestore {
                       || isAdmin(projectId);
       }
 
-    // invites （トークン=docId を前提に “知っている人だけ読める” 方式）
+      // invites （トークン=docId を前提に “知っている人だけ読める” 方式）
       match /invites/{token} {
         // ランダムID前提で公開GET可（推測困難）※get は可、list は通常不可
         allow get: if true;
@@ -94,7 +94,6 @@ service cloud.firestore {
         allow delete: if isAdmin(projectId);
       }
 
-
       // Problems
       match /problems/{problemId} {
         allow read: if isMember(projectId);
@@ -110,7 +109,7 @@ service cloud.firestore {
             // 任意項目は存在すれば型・長さチェック
             && (!('cause' in def) || (def.cause is string && def.cause.matches('^[\\s\\S]{0,1000}$')))
             && (!('solution' in def) || (def.solution is string && def.solution.matches('^[\\s\\S]{0,1000}$')))
-            // 作成者は自分（更新時も自分）※必要なければこの行は外せます
+            // 作成者は自分（更新時も自分）
             && (!('updatedBy' in def) || def.updatedBy == request.auth.uid);
         }
 
@@ -123,25 +122,7 @@ service cloud.firestore {
 
         allow delete: if isEditor(projectId);
 
-      // Problem comments
-      match /comments/{commentId} {
-        allow read: if isMember(projectId);
-        allow create: if isEditor(projectId)
-                      && request.resource.data.authorId == request.auth.uid;
-        allow update, delete: if (
-          // 自分のコメント
-          (request.auth != null && resource.data.authorId == request.auth.uid)
-          // もしくは Admin
-          || isAdmin(projectId)
-        );
-      }
-
-        // Issues
-        match /issues/{issueId} {
-          allow read: if isMember(projectId);
-          allow create, update, delete: if isEditor(projectId);
-
-         // Issue comments
+        // Problem comments
         match /comments/{commentId} {
           allow read: if isMember(projectId);
           allow create: if isEditor(projectId)
@@ -152,13 +133,21 @@ service cloud.firestore {
           );
         }
 
-          // Tasks
-          match /tasks/{taskId} {
-            allow read: if isMember(projectId);
-            allow create, update, delete: if isEditor(projectId);
+        // Issues
+        match /issues/{issueId} {
+          allow read: if isMember(projectId);
 
-           // Task comments
-           match /comments/{commentId} {
+          // Firestore ルールでは配列の要素ごとの詳細検証が困難なため、
+          // ここでは「配列であること」と上限（200件）のみチェック。
+          function validIssueLinks(arr) {
+            return arr is list && arr.size() <= 200;
+          }
+
+          allow create, update, delete: if isEditor(projectId)
+            && (!('links' in request.resource.data) || validIssueLinks(request.resource.data.links));
+
+          // Issue comments
+          match /comments/{commentId} {
             allow read: if isMember(projectId);
             allow create: if isEditor(projectId)
                           && request.resource.data.authorId == request.auth.uid;
@@ -166,7 +155,23 @@ service cloud.firestore {
               (request.auth != null && resource.data.authorId == request.auth.uid)
               || isAdmin(projectId)
             );
-           }
+          }
+
+          // Tasks
+          match /tasks/{taskId} {
+            allow read: if isMember(projectId);
+            allow create, update, delete: if isEditor(projectId);
+
+            // Task comments
+            match /comments/{commentId} {
+              allow read: if isMember(projectId);
+              allow create: if isEditor(projectId)
+                            && request.resource.data.authorId == request.auth.uid;
+              allow update, delete: if (
+                (request.auth != null && resource.data.authorId == request.auth.uid)
+                || isAdmin(projectId)
+              );
+            }
           }
         }
       }
@@ -197,4 +202,5 @@ service cloud.firestore {
     }
   }
 }
+
 
