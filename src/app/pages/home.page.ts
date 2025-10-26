@@ -23,22 +23,22 @@ import { switchMap, take, map, startWith } from 'rxjs/operators';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { serverTimestamp } from 'firebase/firestore';
 import { DraftsService } from '../services/drafts.service';
+import { NetworkService } from '../services/network.service'; // ← 追加
 
-// ---- このページ専用の拡張型（ProblemにproblemDefをオプションで持たせる）----
+// ---- このページ専用の拡張型 ----
 type ProblemWithDef = Problem & {
   problemDef?: {
     phenomenon: string;
     goal: string;
     cause?: string;
     solution?: string;
-    updatedAt?: any;   // Firestore Timestamp を想定
+    updatedAt?: any;
     updatedBy?: string;
   };
 };
-
 type EditProblemField = 'phenomenon' | 'cause' | 'solution' | 'goal';
 
-// ---- リンク種別（types.ts を更新していなくても使えるようローカル定義）----
+// ---- リンク種別 ----
 type LinkType = 'relates' | 'duplicate' | 'blocks' | 'depends_on' | 'same_cause';
 const LINK_TYPE_LABEL: Record<LinkType, string> = {
   relates: '関連',
@@ -70,6 +70,12 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
       </ng-template>
     </div>
 
+    <!-- オフライン注意 -->
+    <div *ngIf="(auth.loggedIn$ | async) && !(isOnline$ | async)"
+         style="padding:8px 10px; border:1px solid #fca5a5; border-radius:8px; background:#fff1f2; margin:8px 0; font-size:12px; color:#991b1b;">
+      オフラインのため <strong>追加・編集・削除</strong> はできません（入力はドラフトとして保存されます）。
+    </div>
+
     <div *ngIf="(auth.loggedIn$ | async) && !(members.isEditor$ | async)"
          style="padding:8px 10px; border:1px solid #e5e7eb; border-radius:8px; background:#fafafa; margin:8px 0; font-size:12px;">
       現在のプロジェクトでは <strong>閲覧のみ（Viewer）</strong> です。編集ボタンは非表示になります。
@@ -93,7 +99,7 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
         <a routerLink="/schedule">📆 Schedule</a>
       </nav>
 
-      <!-- Problem セレクト（＋新規作成… は Editor のみ表示） -->
+      <!-- Problem セレクト -->
       <div style="display:flex; align-items:center; gap:12px; margin:8px 0 12px;">
         <label>Problem:
           <select [(ngModel)]="selectedProblemId" (ngModelChange)="onSelectProblem($event)">
@@ -168,7 +174,10 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
 
               <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:4px;">
                 <button mat-stroked-button (click)="closeNewProblemDialog()">キャンセル</button>
-                <button mat-raised-button color="primary" (click)="createProblemWithDefinition()">作成</button>
+                <button mat-raised-button color="primary" (click)="createProblemWithDefinition()"
+                        [disabled]="!(canEdit$ | async)">
+                  作成
+                </button>
               </div>
             </div>
           </div>
@@ -221,7 +230,10 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
 
               <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:4px;">
                 <button mat-stroked-button (click)="closeEditProblemDialog()">キャンセル</button>
-                <button mat-raised-button color="primary" (click)="saveEditedProblemDef()">保存</button>
+                <button mat-raised-button color="primary" (click)="saveEditedProblemDef()"
+                        [disabled]="!(canEdit$ | async)">
+                  保存
+                </button>
               </div>
             </div>
           </div>
@@ -230,12 +242,14 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
         <span style="flex:1 1 auto"></span>
 
         <ng-container *ngIf="members.isEditor$ | async">
-          <button *ngIf="selectedProblemId" mat-stroked-button (click)="renameSelected()">Rename</button>
-          <button *ngIf="selectedProblemId" mat-stroked-button color="warn" (click)="removeSelected()">Delete</button>
+          <button *ngIf="selectedProblemId" mat-stroked-button (click)="renameSelected()"
+                  [disabled]="!(canEdit$ | async)">Rename</button>
+          <button *ngIf="selectedProblemId" mat-stroked-button color="warn" (click)="removeSelected()"
+                  [disabled]="!(canEdit$ | async)">Delete</button>
         </ng-container>
       </div>
 
-      <!-- 選択中 Problem の情報（problemDef） -->
+      <!-- 選択中 Problem の情報 -->
       <ng-container *ngIf="selectedProblemId as pid">
         <div *ngIf="selectedProblemDoc$ | async as p"
              style="padding:12px; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:12px;">
@@ -277,7 +291,8 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
                 style="display:flex; gap:8px; align-items:center; margin:8px 0;">
             <input [(ngModel)]="issueTitle" name="issueTitle" placeholder="New Issue title"
                    required (ngModelChange)="onIssueTitleChange($event)" />
-            <button mat-raised-button color="primary" type="submit">＋ Add Issue</button>
+            <button mat-raised-button color="primary" type="submit"
+                    [disabled]="!(canEdit$ | async)">＋ Add Issue</button>
           </form>
 
           <ul *ngIf="issues$ | async as issues; else loadingIssues" style="margin:0; padding-left:1rem;">
@@ -286,8 +301,8 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
                 <strong>{{ i.title }}</strong>
                 <span style="flex:1 1 auto"></span>
                 <ng-container *ngIf="members.isEditor$ | async">
-                  <button mat-button (click)="renameIssue(pid, i)">Rename</button>
-                  <button mat-button color="warn" (click)="removeIssue(pid, i)">Delete</button>
+                  <button mat-button (click)="renameIssue(pid, i)" [disabled]="!(canEdit$ | async)">Rename</button>
+                  <button mat-button color="warn" (click)="removeIssue(pid, i)" [disabled]="!(canEdit$ | async)">Delete</button>
                 </ng-container>
               </div>
 
@@ -304,6 +319,7 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
                                 mat-icon-button
                                 aria-label="Remove link"
                                 (click)="onRemoveLink(pid, i.id!, lk.issueId, lk.type)"
+                                [disabled]="!(canEdit$ | async)"
                                 style="vertical-align:middle; margin-left:2px;">
                           <mat-icon style="font-size:16px;">close</mat-icon>
                         </button>
@@ -327,7 +343,7 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
                 <select [(ngModel)]="linkTypeSel[i.id!]" name="linkType-{{i.id}}" style="min-width:140px;">
                   <option *ngFor="let t of linkTypes" [ngValue]="t">{{ linkLabel(t) }}</option>
                 </select>
-                <button mat-stroked-button type="submit">＋ Link</button>
+                <button mat-stroked-button type="submit" [disabled]="!(canEdit$ | async)">＋ Link</button>
               </form>
 
               <!-- Tasks -->
@@ -336,7 +352,7 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
                     style="display:flex; gap:6px; margin:6px 0 4px 0;">
                 <input [(ngModel)]="taskTitle[i.id!]" name="taskTitle-{{i.id}}" placeholder="New Task title"
                        required (ngModelChange)="onTaskTitleChange(i.id!, taskTitle[i.id!])" />
-                <button mat-stroked-button type="submit">＋ Add Task</button>
+                <button mat-stroked-button type="submit" [disabled]="!(canEdit$ | async)">＋ Add Task</button>
               </form>
 
               <ul *ngIf="tasksMap[i.id!] | async as tasks" style="margin:0; padding-left:1rem;">
@@ -354,10 +370,10 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
                     </span>
 
                     <ng-container *ngIf="members.isEditor$ | async">
-                      <button mat-button (click)="renameTask(pid, i.id!, t)">Rename</button>
-                      <button mat-button (click)="editTaskDue(pid, i.id!, t)">Due</button>
-                      <button mat-button (click)="editTaskTags(pid, i.id!, t)">Tags</button>
-                      <button mat-button color="warn" (click)="removeTask(pid, i.id!, t)">Delete</button>
+                      <button mat-button (click)="renameTask(pid, i.id!, t)" [disabled]="!(canEdit$ | async)">Rename</button>
+                      <button mat-button (click)="editTaskDue(pid, i.id!, t)" [disabled]="!(canEdit$ | async)">Due</button>
+                      <button mat-button (click)="editTaskTags(pid, i.id!, t)" [disabled]="!(canEdit$ | async)">Tags</button>
+                      <button mat-button color="warn" (click)="removeTask(pid, i.id!, t)" [disabled]="!(canEdit$ | async)">Delete</button>
                     </ng-container>
                   </div>
                 </li>
@@ -381,7 +397,7 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
             <option value="member" selected>member</option>
             <option value="viewer">viewer</option>
           </select>
-          <button mat-raised-button color="primary" (click)="createInvite()" [disabled]="isCreatingInvite">
+          <button mat-raised-button color="primary" (click)="createInvite()" [disabled]="isCreatingInvite || !(isOnline$ | async)">
             {{ isCreatingInvite ? 'Creating...' : 'Create invite link' }}
           </button>
           <ng-container *ngIf="inviteUrl">
@@ -393,7 +409,7 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
         <p style="opacity:.7; margin-top:6px;">生成されたURLをメールで送ってください。相手は開いてログイン→「参加する」でメンバーになります。</p>
       </div>
 
-      <!-- --- Settings 表示（従来のまま） --- -->
+      <!-- Settings 表示 -->
       <section style="margin-top:16px;">
         <h3>Settings (準備のみ／表示)</h3>
         <p style="opacity:.75; margin:0 0 8px;">
@@ -404,7 +420,7 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
         </pre>
       </section>
       
-      <!-- 追加：テーマ設定 UI -->
+      <!-- テーマ設定 UI -->
       <section style="margin-top:16px;">
         <h3>テーマ設定</h3>
 
@@ -439,16 +455,20 @@ export class HomePage {
   taskTitle: Record<string, string> = {}; // key = issueId
   tasksMap: Record<string, Observable<Task[]>> = {};
 
-  // --- Link UI state ---
+  // Link UI state
   linkTypes: LinkType[] = ['relates','duplicate','blocks','depends_on','same_cause'];
-  linkTarget: Record<string, string | null> = {};      // issueId -> targetIssueId
-  linkTypeSel: Record<string, LinkType> = {};          // issueId -> selected type
+  linkTarget: Record<string, string | null> = {};
+  linkTypeSel: Record<string, LinkType> = {};
 
-  // --- Draft timers (Issue/Task/Problem new & edit) ---
+  // Draft timers
   private issueTitleTimer: any = null;
   private taskTitleTimers: Record<string, any> = {};
   private newProblemTimers: Partial<Record<'title'|'phenomenon'|'cause'|'solution'|'goal'|'template', any>> = {};
   private editProblemTimers: Partial<Record<EditProblemField, any>> = {};
+
+  // ネットワーク
+  isOnline$!: Observable<boolean>;
+  canEdit$!: Observable<boolean>;
 
   constructor(
     public prefs: PrefsService,
@@ -462,13 +482,19 @@ export class HomePage {
     public members: MembersService,
     private invites: InvitesService,
     private snack: MatSnackBar,
-    private drafts: DraftsService
-  ) {}
+    private drafts: DraftsService,
+    private network: NetworkService,
+  ) {
+    this.isOnline$ = this.network.isOnline$;
+    this.canEdit$ = combineLatest([this.members.isEditor$, this.network.isOnline$]).pipe(
+      map(([isEditor, online]) => !!isEditor && !!online)
+    );
+  }
 
   themeMode: 'light' | 'dark' | 'system' = 'system';
 
   ngOnInit() {
-    // テーマ反映（既存）
+    // テーマ反映
     this.prefs.prefs$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(p => {
@@ -492,7 +518,7 @@ export class HomePage {
       switchMap(([isIn, pid]) => (isIn && pid && pid !== 'default') ? this.problems.list(pid) : of([]))
     );
 
-    // 選択中 Problem の Doc（problemDef 表示用）
+    // 選択中 Problem の Doc
     this.selectedProblemDoc$ = combineLatest([
       this.problems$.pipe(startWith([] as Problem[])),
       this.selectedProblem$
@@ -509,7 +535,7 @@ export class HomePage {
       )
     );
 
-    // Issue → Task購読キャッシュ & ドラフト復元 & Link UI 初期化
+    // Issue → Task購読 + ドラフト復元 + Link UI 初期化
     this.issues$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(issues => {
@@ -539,7 +565,7 @@ export class HomePage {
       });
   }
 
-  // 共通パターン（TreePage / HomePage 両方）
+  // 共通 withPid
   private withPid(run: (pid: string) => void) {
     this.currentProject.projectId$.pipe(take(1)).subscribe(pid => {
       if (!pid || pid === 'default') {
@@ -548,6 +574,16 @@ export class HomePage {
       }
       run(pid);
     });
+  }
+
+  // オンライン必須ガード
+  private async requireOnline(): Promise<boolean> {
+    const online = await firstValueFrom(this.isOnline$);
+    if (!online) {
+      alert('オフラインのため、この操作は実行できません。接続を確認してください。');
+      return false;
+    }
+    return true;
   }
 
   // --- Issue タイトルのドラフト ---
@@ -586,41 +622,44 @@ export class HomePage {
   }
 
   // --- Problem 操作 ---
-  renameSelected() {
+  async renameSelected() {
     if (!this.selectedProblemId) return;
+    if (!(await this.requireOnline())) return;
     const t = prompt('New Problem title');
     if (!t?.trim()) return;
     this.withPid(pid => this.problems.update(pid, this.selectedProblemId!, { title: t.trim() }));
   }
-  removeSelected() {
+  async removeSelected() {
     if (!this.selectedProblemId) return;
-    if (!confirm('Delete this Problem (and all children)?')) return;  // ← 確認は一旦踏襲
+    if (!(await this.requireOnline())) return;
+    if (!confirm('Delete this Problem (and all children)?')) return;
     const problemId = this.selectedProblemId!;
     this.withPid(async pid => {
-      // 実削除からソフトデリートに変更
       await this.softDeleteWithUndo('problem', { projectId: pid, problemId }, '(Problem)');
-      // UI上は消えるので選択解除（Undo しても一覧に復帰する）
       this.selectedProblemId = null;
       this.selectedProblem$.next(null);
     });
   }
 
   // --- Issue 操作 ---
-  createIssue(problemId: string) {
+  async createIssue(problemId: string) {
+    if (!(await this.requireOnline())) return;
     const t = this.issueTitle.trim();
     if (!t) return;
     this.withPid(pid => this.issues.create(pid, problemId, { title: t }).then(() => {
       this.issueTitle = '';
       const key = this.draftKeyIssueTitle(this.selectedProblemId);
-      if (key) this.drafts.clear(key);     // ← クリア
+      if (key) this.drafts.clear(key);
     }));
   }
-  renameIssue(problemId: string, i: Issue) {
+  async renameIssue(problemId: string, i: Issue) {
+    if (!(await this.requireOnline())) return;
     const t = prompt('New Issue title', i.title);
     if (!t?.trim()) return;
     this.withPid(pid => this.issues.update(pid, problemId, i.id!, { title: t.trim() }));
   }
-  removeIssue(problemId: string, i: Issue) {
+  async removeIssue(problemId: string, i: Issue) {
+    if (!(await this.requireOnline())) return;
     if (!confirm(`Delete Issue "${i.title}"?`)) return;
     this.withPid(async pid => {
       await this.softDeleteWithUndo('issue', { projectId: pid, problemId, issueId: i.id! }, i.title);
@@ -635,6 +674,7 @@ export class HomePage {
     return hit?.title ?? null;
   }
   async onAddLink(problemId: string, fromIssueId: string) {
+    if (!(await this.requireOnline())) return;
     const toIssueId = this.linkTarget[fromIssueId];
     const type = this.linkTypeSel[fromIssueId] || 'relates';
     if (!toIssueId) { alert('対象 Issue を選んでください'); return; }
@@ -643,11 +683,11 @@ export class HomePage {
     if (!pid) { alert('プロジェクト未選択'); return; }
     const uid = await firstValueFrom(this.auth.uid$);
     await this.issues.addLink(pid, problemId, fromIssueId, toIssueId, type, uid || '');
-    // フォームをリセット
     this.linkTarget[fromIssueId] = null;
     this.linkTypeSel[fromIssueId] = 'relates';
   }
   async onRemoveLink(problemId: string, fromIssueId: string, toIssueId: string, type: LinkType) {
+    if (!(await this.requireOnline())) return;
     const pid = this.currentProject.getSync();
     if (!pid) { alert('プロジェクト未選択'); return; }
     await this.issues.removeLink(pid, problemId, fromIssueId, toIssueId, type);
@@ -668,21 +708,24 @@ export class HomePage {
     }, 600);
   }
 
-  createTask(problemId: string, issueId: string) {
+  async createTask(problemId: string, issueId: string) {
+    if (!(await this.requireOnline())) return;
     const t = (this.taskTitle[issueId] ?? '').trim();
     if (!t) return;
     this.withPid(pid => this.tasks.create(pid, problemId, issueId, { title: t }).then(() => {
       this.taskTitle[issueId] = '';
       const key = this.draftKeyTaskTitle(this.selectedProblemId, issueId);
-      if (key) this.drafts.clear(key);     // ← クリア
+      if (key) this.drafts.clear(key);
     }));
   }
-  renameTask(problemId: string, issueId: string, task: Task) {
+  async renameTask(problemId: string, issueId: string, task: Task) {
+    if (!(await this.requireOnline())) return;
     const t = prompt('New Task title', task.title);
     if (!t?.trim()) return;
     this.withPid(pid => this.tasks.update(pid, problemId, issueId, task.id!, { title: t.trim() }));
   }
-  removeTask(problemId: string, issueId: string, t: Task) {
+  async removeTask(problemId: string, issueId: string, t: Task) {
+    if (!(await this.requireOnline())) return;
     if (!confirm(`Delete Task "${t.title}"?`)) return;
     this.withPid(async pid => {
       await this.softDeleteWithUndo('task', { projectId: pid, problemId, issueId, taskId: t.id! }, t.title);
@@ -690,7 +733,8 @@ export class HomePage {
   }
 
   // 期日・タグ編集
-  editTaskDue(problemId: string, issueId: string, t: Task) {
+  async editTaskDue(problemId: string, issueId: string, t: Task) {
+    if (!(await this.requireOnline())) return;
     const cur = t.dueDate ?? '';
     const nxt = prompt('Due (YYYY-MM-DD、空で解除)', cur ?? '');
     if (nxt === null) return;
@@ -701,7 +745,8 @@ export class HomePage {
     }
     this.withPid(pid => this.tasks.update(pid, problemId, issueId, t.id!, { dueDate }));
   }
-  editTaskTags(problemId: string, issueId: string, t: Task) {
+  async editTaskTags(problemId: string, issueId: string, t: Task) {
+    if (!(await this.requireOnline())) return;
     const current = (t.tags ?? []).join(', ');
     const input = prompt('Tags (カンマ/スペース区切り)\n例: バグ, UI  または  バグ UI', current ?? '');
     if (input == null) return;
@@ -721,6 +766,7 @@ export class HomePage {
   isCreatingInvite = false;
 
   async createInvite() {
+    if (!(await this.requireOnline())) return;
     if (!this.inviteEmail.trim()) return;
     const pid = this.currentProject.getSync();
     if (!pid) { alert('プロジェクト未選択'); return; }
@@ -752,7 +798,6 @@ export class HomePage {
       && !!window.matchMedia
       && window.matchMedia('(prefers-color-scheme: dark)').matches;
   }
-
   get themeModeLabel(): string {
     if (this.themeMode === 'system') {
       return this.systemPrefersDark ? 'システム（ダーク）' : 'システム（ライト）';
@@ -774,7 +819,7 @@ export class HomePage {
   // 編集ダイアログ用
   editProblemOpen = false;
   editProblem = {
-    title: '',        // 表示用（編集はしない）
+    title: '',
     phenomenon: '',
     cause: '',
     solution: '',
@@ -813,10 +858,11 @@ export class HomePage {
     this.newProblem = { title: '', phenomenon: '', cause: '', solution: '', goal: '', template: 'bug' };
   }
 
-  // 追加：保存処理（validation → Firestore へ）
+  // 作成保存
   async createProblemWithDefinition() {
-    const p = this.newProblem;
+    if (!(await this.requireOnline())) return;
 
+    const p = this.newProblem;
     const errs: string[] = [];
     if (!p.title.trim()) errs.push('タイトルは必須です');
     if (!p.phenomenon.trim()) errs.push('現象は必須です');
@@ -827,7 +873,6 @@ export class HomePage {
     if (over(p.cause, 1000)) errs.push('原因は1000文字以内にしてください');
     if (over(p.solution, 1000)) errs.push('解決策は1000文字以内にしてください');
     if (over(p.goal, 500)) errs.push('目標は500文字以内にしてください');
-
     if (errs.length) { alert(errs.join('\n')); return; }
 
     const pid = this.currentProject.getSync();
@@ -845,32 +890,29 @@ export class HomePage {
     };
     const cause = p.cause.trim();
     const solution = p.solution.trim();
-    if (cause) payload.problemDef.cause = cause;         // 空なら送らない
+    if (cause) payload.problemDef.cause = cause;
     if (solution) payload.problemDef.solution = solution;
     
     const ref = await this.problems.create(pid, payload);
-
     this.selectedProblemId = (ref as any)?.id ?? null;
     this.selectedProblem$.next(this.selectedProblemId);
 
-    // 新規Problem作成ドラフトをクリア
     const kNew = this.draftKeyNewProblem(); if (kNew) this.drafts.clear(kNew);
-
     this.closeNewProblemDialog();
   }
 
-  // Firestore Timestamp / Date / null を安全に Date|null へ
+  // Firestore Timestamp → Date
   getUpdatedAtDate(p: ProblemWithDef): Date | null {
     const ts: any = p?.problemDef?.updatedAt;
     if (!ts) return null;
     try {
-      if (typeof ts.toDate === 'function') return ts.toDate(); // Firestore Timestamp
-      if (ts instanceof Date) return ts;                       // 既に Date
+      if (typeof ts.toDate === 'function') return ts.toDate();
+      if (ts instanceof Date) return ts;
     } catch {}
     return null;
   }
 
-  // Problem 定義 編集モーダルを開く
+  // 編集モーダル
   openEditProblemDef(p: ProblemWithDef) {
     this.editProblemOpen = true;
     this.editProblem = {
@@ -893,20 +935,16 @@ export class HomePage {
       }
     }
   }
+  closeEditProblemDialog() { this.editProblemOpen = false; }
 
-  // 閉じる
-  closeEditProblemDialog() {
-    this.editProblemOpen = false;
-  }
-
-  // 保存
+  // 編集保存
   async saveEditedProblemDef() {
+    if (!(await this.requireOnline())) return;
+
     const pid = this.currentProject.getSync();
     if (!pid || !this.selectedProblemId) { alert('プロジェクト/Problem未選択'); return; }
 
     const d = this.editProblem;
-
-    // 簡易バリデーション（作成時と同等）
     const errs: string[] = [];
     if (!d.phenomenon.trim()) errs.push('現象は必須です');
     if (!d.goal.trim()) errs.push('目標は必須です');
@@ -926,9 +964,7 @@ export class HomePage {
       updatedBy: uid || '',
     });
 
-    // 編集ドラフトクリア
     const kEdit = this.draftKeyEditProblem(this.selectedProblemId); if (kEdit) this.drafts.clear(kEdit);
-
     this.closeEditProblemDialog();
   }
 
@@ -962,13 +998,12 @@ export class HomePage {
     }, 600);
   }
 
-  // クラス内メソッドとして追加
   visibleLinks(raw: any, all: Issue[] | null | undefined): { issueId: string, type: LinkType }[] {
     if (!Array.isArray(raw) || !Array.isArray(all)) return [];
     const set = new Set(all.map(i => i.id));
     return raw
       .filter((v: any) => v && typeof v === 'object' && v.issueId && v.type)
-      .filter((v: any) => set.has(String(v.issueId)))          // ← 相手が存在するものだけ
+      .filter((v: any) => set.has(String(v.issueId)))
       .map((v: any) => ({ issueId: String(v.issueId), type: v.type as LinkType }));
   }
 
@@ -980,7 +1015,6 @@ export class HomePage {
   ){
     const uid = await firstValueFrom(this.auth.uid$);
 
-    // それぞれに応じて update を発行
     const patch = { softDeleted: true, deletedAt: (serverTimestamp as any)(), updatedBy: uid || '' } as any;
 
     if (kind === 'problem') {
@@ -1004,7 +1038,7 @@ export class HomePage {
     });
   }
 
-  // 破棄時のタイマー解放（任意）
+  // 破棄時のタイマー解放
   ngOnDestroy() {
     if (this.issueTitleTimer) { clearTimeout(this.issueTitleTimer); this.issueTitleTimer = null; }
     for (const k of Object.keys(this.taskTitleTimers)) {
@@ -1020,5 +1054,6 @@ export class HomePage {
     });
   }
 }
+
 
 

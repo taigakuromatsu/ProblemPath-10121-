@@ -1,3 +1,4 @@
+// src/app/project-switcher.ts
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, ChangeDetectorRef, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -8,8 +9,9 @@ import { MatButtonModule } from '@angular/material/button';
 import { ProjectDirectoryService, MyProject } from './services/project-directory.service';
 import { CurrentProjectService } from './services/current-project.service';
 import { AuthService } from './services/auth.service';
+import { NetworkService } from './services/network.service';
 
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, Observable } from 'rxjs';
 
 // Firestore
 import { Firestore } from '@angular/fire/firestore';
@@ -31,7 +33,7 @@ import { arrayRemove } from 'firebase/firestore';
         <mat-select
           [(ngModel)]="selected"
           (ngModelChange)="onChange($event)"
-          [disabled]="loading || !projects.length"
+          [disabled]="loading || !projects.length || !(isOnline$ | async)"
         >
           <mat-option *ngIf="loading" [disabled]="true">Loading...</mat-option>
           <ng-container *ngIf="!loading && projects.length; else noItems">
@@ -42,20 +44,21 @@ import { arrayRemove } from 'firebase/firestore';
         </mat-select>
       </mat-form-field>
 
-      <!-- 右側アクション -->
-      <button mat-stroked-button (click)="createProject()" [disabled]="creating || loading">
+      <!-- 右側アクション（オフライン時は抑止） -->
+      <button mat-stroked-button (click)="createProject()"
+              [disabled]="creating || loading || !(isOnline$ | async)">
         ＋ 新規作成
       </button>
 
       <button mat-stroked-button color="warn"
               (click)="deleteProject()"
-              [disabled]="deleting || loading || !canDelete">
+              [disabled]="deleting || loading || !canDelete || !(isOnline$ | async)">
         🗑️ 削除
       </button>
 
       <button mat-stroked-button
               (click)="leaveProject()"
-              [disabled]="leaving || loading || !canLeave">
+              [disabled]="leaving || loading || !canLeave || !(isOnline$ | async)">
         🚪 退出
       </button>
     </div>
@@ -68,12 +71,17 @@ import { arrayRemove } from 'firebase/firestore';
 export class ProjectSwitcher implements OnDestroy {
   projects: MyProject[] = [];
   selected: string | null = null;
+  private prevSelected: string | null = null; // オフラインで変更された時に戻す用
   loading = true;
 
   // ボタンのスピナー用
   creating = false;
   deleting = false;
   leaving  = false;
+
+  // オンライン監視
+  isOnline$!: Observable<boolean>;
+  private onlineNow = true; // 同期ガード用
 
   // “削除された側”対策：選択中プロジェクトの membership を番犬監視
   private stopMembershipWatch?: () => void;
@@ -85,9 +93,14 @@ export class ProjectSwitcher implements OnDestroy {
     private authSvc: AuthService,
     private fs: Firestore,
     private cdr: ChangeDetectorRef,
+    private network: NetworkService
   ) {}
 
   async ngOnInit() {
+    // ネットワーク状態購読
+    this.isOnline$ = this.network.isOnline$;
+    this.isOnline$.subscribe(v => { this.onlineNow = !!v; });
+
     const uid = await firstValueFrom(this.authSvc.uid$);
     this.currentUid = uid ?? null;
     if (!uid) { this.loading = false; this.cdr.markForCheck(); return; }
@@ -97,9 +110,11 @@ export class ProjectSwitcher implements OnDestroy {
     const curr = this.current.getSync();
     if (curr && this.projects.some(p => p.pid === curr)) {
       this.selected = curr;
+      this.prevSelected = curr;
       this.startMembershipWatch(curr, uid); // 起動時にも番犬
     } else {
       this.selected = this.projects[0]?.pid ?? null;
+      this.prevSelected = this.selected;
       this.current.set(this.selected);
       if (this.selected) this.startMembershipWatch(this.selected, uid);
     }
@@ -110,9 +125,26 @@ export class ProjectSwitcher implements OnDestroy {
     this.stopMembershipWatch?.();
   }
 
+  // オンライン必須（実行時ガード）
+  private async requireOnline(): Promise<boolean> {
+    const ok = await firstValueFrom(this.isOnline$);
+    if (!ok) { alert('オフラインのため操作できません'); }
+    return !!ok;
+  }
+
   onChange(pid: string | null) {
+    // 念のため実行時ガード（テンプレ側でも disable 済み）
+    if (!this.onlineNow) {
+      alert('オフラインのためプロジェクトを切り替えられません');
+      // UIを元に戻す
+      this.selected = this.prevSelected;
+      this.cdr.markForCheck();
+      return;
+    }
+
     this.current.set(pid);
     this.selected = pid;
+    this.prevSelected = pid;
     this.stopMembershipWatch?.();
     if (pid && this.currentUid) this.startMembershipWatch(pid, this.currentUid);
     this.cdr.markForCheck();
@@ -135,6 +167,7 @@ export class ProjectSwitcher implements OnDestroy {
           // 退会/削除/権限消失 → ただちに購読解除
           this.current.set(null);
           this.selected = null;
+          this.prevSelected = null;
           this.cdr.markForCheck();
           this.stopMembershipWatch?.();
         }
@@ -144,6 +177,7 @@ export class ProjectSwitcher implements OnDestroy {
         console.info('membership watch error, auto-detach current', err?.code || err);
         this.current.set(null);
         this.selected = null;
+        this.prevSelected = null;
         this.cdr.markForCheck();
         this.stopMembershipWatch?.();
       }
@@ -169,6 +203,7 @@ export class ProjectSwitcher implements OnDestroy {
         // 選択中のプロジェクトがもう無い/読めない → 即 current を解除
         this.current.set(null);
         this.selected = null;
+        this.prevSelected = null;
         this.stopMembershipWatch?.();
       }
       this.loading = false; this.cdr.markForCheck();
@@ -177,6 +212,7 @@ export class ProjectSwitcher implements OnDestroy {
 
   // ============== 新規作成（誰でも） ==============
   async createProject() {
+    if (!await this.requireOnline()) return;
     try {
       this.creating = true; this.cdr.markForCheck();
       const u = (this.authSvc as any).auth?.currentUser;
@@ -208,6 +244,7 @@ export class ProjectSwitcher implements OnDestroy {
       // 再読込＆選択
       await this.reload(u.uid);
       this.selected = pid;
+      this.prevSelected = pid;
       this.current.set(pid);
       this.stopMembershipWatch?.();
       this.startMembershipWatch(pid, u.uid);
@@ -268,6 +305,7 @@ export class ProjectSwitcher implements OnDestroy {
 
   // ============== 削除（Adminのみ） ==============
   async deleteProject() {
+    if (!await this.requireOnline()) return;
     try {
       this.deleting = true; this.cdr.markForCheck();
       const u = (this.authSvc as any).auth?.currentUser;
@@ -284,6 +322,7 @@ export class ProjectSwitcher implements OnDestroy {
       // ★ 先に自分のUIから購読を切る
       this.current.set(null);
       this.selected = null;
+      this.prevSelected = null;
       this.stopMembershipWatch?.();
       this.cdr.markForCheck();
 
@@ -339,6 +378,7 @@ export class ProjectSwitcher implements OnDestroy {
   }
 
   async leaveProject() {
+    if (!await this.requireOnline()) return;
     try {
       this.leaving = true; this.cdr.markForCheck();
       const u = (this.authSvc as any).auth?.currentUser;
@@ -357,6 +397,7 @@ export class ProjectSwitcher implements OnDestroy {
       // ★ 自分のUIから購読を切る（退出時も）
       this.current.set(null);
       this.selected = null;
+      this.prevSelected = null;
       this.stopMembershipWatch?.();
       this.cdr.markForCheck();
 

@@ -2,8 +2,8 @@
 import { Component, DestroyRef } from '@angular/core';
 import { AsyncPipe, NgFor, NgIf } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Observable, BehaviorSubject, of } from 'rxjs';
-import { switchMap, shareReplay, take, tap } from 'rxjs/operators';
+import { Observable, BehaviorSubject, of, combineLatest, firstValueFrom } from 'rxjs';
+import { switchMap, shareReplay, take, tap, map } from 'rxjs/operators';
 import { MatButtonModule } from '@angular/material/button';
 
 import { ProblemsService } from '../services/problems.service';
@@ -17,11 +17,13 @@ import { Router, ActivatedRoute, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AuthService } from '../services/auth.service';
 import { MembersService } from '../services/members.service';
+import { NetworkService } from '../services/network.service';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 @Component({
   standalone: true,
   selector: 'pp-board',
-  imports: [AsyncPipe, NgFor, NgIf, FormsModule, MatButtonModule, RouterLink, DragDropModule],
+  imports: [AsyncPipe, NgFor, NgIf, FormsModule, MatButtonModule, RouterLink, DragDropModule, MatSnackBarModule],
   template: `
     <div style="display:flex; align-items:center; gap:12px; margin:8px 0 16px;">
       <a mat-stroked-button routerLink="/tree">← Treeへ</a>
@@ -43,6 +45,10 @@ import { MembersService } from '../services/members.service';
       <ng-template #signinB>
         <button mat-raised-button color="primary" type="button" (click)="auth.signInWithGoogle()">Sign in</button>
       </ng-template>
+    </div>
+
+    <div *ngIf="!(isOnline$ | async)" style="margin:-8px 0 12px; font-size:12px; color:#b45309; background:#fffbeb; border:1px solid #fcd34d; padding:6px 8px; border-radius:6px;">
+      現在オフラインです。カードの移動・更新・担当者変更はできません。
     </div>
 
     <div *ngIf="!selectedProblemId" style="opacity:.7">Problemを選ぶとカンバンを表示します。</div>
@@ -76,6 +82,7 @@ import { MembersService } from '../services/members.service';
                     [id]="listId(col, i.id!)"
                     (cdkDropListDropped)="onListDrop($event, pid, i.id!)"
                     [cdkDropListEnterPredicate]="canEnter"
+                    [cdkDropListDisabled]="!(canEdit$ | async)"
                     style="border:1px solid #e5e7eb; border-radius:10px; padding:8px; margin-bottom:10px; min-height:60px; transition:border-color .15s ease;"
                     (cdkDropListEntered)="($event.container.element.nativeElement.style.borderColor = '#9ca3af')"
                     (cdkDropListExited)="($event.container.element.nativeElement.style.borderColor = '#e5e7eb')"
@@ -90,8 +97,8 @@ import { MembersService } from '../services/members.service';
                     <div *ngFor="let t of ts; trackBy: trackTask"
                          cdkDrag
                          [cdkDragData]="{ task: t, issueId: i.id }"
-                         [cdkDragDisabled]="isBusy(t.id!)"
-                         [style.opacity]="isBusy(t.id!) ? 0.5 : 1"
+                         [cdkDragDisabled]="isBusy(t.id!) || !(canEdit$ | async)"
+                         [style.opacity]="(isBusy(t.id!) || !(canEdit$ | async)) ? 0.5 : 1"
                          style="border:1px solid #ddd; border-radius:8px; padding:8px; margin-bottom:6px;">
                       <ng-template cdkDragPreview>
                         <div style="border:1px solid #bbb; border-radius:8px; padding:8px; background:#fff;">
@@ -106,7 +113,7 @@ import { MembersService } from '../services/members.service';
 
                       <div style="display:flex; gap:6px; margin-top:6px;" *ngIf="isEditor$ | async">
                         <button mat-button *ngFor="let next of statusCols"
-                                [disabled]="next===t.status || isBusy(t.id!)"
+                                [disabled]="next===t.status || isBusy(t.id!) || !(canEdit$ | async)"
                                 (click)="setTaskStatus(pid, i.id!, t, next)">
                           {{ statusLabel[next] }}
                         </button>
@@ -115,13 +122,13 @@ import { MembersService } from '../services/members.service';
                       <div style="display:flex; gap:6px; margin-top:6px;" *ngIf="auth.loggedIn$ | async">
                         <button mat-stroked-button
                                 *ngIf="(members.isEditor$ | async) && !(t.assignees || []).includes((auth.uid$ | async) || '')"
-                                [disabled]="isBusy(t.id!)"
+                                [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
                                 (click)="assignToMe(pid, i.id!, t)">
                           Assign to me
                         </button>
                         <button mat-stroked-button
                                 *ngIf="(members.isEditor$ | async) && (t.assignees || []).includes((auth.uid$ | async) || '')"
-                                [disabled]="isBusy(t.id!)"
+                                [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
                                 (click)="unassignMe(pid, i.id!, t)">
                           Unassign
                         </button>
@@ -169,6 +176,8 @@ export class BoardPage {
   };
 
   isEditor$!: Observable<boolean>;
+  isOnline$!: Observable<boolean>;
+  canEdit$!: Observable<boolean>;
 
   // DnD中のタスク制御
   busyTaskIds = new Set<string>();
@@ -188,21 +197,27 @@ export class BoardPage {
     private destroyRef: DestroyRef,
     public auth: AuthService,
     private currentProject: CurrentProjectService,
-    public members: MembersService
+    public members: MembersService,
+    private network: NetworkService,
+    private snack: MatSnackBar,
   ) {
     this.isEditor$ = this.members.isEditor$;
+    this.isOnline$ = this.network.isOnline$;
+    this.canEdit$ = combineLatest([this.members.isEditor$, this.network.isOnline$]).pipe(
+      map(([isEditor, online]) => !!isEditor && !!online)
+    );
   }
 
   allowDnD = false;
 
   ngOnInit() {
     // 問題一覧：pidに追従
-        this.problems$ = this.currentProject.projectId$.pipe(
-          switchMap(pid => (pid && pid !== 'default') ? this.problems.list(pid) : of([]))
+    this.problems$ = this.currentProject.projectId$.pipe(
+      switchMap(pid => (pid && pid !== 'default') ? this.problems.list(pid) : of([]))
     );
 
-    // ログインでDnD有効/無効
-    this.isEditor$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(v => {
+    // DnD 有効/無効（編集可否に追従）
+    this.canEdit$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(v => {
       this.allowDnD = !!v;
     });
 
@@ -218,7 +233,7 @@ export class BoardPage {
     this.route.queryParamMap
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(m => {
-        const pid = m.get('pid');           // ← problemId を 'pid' で引き回している既存仕様
+        const pid = m.get('pid'); // problemId を 'pid' で引き回し
         this.selectedProblemId = pid;
         this.selectedProblem$.next(pid);
       });
@@ -290,14 +305,14 @@ export class BoardPage {
     t: Task,
     status: 'not_started'|'in_progress'|'done'
   ) {
-    if (!this.allowDnD) return;
+    if (!(await this.requireCanEdit())) return;
     if (!t.id || this.isBusy(t.id)) return;
     const progress = status === 'done' ? 100 : status === 'not_started' ? 0 : 50;
 
     this.busyTaskIds.add(t.id);
     this.withPid(async pid => {
       try { await this.tasks.update(pid, problemId, issueId, t.id!, { status, progress }); }
-      catch (e) { console.error(e); alert('更新に失敗しました'); }
+      catch (e) { console.error(e); this.snack.open('更新に失敗しました', 'OK', { duration: 3000 }); }
       finally { this.busyTaskIds.delete(t.id!); }
     });
   }
@@ -307,7 +322,8 @@ export class BoardPage {
     problemId: string,
     issueId: string
   ) {
-    if (!this.allowDnD) return;
+    if (!(await this.requireCanEdit())) return;
+
     // ID -> status を復元（dl-<status>-<issueId>）
     const parse = (id: string) => id.split('-')[1] as 'not_started'|'in_progress'|'done';
     const srcStatus  = parse(ev.previousContainer.id);
@@ -331,14 +347,13 @@ export class BoardPage {
     if (!moved?.id || this.isBusy(moved.id)) return;
 
     const id = moved.id!;
-
     const progress = destStatus === 'done' ? 100 : destStatus === 'not_started' ? 0 : 50;
 
     // 1) ステータス更新
     this.busyTaskIds.add(moved.id);
     this.withPid(async pid => {
       try { await this.tasks.update(pid, problemId, issueId, id, { status: destStatus, progress }); }
-      catch (e) { console.error(e); alert('ステータス更新に失敗しました'); }
+      catch (e) { console.error(e); this.snack.open('ステータス更新に失敗しました', 'OK', { duration: 3000 }); }
       finally { this.busyTaskIds.delete(id); }
     });
 
@@ -350,13 +365,14 @@ export class BoardPage {
   }
 
   private async persistOrder(problemId: string, issueId: string, arr: Task[]) {
+    if (!(await this.requireCanEdit())) return;
     const updates = arr.map((t, idx) => ({ id: t.id!, order: (idx + 1) * 10 }));
     this.withPid(async pid => {
       for (const u of updates) {
         if (!u.id || this.isBusy(u.id)) continue;
         this.busyTaskIds.add(u.id);
         try { await this.tasks.update(pid, problemId, issueId, u.id, { order: u.order }); }
-        catch (e) { console.error(e); alert('順序の保存に失敗しました'); }
+        catch (e) { console.error(e); this.snack.open('順序の保存に失敗しました', 'OK', { duration: 3000 }); }
         finally { this.busyTaskIds.delete(u.id); }
       }
     });
@@ -386,51 +402,67 @@ export class BoardPage {
     this.taskCountSubs.clear();
   }
 
-// 共通パターン（TreePage / HomePage 両方）
-private withPid(run: (pid: string) => void) {
-  this.currentProject.projectId$.pipe(take(1)).subscribe(pid => {
-    if (!pid || pid === 'default') {
-      alert('プロジェクト未選択');
-      return;
-    }
-    run(pid);
-  });
-}
+  // 共通パターン（TreePage / HomePage 両方）
+  private withPid(run: (pid: string) => void) {
+    this.currentProject.projectId$.pipe(take(1)).subscribe(pid => {
+      if (!pid || pid === 'default') {
+        this.snack.open('プロジェクト未選択', 'OK', { duration: 2500 });
+        return;
+      }
+      run(pid);
+    });
+  }
 
   // BoardPage クラス内に追加
-private bucket(s: Task['status'] | undefined): 'not_started'|'in_progress'|'done' {
-  if (s === 'done') return 'done';
-  if (s === 'in_progress' || s === 'review_wait' || s === 'fixing') return 'in_progress';
-  return 'not_started'; // undefined もここへ
-}
+  private bucket(s: Task['status'] | undefined): 'not_started'|'in_progress'|'done' {
+    if (s === 'done') return 'done';
+    if (s === 'in_progress' || s === 'review_wait' || s === 'fixing') return 'in_progress';
+    return 'not_started'; // undefined もここへ
+  }
 
-tasksByStatus(tasks: Task[] | null | undefined, status: 'not_started'|'in_progress'|'done'): Task[] {
-  return (tasks ?? []).filter(t => this.bucket(t.status) === status);
-}
+  tasksByStatus(tasks: Task[] | null | undefined, status: 'not_started'|'in_progress'|'done'): Task[] {
+    return (tasks ?? []).filter(t => this.bucket(t.status) === status);
+  }
 
-assignToMe(problemId: string, issueId: string, t: Task) {
-  const sub = this.auth.uid$.pipe(take(1)).subscribe(uid => {
+  async assignToMe(problemId: string, issueId: string, t: Task) {
+    if (!(await this.requireCanEdit())) return;
+    const uid = await firstValueFrom(this.auth.uid$);
     if (!uid || !t.id) return;
     this.withPid(async pid => {
       this.busyTaskIds.add(t.id!);
       try { await this.tasks.assignMe(pid, problemId, issueId, t.id!, uid); }
-      catch (e) { console.error(e); alert('Assignに失敗しました'); }
+      catch (e) { console.error(e); this.snack.open('Assignに失敗しました', 'OK', { duration: 3000 }); }
       finally { this.busyTaskIds.delete(t.id!); }
     });
-  });
-}
+  }
 
-unassignMe(problemId: string, issueId: string, t: Task) {
-  const sub = this.auth.uid$.pipe(take(1)).subscribe(uid => {
+  async unassignMe(problemId: string, issueId: string, t: Task) {
+    if (!(await this.requireCanEdit())) return;
+    const uid = await firstValueFrom(this.auth.uid$);
     if (!uid || !t.id) return;
     this.withPid(async pid => {
       this.busyTaskIds.add(t.id!);
       try { await this.tasks.unassignMe(pid, problemId, issueId, t.id!, uid); }
-      catch (e) { console.error(e); alert('Unassignに失敗しました'); }
+      catch (e) { console.error(e); this.snack.open('Unassignに失敗しました', 'OK', { duration: 3000 }); }
       finally { this.busyTaskIds.delete(t.id!); }
     });
-  });
+  }
+
+  // ===== オンライン/権限ガード =====
+  private async requireCanEdit(): Promise<boolean> {
+    const [isEditor, online] = await Promise.all([
+      firstValueFrom(this.members.isEditor$),
+      firstValueFrom(this.isOnline$),
+    ]);
+    if (!isEditor) {
+      this.snack.open('編集権限がありません（Viewer）', 'OK', { duration: 3000 });
+      return false;
+    }
+    if (!online) {
+      this.snack.open('オフラインのため編集できません', 'OK', { duration: 3000 });
+      return false;
+    }
+    return true;
+  }
 }
 
-
-}

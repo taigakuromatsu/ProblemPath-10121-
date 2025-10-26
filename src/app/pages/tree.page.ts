@@ -22,6 +22,7 @@ import { map, switchMap, take, tap } from 'rxjs/operators';
 import { MembersService } from '../services/members.service';
 import { CommentsService, CommentDoc, CommentTarget } from '../services/comments.service';
 import { DraftsService } from '../services/drafts.service';
+import { NetworkService } from '../services/network.service'; // ★ 追加
 
 type Status = 'not_started' | 'in_progress' | 'done';
 
@@ -141,8 +142,8 @@ function dlog(...args: any[]) {
                 💬 Comments ({{ commentCounts[node.id] ?? 0 }})
               </button>
 
-              <button mat-button type="button" (click)="renameProblemNode(node)" *ngIf="isEditor$ | async">Rename</button>
-              <button mat-button type="button" color="warn" (click)="removeProblemNode(node)" *ngIf="isEditor$ | async">Delete</button>
+              <button mat-button type="button" (click)="renameProblemNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">Rename</button>
+              <button mat-button type="button" color="warn" (click)="removeProblemNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">Delete</button>
             </div>
             <div *ngIf="tree.isExpanded(node)"><ng-container matTreeNodeOutlet></ng-container></div>
           </mat-nested-tree-node>
@@ -161,8 +162,8 @@ function dlog(...args: any[]) {
                 💬 Comments ({{ commentCounts[node.id] ?? 0 }})
               </button>
 
-              <button mat-button type="button" (click)="renameIssueNode(node)" *ngIf="isEditor$ | async">Rename</button>
-              <button mat-button type="button" color="warn" (click)="removeIssueNode(node)" *ngIf="isEditor$ | async">Delete</button>
+              <button mat-button type="button" (click)="renameIssueNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">Rename</button>
+              <button mat-button type="button" color="warn" (click)="removeIssueNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">Delete</button>
             </div>
             <div *ngIf="tree.isExpanded(node)"><ng-container matTreeNodeOutlet></ng-container></div>
           </mat-nested-tree-node>
@@ -191,8 +192,8 @@ function dlog(...args: any[]) {
                 💬 Comments ({{ commentCounts[node.id] ?? 0 }})
               </button>
 
-              <button mat-button type="button" (click)="renameTaskNode(node)" *ngIf="isEditor$ | async">Rename</button>
-              <button mat-button type="button" color="warn" (click)="removeTaskNode(node)" *ngIf="isEditor$ | async">Delete</button>
+              <button mat-button type="button" (click)="renameTaskNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">Rename</button>
+              <button mat-button type="button" color="warn" (click)="removeTaskNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">Delete</button>
             </div>
           </mat-nested-tree-node>
 
@@ -208,15 +209,20 @@ function dlog(...args: any[]) {
             💬 Comments — {{ selectedNode.kind }}: {{ selectedNode.name }}
           </div>
 
+          <div *ngIf="!(isOnline$ | async)" style="margin-bottom:6px; font-size:12px; color:#b45309; background:#fffbeb; border:1px solid #fcd34d; padding:6px 8px; border-radius:6px;">
+            現在オフラインです。コメントの投稿・編集・削除はできません。
+          </div>
+
           <div style="display:flex; gap:6px; margin-bottom:8px;">
-            <textarea [(ngModel)]="newBody" 
-                      (ngModelChange)="onCommentBodyChange($event)" 
+            <textarea [(ngModel)]="newBody"
+                      (ngModelChange)="onCommentBodyChange($event)"
+                      [disabled]="!(canEdit$ | async)"
                       rows="3" style="flex:1; width:100%;"
                       placeholder="コメントを入力…"></textarea>
           </div>
           <div style="display:flex; gap:8px; margin-bottom:12px;">
             <button mat-raised-button color="primary" (click)="editingId ? saveEdit() : addComment()"
-                    [disabled]="!newBody.trim()">
+                    [disabled]="!newBody.trim() || !(canEdit$ | async)">
               {{ editingId ? '更新' : '投稿' }}
             </button>
             <button mat-stroked-button (click)="cancelEdit()" *ngIf="editingId">キャンセル</button>
@@ -233,8 +239,8 @@ function dlog(...args: any[]) {
 
               <div style="display:flex; gap:6px; margin-top:6px;"
                    *ngIf="(members.isAdmin$ | async) || ((auth.uid$ | async) === c.authorId)">
-                <button mat-button (click)="startEdit(c.id!, c.body)">編集</button>
-                <button mat-button color="warn" (click)="deleteComment(c.id!)">削除</button>
+                <button mat-button (click)="startEdit(c.id!, c.body)" [disabled]="!(canEdit$ | async)">編集</button>
+                <button mat-button color="warn" (click)="deleteComment(c.id!)" [disabled]="!(canEdit$ | async)">削除</button>
               </div>
             </div>
           </div>
@@ -292,6 +298,8 @@ export class TreePage {
   loadError: string | null = null;
 
   isEditor$!: Observable<boolean>;
+  isOnline$!: Observable<boolean>;              // ★ 追加
+  canEdit$!: Observable<boolean>;               // ★ 追加
 
   selectedNode: TreeNode | null = null;
   comments$?: Observable<CommentDoc[]>;
@@ -317,44 +325,56 @@ export class TreePage {
     public members: MembersService,
     private comments: CommentsService,
     private snack: MatSnackBar,
-    private drafts: DraftsService
+    private drafts: DraftsService,
+    private network: NetworkService,     // ★ 追加
   ) {
     this.isEditor$ = this.members.isEditor$;
+    // フィールド初期化は constructor で代入（順序問題を避ける）
+    this.isOnline$ = this.network.isOnline$;
+    this.canEdit$ = combineLatest([this.members.isEditor$, this.network.isOnline$]).pipe(
+      map(([isEditor, online]) => !!isEditor && !!online)
+    );
   }
 
-  // ===== 現行メソッドを保持 =====
-  renameProblemNode(node: { id: string; name: string }) {
+  // ===== 既存メソッド（ガード追加） =====
+  async renameProblemNode(node: { id: string; name: string }) {
+    if (!(await this.requireCanEdit())) return;
     const t = prompt('New Problem title', node.name);
     if (!t?.trim()) return;
     this.withPid(pid => this.problems.update(pid, node.id, { title: t.trim() }));
   }
-  removeProblemNode(node: { id: string; name: string }) {
+  async removeProblemNode(node: { id: string; name: string }) {
+    if (!(await this.requireCanEdit())) return;
     if (!confirm(`Delete "${node.name}"?`)) return;
     this.withPid(async pid => {
       await this.softDeleteWithUndo('problem', { projectId: pid, problemId: node.id }, '(Problem)');
     });
   }
-  renameIssueNode(node: { id: string; name: string; parentId?: string }) {
+  async renameIssueNode(node: { id: string; name: string; parentId?: string }) {
     if (!node.parentId) return;
+    if (!(await this.requireCanEdit())) return;
     const t = prompt('New Issue title', node.name);
     if (!t?.trim()) return;
     this.withPid(pid => this.issues.update(pid, node.parentId!, node.id, { title: t.trim() }));
   }
-  removeIssueNode(node: { id: string; name: string; parentId?: string }) {
+  async removeIssueNode(node: { id: string; name: string; parentId?: string }) {
     if (!node.parentId) return;
+    if (!(await this.requireCanEdit())) return;
     if (!confirm(`Delete Issue "${node.name}"?`)) return;
     this.withPid(async pid => {
       await this.softDeleteWithUndo('issue', { projectId: pid, problemId: node.parentId!, issueId: node.id }, node.name);
     });
   }
-  renameTaskNode(node: { id: string; name: string; parentProblemId?: string; parentIssueId?: string }) { 
+  async renameTaskNode(node: { id: string; name: string; parentProblemId?: string; parentIssueId?: string }) { 
     if (!node.parentProblemId || !node.parentIssueId) return; 
+    if (!(await this.requireCanEdit())) return;
     const t = prompt('New Task title', node.name); 
     if (!t?.trim()) return; 
     this.withPid(pid => this.tasks.update(pid, node.parentProblemId!, node.parentIssueId!, node.id, { title: t.trim() }));
   }
   async removeTaskNode(node: { id: string; name: string; parentProblemId?: string; parentIssueId?: string }) {
     if (!node.parentProblemId || !node.parentIssueId || this.isBusyId(node.id)) return;
+    if (!(await this.requireCanEdit())) return;
     if (!confirm(`Delete Task "${node.name}"?`)) return;
     this.busyIds.add(node.id!);
     this.withPid(async pid => {
@@ -667,16 +687,16 @@ export class TreePage {
   }  
 
   // ---- ヘルパー ----
-// 共通パターン（TreePage / HomePage 両方）
-private withPid(run: (pid: string) => void) {
-  this.currentProject.projectId$.pipe(take(1)).subscribe(pid => {
-    if (!pid || pid === 'default') {
-      alert('プロジェクト未選択');
-      return;
-    }
-    run(pid);
-  });
-}
+  // 共通パターン（TreePage / HomePage 両方）
+  private withPid(run: (pid: string) => void) {
+    this.currentProject.projectId$.pipe(take(1)).subscribe(pid => {
+      if (!pid || pid === 'default') {
+        alert('プロジェクト未選択');
+        return;
+      }
+      run(pid);
+    });
+  }
 
   // コメントターゲットを算出
   private async toTarget(node: TreeNode): Promise<CommentTarget | null> {
@@ -706,6 +726,7 @@ private withPid(run: (pid: string) => void) {
   }
 
   async deleteComment(id: string){
+    if (!(await this.requireCanEdit())) return;
     const node = this.selectedNode; if (!node) return;
     const t = await this.toTarget(node); if (!t) return;
     await this.comments.delete(t, id);
@@ -730,108 +751,124 @@ private withPid(run: (pid: string) => void) {
     this.commentCounts[node.id] = Math.max(0, prev + delta);
   }
 
-  // TreePage クラス内に追加
+  // ---- コメントのドラフト（既存） ----
+  private commentSaveTimer: any = null;
 
-private commentSaveTimer: any = null;
+  private draftKeyFor(node: TreeNode | null): string | null {
+    const pid = this.currentProject.getSync();
+    if (!pid || !node) return null;
+    if (node.kind === 'problem') return `comment:${pid}:p:${node.id}`;
+    if (node.kind === 'issue')   return `comment:${pid}:i:${node.parentId}:${node.id}`;
+    return `comment:${pid}:t:${node.parentProblemId}:${node.parentIssueId}:${node.id}`;
+  }
 
-private draftKeyFor(node: TreeNode | null): string | null {
-  const pid = this.currentProject.getSync();
-  if (!pid || !node) return null;
-  if (node.kind === 'problem') return `comment:${pid}:p:${node.id}`;
-  if (node.kind === 'issue')   return `comment:${pid}:i:${node.parentId}:${node.id}`;
-  return `comment:${pid}:t:${node.parentProblemId}:${node.parentIssueId}:${node.id}`;
-}
+  onCommentBodyChange(val: string) {
+    // 600ms デバウンスで localStorage に保存
+    if (this.commentSaveTimer) clearTimeout(this.commentSaveTimer);
+    this.commentSaveTimer = setTimeout(() => {
+      const key = this.draftKeyFor(this.selectedNode);
+      if (key) this.drafts.set(key, (val ?? '').toString());
+    }, 600);
+  }
 
-onCommentBodyChange(val: string) {
-  // 600ms デバウンスで localStorage に保存
-  if (this.commentSaveTimer) clearTimeout(this.commentSaveTimer);
-  this.commentSaveTimer = setTimeout(() => {
-    const key = this.draftKeyFor(this.selectedNode);
-    if (key) this.drafts.set(key, (val ?? '').toString());
-  }, 600);
-}
+  // コメントターゲット切替時に下書き復元を提案
+  async openComments(node: TreeNode){
+    this.selectedNode = node;
+    const t = await this.toTarget(node);
+    if (!t) { this.comments$ = undefined; return; }
+    this.comments$ = this.comments.listByTarget(t, 50);
+    this.editingId = null;
 
-// コメントターゲット切替時に下書き復元を提案
-async openComments(node: TreeNode){
-  this.selectedNode = node;
-  const t = await this.toTarget(node);
-  if (!t) { this.comments$ = undefined; return; }
-  this.comments$ = this.comments.listByTarget(t, 50);
-  this.editingId = null;
+    // 一旦クリアしてからドラフト復元
+    this.newBody = '';
 
-  // ★ここを追加：一旦クリアしてからドラフト復元
-  this.newBody = '';
-
-  const key = this.draftKeyFor(node);
-  if (key) {
-    const rec = this.drafts.get<string>(key);
-    if (rec && (!this.newBody || this.newBody.trim() === '')) {
-      const ok = confirm('未投稿の下書きが見つかりました。復元しますか？');
-      if (ok) this.newBody = rec.value || '';
+    const key = this.draftKeyFor(node);
+    if (key) {
+      const rec = this.drafts.get<string>(key);
+      if (rec && (!this.newBody || this.newBody.trim() === '')) {
+        const ok = confirm('未投稿の下書きが見つかりました。復元しますか？');
+        if (ok) this.newBody = rec.value || '';
+      }
     }
   }
-}
 
-// 投稿/更新/キャンセル時はドラフトを消す
-async addComment(){
-  if (this.commentSaveTimer) { clearTimeout(this.commentSaveTimer); this.commentSaveTimer = null; }
-  if (!this.selectedNode || !this.newBody.trim()) return;
-  const t = await this.toTarget(this.selectedNode); if (!t) return;
+  // 投稿/更新/キャンセル時はドラフトを消す
+  async addComment(){
+    if (!(await this.requireCanEdit())) return;
+    if (this.commentSaveTimer) { clearTimeout(this.commentSaveTimer); this.commentSaveTimer = null; }
+    if (!this.selectedNode || !this.newBody.trim()) return;
+    const t = await this.toTarget(this.selectedNode); if (!t) return;
 
-  const uid = await firstValueFrom(this.auth.uid$);
-  const name = await firstValueFrom(this.auth.displayName$);
-  await this.comments.create(t, this.newBody.trim(), uid!, name || undefined);
-  const key = this.draftKeyFor(this.selectedNode);
-  if (key) this.drafts.clear(key);    // ← クリア
-  this.newBody = '';
-}
+    const uid = await firstValueFrom(this.auth.uid$);
+    const name = await firstValueFrom(this.auth.displayName$);
+    await this.comments.create(t, this.newBody.trim(), uid!, name || undefined);
+    const key = this.draftKeyFor(this.selectedNode);
+    if (key) this.drafts.clear(key);    // ← クリア
+    this.newBody = '';
+  }
 
-async saveEdit(){
-  if (this.commentSaveTimer) { clearTimeout(this.commentSaveTimer); this.commentSaveTimer = null; }
-  const node = this.selectedNode; if (!node || !this.editingId || !this.newBody.trim()) return;
-  const t = await this.toTarget(node); if (!t) return;
-  await this.comments.update(t, this.editingId, this.newBody.trim());
-  const key = this.draftKeyFor(node);
-  if (key) this.drafts.clear(key);    // ← クリア
-  this.editingId = null;
-  this.newBody = '';
-}
+  async saveEdit(){
+    if (!(await this.requireCanEdit())) return;
+    if (this.commentSaveTimer) { clearTimeout(this.commentSaveTimer); this.commentSaveTimer = null; }
+    const node = this.selectedNode; if (!node || !this.editingId || !this.newBody.trim()) return;
+    const t = await this.toTarget(node); if (!t) return;
+    await this.comments.update(t, this.editingId, this.newBody.trim());
+    const key = this.draftKeyFor(node);
+    if (key) this.drafts.clear(key);    // ← クリア
+    this.editingId = null;
+    this.newBody = '';
+  }
 
-cancelEdit(){
-  this.editingId = null;
-  // 編集キャンセルでもドラフトは保持したいので newBody は残す／クリアしない
-}
-
+  cancelEdit(){
+    this.editingId = null;
+    // 編集キャンセルでもドラフトは保持したいので newBody は残す／クリアしない
+  }
 
   /** 共通：ソフトデリート → Undo 5秒 */
-private async softDeleteWithUndo(
-  kind: 'problem'|'issue'|'task',
-  path: { projectId: string; problemId?: string; issueId?: string; taskId?: string },
-  titleForToast: string
-){
-  const uid = await firstValueFrom(this.auth.uid$);
-  const patch = { softDeleted: true, deletedAt: serverTimestamp() as any, updatedBy: uid || '' } as any;
+  private async softDeleteWithUndo(
+    kind: 'problem'|'issue'|'task',
+    path: { projectId: string; problemId?: string; issueId?: string; taskId?: string },
+    titleForToast: string
+  ){
+    const uid = await firstValueFrom(this.auth.uid$);
+    const patch = { softDeleted: true, deletedAt: serverTimestamp() as any, updatedBy: uid || '' } as any;
 
-  if (kind === 'problem') {
-    await this.problems.update(path.projectId, path.problemId!, patch);
-  } else if (kind === 'issue') {
-    await this.issues.update(path.projectId, path.problemId!, path.issueId!, patch);
-  } else {
-    await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, patch);
+    if (kind === 'problem') {
+      await this.problems.update(path.projectId, path.problemId!, patch);
+    } else if (kind === 'issue') {
+      await this.issues.update(path.projectId, path.problemId!, path.issueId!, patch);
+    } else {
+      await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, patch);
+    }
+
+    const ref = this.snack.open(`「${titleForToast}」を削除しました`, '元に戻す', { duration: 5000 });
+    ref.onAction().subscribe(async () => {
+      const unpatch = { softDeleted: false, deletedAt: null, updatedBy: uid || '' } as any;
+      if (kind === 'problem') {
+        await this.problems.update(path.projectId, path.problemId!, unpatch);
+      } else if (kind === 'issue') {
+        await this.issues.update(path.projectId, path.problemId!, path.issueId!, unpatch);
+      } else {
+        await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, unpatch);
+      }
+    });
   }
 
-  const ref = this.snack.open(`「${titleForToast}」を削除しました`, '元に戻す', { duration: 5000 });
-  ref.onAction().subscribe(async () => {
-    const unpatch = { softDeleted: false, deletedAt: null, updatedBy: uid || '' } as any;
-    if (kind === 'problem') {
-      await this.problems.update(path.projectId, path.problemId!, unpatch);
-    } else if (kind === 'issue') {
-      await this.issues.update(path.projectId, path.problemId!, path.issueId!, unpatch);
-    } else {
-      await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, unpatch);
+  // ===== オンライン/権限ガード =====
+  private async requireCanEdit(): Promise<boolean> {
+    const [isEditor, online] = await Promise.all([
+      firstValueFrom(this.members.isEditor$),
+      firstValueFrom(this.isOnline$),
+    ]);
+    if (!isEditor) {
+      this.snack.open('編集権限がありません（Viewer）', 'OK', { duration: 3000 });
+      return false;
     }
-  });
-}
-
+    if (!online) {
+      this.snack.open('オフラインのため編集できません', 'OK', { duration: 3000 });
+      return false;
+    }
+    return true;
+  }
 }
 
