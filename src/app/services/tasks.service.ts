@@ -29,7 +29,9 @@ const OPEN_STATUSES: Status[] = ['not_started','in_progress','review_wait','fixi
 @Injectable({ providedIn: 'root' })
 export class TasksService {
 
-  constructor(private fs: Firestore) {}
+  constructor(
+    private fs: Firestore,
+  ) {}
 
   private base(projectId: string) { return `projects/${projectId}/problems`; }
 
@@ -56,7 +58,8 @@ export class TasksService {
       nativeOrderBy('order', 'asc'),
       nativeOrderBy('createdAt', 'asc')
     );
-    return rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>;
+    return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>)
+      .pipe(map((xs: any[]) => xs.filter((t: any) => !t?.softDeleted)));
   }
 
   // ===== 作成 =====

@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Firestore } from '@angular/fire/firestore';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { Issue, IssueLink, LinkType } from '../models/types';
 
 const DEBUG_ISSUES = false; // ← 必要な時だけ true に
@@ -53,22 +53,16 @@ export class IssuesService {
     if (DEBUG_ISSUES) console.debug(...args);
   }
 
-  // ──────────────────────────────────────────────────────────────
-  // listByProblem
-  // ──────────────────────────────────────────────────────────────
+  // listByProblem()
   listByProblem(projectId: string, problemId: string): Observable<Issue[]> {
-    this.dlog('[IssuesService.listByProblem]', {
-      pid: projectId, problemId,
-      path: `${this.base(projectId)}/${problemId}/issues`
-    });
+    this.dlog('[IssuesService.listByProblem]', { pid: projectId, problemId, path: `${this.base(projectId)}/${problemId}/issues` });
     const colRef = nativeCollection(this.fs as any, `${this.base(projectId)}/${problemId}/issues`);
     const q = nativeQuery(colRef, nativeOrderBy('order', 'asc'), nativeOrderBy('createdAt', 'asc'));
-    return rxCollectionData(q as any, { idField: 'id' }) as Observable<Issue[]>;
+    return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Issue[]>)
+      .pipe(map((xs: any[]) => xs.filter((i: any) => !i?.softDeleted)));
   }
 
-  // ──────────────────────────────────────────────────────────────
   // create
-  // ──────────────────────────────────────────────────────────────
   async create(projectId: string, problemId: string, i: Partial<Issue>): Promise<any> {
     const colRef = nativeCollection(this.fs as any, `${this.base(projectId)}/${problemId}/issues`);
     const order = i.order ?? await this.nextOrder(projectId, problemId);
@@ -92,9 +86,7 @@ export class IssuesService {
     });
   }
 
-  // ──────────────────────────────────────────────────────────────
   // 並べ替え
-  // ──────────────────────────────────────────────────────────────
   async moveUp(projectId: string, problemId: string, id: string, currentOrder: number): Promise<void> {
     const colRef = nativeCollection(this.fs as any, `${this.base(projectId)}/${problemId}/issues`);
     const q = nativeQuery(colRef, nativeWhere('order', '<', currentOrder), nativeOrderBy('order', 'desc'), nativeLimit(1));
@@ -123,9 +115,7 @@ export class IssuesService {
     await batch.commit();
   }
 
-  // ──────────────────────────────────────────────────────────────
   // update
-  // ──────────────────────────────────────────────────────────────
   async update(projectId: string, problemId: string, id: string, patch: Partial<Issue>): Promise<void> {
     const ref = nativeDoc(this.fs as any, this.issueDocPath(projectId, problemId, id));
 
@@ -139,9 +129,7 @@ export class IssuesService {
     return nativeUpdateDoc(ref, body) as any;
   }
 
-  // ──────────────────────────────────────────────────────────────
   // remove（tasks 再帰削除→issue削除）
-  // ──────────────────────────────────────────────────────────────
   async remove(projectId: string, problemId: string, id: string): Promise<void> {
     const tasksPath = `${this.base(projectId)}/${problemId}/issues/${id}/tasks`;
     await this.deleteCollection(tasksPath);
@@ -150,9 +138,7 @@ export class IssuesService {
     return nativeDeleteDoc(issueRef) as any;
   }
 
-  // ──────────────────────────────────────────────────────────────
   // 相互リンク（同一 Problem 内）: 追加 / 削除
-  // ──────────────────────────────────────────────────────────────
 
   // 逆方向マップ
   private static readonly INVERSE: Record<LinkType, LinkType> = {
@@ -224,9 +210,7 @@ export class IssuesService {
     await commitIfAny(batch);
   }
 
-  // ──────────────────────────────────────────────────────────────
   // 内部ユーティリティ
-  // ──────────────────────────────────────────────────────────────
   private async nextOrder(projectId: string, problemId: string): Promise<number> {
     const colRef = nativeCollection(this.fs as any, `${this.base(projectId)}/${problemId}/issues`);
     const q = nativeQuery(colRef, nativeOrderBy('order', 'desc'), nativeLimit(1));

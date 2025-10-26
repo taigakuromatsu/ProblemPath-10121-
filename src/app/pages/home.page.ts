@@ -21,6 +21,8 @@ import { InvitesService, InviteRole } from '../services/invites.service';
 import { Problem, Issue, Task } from '../models/types';
 import { Observable, BehaviorSubject, of, combineLatest, firstValueFrom } from 'rxjs';
 import { switchMap, take, map, startWith } from 'rxjs/operators';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { serverTimestamp } from 'firebase/firestore';
 
 // ---- このページ専用の拡張型（ProblemにproblemDefをオプションで持たせる）----
 type ProblemWithDef = Problem & {
@@ -436,7 +438,8 @@ export class HomePage {
     public auth: AuthService,
     private currentProject: CurrentProjectService,
     public members: MembersService,
-    private invites: InvitesService
+    private invites: InvitesService,
+    private snack: MatSnackBar
   ) {}
 
   themeMode: 'light' | 'dark' | 'system' = 'system';
@@ -537,14 +540,17 @@ private withPid(run: (pid: string) => void) {
   }
   removeSelected() {
     if (!this.selectedProblemId) return;
-    if (!confirm('Delete this Problem (and all children)?')) return;
-    const id = this.selectedProblemId!;
+    if (!confirm('Delete this Problem (and all children)?')) return;  // ← 確認は一旦踏襲
+    const problemId = this.selectedProblemId!;
     this.withPid(async pid => {
-      await this.problems.remove(pid, id);
+      // 実削除からソフトデリートに変更
+      await this.softDeleteWithUndo('problem', { projectId: pid, problemId }, '(Problem)');
+      // UI上は消えるので選択解除（Undo しても一覧に復帰する）
       this.selectedProblemId = null;
       this.selectedProblem$.next(null);
     });
   }
+  
 
   // --- Issue 操作 ---
   createIssue(problemId: string) {
@@ -559,8 +565,11 @@ private withPid(run: (pid: string) => void) {
   }
   removeIssue(problemId: string, i: Issue) {
     if (!confirm(`Delete Issue "${i.title}"?`)) return;
-    this.withPid(pid => this.issues.remove(pid, problemId, i.id!));
+    this.withPid(async pid => {
+      await this.softDeleteWithUndo('issue', { projectId: pid, problemId, issueId: i.id! }, i.title);
+    });
   }
+  
 
   // === Link 操作 ===
   linkLabel(t: LinkType) { return LINK_TYPE_LABEL[t] || t; }
@@ -604,10 +613,13 @@ private withPid(run: (pid: string) => void) {
     if (!t?.trim()) return;
     this.withPid(pid => this.tasks.update(pid, problemId, issueId, task.id!, { title: t.trim() }));
   }
-  removeTask(problemId: string, issueId: string, task: Task) {
-    if (!confirm(`Delete Task "${task.title}"?`)) return;
-    this.withPid(pid => this.tasks.remove(pid, problemId, issueId, task.id!));
+  removeTask(problemId: string, issueId: string, t: Task) {
+    if (!confirm(`Delete Task "${t.title}"?`)) return;
+    this.withPid(async pid => {
+      await this.softDeleteWithUndo('task', { projectId: pid, problemId, issueId, taskId: t.id! }, t.title);
+    });
   }
+  
 
   // 期日・タグ編集
   editTaskDue(problemId: string, issueId: string, t: Task) {
@@ -829,6 +841,41 @@ visibleLinks(raw: any, all: Issue[] | null | undefined): { issueId: string, type
     .filter(v => v && typeof v === 'object' && v.issueId && v.type)
     .filter(v => set.has(String(v.issueId)))          // ← 相手が存在するものだけ
     .map(v => ({ issueId: String(v.issueId), type: v.type as LinkType }));
+}
+
+
+// home.page.ts 内クラスに追加
+
+/** 共通：ソフトデリート → Undo 5秒 */
+private async softDeleteWithUndo(
+  kind: 'problem'|'issue'|'task',
+  path: { projectId: string; problemId?: string; issueId?: string; taskId?: string },
+  title: string
+){
+  const uid = await firstValueFrom(this.auth.uid$);
+
+  // それぞれに応じて update を発行
+  const patch = { softDeleted: true, deletedAt: (serverTimestamp as any)(), updatedBy: uid || '' } as any;
+
+  if (kind === 'problem') {
+    await this.problems.update(path.projectId, path.problemId!, patch);
+  } else if (kind === 'issue') {
+    await this.issues.update(path.projectId, path.problemId!, path.issueId!, patch);
+  } else {
+    await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, patch);
+  }
+
+  const ref = this.snack.open(`「${title}」を削除しました`, '元に戻す', { duration: 5000 });
+  ref.onAction().subscribe(async () => {
+    const unpatch = { softDeleted: false, deletedAt: null, updatedBy: uid || '' } as any;
+    if (kind === 'problem') {
+      await this.problems.update(path.projectId, path.problemId!, unpatch);
+    } else if (kind === 'issue') {
+      await this.issues.update(path.projectId, path.problemId!, path.issueId!, unpatch);
+    } else {
+      await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, unpatch);
+    }
+  });
 }
 
 }

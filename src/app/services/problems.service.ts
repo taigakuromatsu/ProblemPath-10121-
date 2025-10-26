@@ -1,7 +1,8 @@
 import { Injectable } from '@angular/core';
 import { Firestore } from '@angular/fire/firestore';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { Problem } from '../models/types';
+
 
 const DEBUG_PROBLEMS = false; // ← 必要な時だけ true に
 
@@ -35,18 +36,14 @@ export class ProblemsService {
     if (DEBUG_PROBLEMS) console.debug(...args);
   }
 
-  // -------- list --------
+  // list()
   list(projectId: string): Observable<Problem[]> {
     this.dlog('[ProblemsService.list]', { pid: projectId, path: this.colPath(projectId) });
     const colRef = nativeCollection(this.fs as any, this.colPath(projectId));
-    const q = nativeQuery(
-      colRef,
-      nativeOrderBy('order', 'asc'),
-      nativeOrderBy('createdAt', 'asc')
-    );
-    return rxCollectionData(q as any, { idField: 'id' }) as Observable<Problem[]>;
+    const q = nativeQuery(colRef, nativeOrderBy('order', 'asc'), nativeOrderBy('createdAt', 'asc'));
+    return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Problem[]>)
+      .pipe(map((xs: any[]) => xs.filter((p: any) => !p?.softDeleted)));
   }
-
 
   // -------- nextOrder（内部ユーティリティ） --------
   private async nextOrder(projectId: string): Promise<number> {
