@@ -21,6 +21,7 @@ import { Observable, combineLatest, of, firstValueFrom } from 'rxjs';
 import { map, switchMap, take, tap } from 'rxjs/operators';
 import { MembersService } from '../services/members.service';
 import { CommentsService, CommentDoc, CommentTarget } from '../services/comments.service';
+import { DraftsService } from '../services/drafts.service';
 
 type Status = 'not_started' | 'in_progress' | 'done';
 
@@ -208,7 +209,9 @@ function dlog(...args: any[]) {
           </div>
 
           <div style="display:flex; gap:6px; margin-bottom:8px;">
-            <textarea [(ngModel)]="newBody" rows="3" style="flex:1; width:100%;"
+            <textarea [(ngModel)]="newBody" 
+                      (ngModelChange)="onCommentBodyChange($event)" 
+                      rows="3" style="flex:1; width:100%;"
                       placeholder="コメントを入力…"></textarea>
           </div>
           <div style="display:flex; gap:8px; margin-bottom:12px;">
@@ -313,7 +316,8 @@ export class TreePage {
     private currentProject: CurrentProjectService,
     public members: MembersService,
     private comments: CommentsService,
-    private snack: MatSnackBar
+    private snack: MatSnackBar,
+    private drafts: DraftsService
   ) {
     this.isEditor$ = this.members.isEditor$;
   }
@@ -424,6 +428,7 @@ export class TreePage {
     this.subForTree?.unsubscribe();
     this.issueSubs.forEach(s => s.unsubscribe());
     this.taskSubs.forEach(s => s.unsubscribe());
+    if (this.commentSaveTimer) { clearTimeout(this.commentSaveTimer); this.commentSaveTimer = null; }
   }
 
   dataSource = new MatTreeNestedDataSource<TreeNode>();
@@ -694,47 +699,10 @@ private withPid(run: (pid: string) => void) {
   }
 
   // ノード選択→コメント購読
-  async openComments(node: TreeNode){
-    this.selectedNode = node;
-    const t = await this.toTarget(node);
-    if (!t) {
-      this.comments$ = undefined;
-      return;
-    }
-    this.comments$ = this.comments.listByTarget(t, 50);
-    this.newBody = '';
-    this.editingId = null;
-  }
 
   startEdit(id: string, current: string){
     this.editingId = id;
     this.newBody = current;
-  }
-
-  async addComment(){
-    if (!this.selectedNode || !this.newBody.trim()) return;
-    const t = await this.toTarget(this.selectedNode); if (!t) return;
-
-    const uid = await firstValueFrom(this.auth.uid$);
-    const name = await firstValueFrom(this.auth.displayName$);
-    await this.comments.create(t, this.newBody.trim(), uid!, name || undefined);
-    this.newBody = '';
-
-    // バッジ即時反映
-    this.bumpCount(this.selectedNode, +1);
-  }
-
-  async saveEdit(){
-    const node = this.selectedNode; if (!node || !this.editingId || !this.newBody.trim()) return;
-    const t = await this.toTarget(node); if (!t) return;
-    await this.comments.update(t, this.editingId, this.newBody.trim());
-    this.editingId = null;
-    this.newBody = '';
-  }
-
-  cancelEdit(){
-    this.editingId = null;
-    this.newBody = '';
   }
 
   async deleteComment(id: string){
@@ -761,6 +729,79 @@ private withPid(run: (pid: string) => void) {
     const prev = this.commentCounts[node.id] ?? 0;
     this.commentCounts[node.id] = Math.max(0, prev + delta);
   }
+
+  // TreePage クラス内に追加
+
+private commentSaveTimer: any = null;
+
+private draftKeyFor(node: TreeNode | null): string | null {
+  const pid = this.currentProject.getSync();
+  if (!pid || !node) return null;
+  if (node.kind === 'problem') return `comment:${pid}:p:${node.id}`;
+  if (node.kind === 'issue')   return `comment:${pid}:i:${node.parentId}:${node.id}`;
+  return `comment:${pid}:t:${node.parentProblemId}:${node.parentIssueId}:${node.id}`;
+}
+
+onCommentBodyChange(val: string) {
+  // 600ms デバウンスで localStorage に保存
+  if (this.commentSaveTimer) clearTimeout(this.commentSaveTimer);
+  this.commentSaveTimer = setTimeout(() => {
+    const key = this.draftKeyFor(this.selectedNode);
+    if (key) this.drafts.set(key, (val ?? '').toString());
+  }, 600);
+}
+
+// コメントターゲット切替時に下書き復元を提案
+async openComments(node: TreeNode){
+  this.selectedNode = node;
+  const t = await this.toTarget(node);
+  if (!t) { this.comments$ = undefined; return; }
+  this.comments$ = this.comments.listByTarget(t, 50);
+  this.editingId = null;
+
+  // ★ここを追加：一旦クリアしてからドラフト復元
+  this.newBody = '';
+
+  const key = this.draftKeyFor(node);
+  if (key) {
+    const rec = this.drafts.get<string>(key);
+    if (rec && (!this.newBody || this.newBody.trim() === '')) {
+      const ok = confirm('未投稿の下書きが見つかりました。復元しますか？');
+      if (ok) this.newBody = rec.value || '';
+    }
+  }
+}
+
+// 投稿/更新/キャンセル時はドラフトを消す
+async addComment(){
+  if (this.commentSaveTimer) { clearTimeout(this.commentSaveTimer); this.commentSaveTimer = null; }
+  if (!this.selectedNode || !this.newBody.trim()) return;
+  const t = await this.toTarget(this.selectedNode); if (!t) return;
+
+  const uid = await firstValueFrom(this.auth.uid$);
+  const name = await firstValueFrom(this.auth.displayName$);
+  await this.comments.create(t, this.newBody.trim(), uid!, name || undefined);
+  const key = this.draftKeyFor(this.selectedNode);
+  if (key) this.drafts.clear(key);    // ← クリア
+  this.newBody = '';
+}
+
+async saveEdit(){
+  if (this.commentSaveTimer) { clearTimeout(this.commentSaveTimer); this.commentSaveTimer = null; }
+  const node = this.selectedNode; if (!node || !this.editingId || !this.newBody.trim()) return;
+  const t = await this.toTarget(node); if (!t) return;
+  await this.comments.update(t, this.editingId, this.newBody.trim());
+  const key = this.draftKeyFor(node);
+  if (key) this.drafts.clear(key);    // ← クリア
+  this.editingId = null;
+  this.newBody = '';
+}
+
+cancelEdit(){
+  this.editingId = null;
+  // 編集キャンセルでもドラフトは保持したいので newBody は残す／クリアしない
+}
+
 
   /** 共通：ソフトデリート → Undo 5秒 */
 private async softDeleteWithUndo(

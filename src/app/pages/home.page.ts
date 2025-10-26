@@ -5,9 +5,9 @@ import { AsyncPipe, NgFor, NgIf, JsonPipe, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSelectModule } from '@angular/material/select';
+import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-
 import { PrefsService } from '../services/prefs.service';
 import { ThemeService } from '../services/theme.service';
 import { ProblemsService } from '../services/problems.service';
@@ -17,12 +17,12 @@ import { CurrentProjectService } from '../services/current-project.service';
 import { AuthService } from '../services/auth.service';
 import { MembersService } from '../services/members.service';
 import { InvitesService, InviteRole } from '../services/invites.service';
-
 import { Problem, Issue, Task } from '../models/types';
 import { Observable, BehaviorSubject, of, combineLatest, firstValueFrom } from 'rxjs';
 import { switchMap, take, map, startWith } from 'rxjs/operators';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { serverTimestamp } from 'firebase/firestore';
+import { DraftsService } from '../services/drafts.service';
 
 // ---- このページ専用の拡張型（ProblemにproblemDefをオプションで持たせる）----
 type ProblemWithDef = Problem & {
@@ -35,6 +35,8 @@ type ProblemWithDef = Problem & {
     updatedBy?: string;
   };
 };
+
+type EditProblemField = 'phenomenon' | 'cause' | 'solution' | 'goal';
 
 // ---- リンク種別（types.ts を更新していなくても使えるようローカル定義）----
 type LinkType = 'relates' | 'duplicate' | 'blocks' | 'depends_on' | 'same_cause';
@@ -51,7 +53,7 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
   selector: 'pp-home',
   imports: [
     RouterLink, AsyncPipe, NgFor, NgIf, JsonPipe, DatePipe, FormsModule,
-    MatButtonModule, MatSelectModule, MatIconModule, MatSnackBarModule
+    MatButtonModule, MatSelectModule, MatFormFieldModule, MatIconModule, MatSnackBarModule
   ],
   template: `
     <h2>Home</h2>
@@ -114,12 +116,17 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
             <div style="display:grid; gap:10px;">
               <div>
                 <label>タイトル（必須）</label>
-                <input [(ngModel)]="newProblem.title" style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;" />
+                <input
+                  [(ngModel)]="newProblem.title"
+                  (ngModelChange)="onNewProblemChange('title', newProblem.title)"
+                  style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;" />
               </div>
 
               <div style="display:flex; gap:8px; align-items:center;">
                 <label>テンプレ</label>
-                <select [(ngModel)]="newProblem.template" (ngModelChange)="applyProblemTemplate($event)">
+                <select
+                  [(ngModel)]="newProblem.template"
+                  (ngModelChange)="applyProblemTemplate($event); onNewProblemChange('template', newProblem.template)">
                   <option value="bug">バグ/不具合</option>
                   <option value="improve">改善/パフォーマンス</option>
                 </select>
@@ -128,6 +135,7 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
               <div>
                 <label>現象（必須）</label>
                 <textarea rows="3" [(ngModel)]="newProblem.phenomenon"
+                          (ngModelChange)="onNewProblemChange('phenomenon', newProblem.phenomenon)"
                           style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
                 <div style="opacity:.7; font-size:12px; margin-top:4px;">
                   何が起きている？再現手順・ユーザー影響・発生率 など
@@ -137,18 +145,21 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
               <div>
                 <label>原因（任意）</label>
                 <textarea rows="3" [(ngModel)]="newProblem.cause"
+                          (ngModelChange)="onNewProblemChange('cause', newProblem.cause)"
                           style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
               </div>
 
               <div>
                 <label>解決策（任意）</label>
                 <textarea rows="3" [(ngModel)]="newProblem.solution"
+                          (ngModelChange)="onNewProblemChange('solution', newProblem.solution)"
                           style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
               </div>
 
               <div>
                 <label>目標（必須）</label>
                 <textarea rows="2" [(ngModel)]="newProblem.goal"
+                          (ngModelChange)="onNewProblemChange('goal', newProblem.goal)"
                           style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
                 <div style="opacity:.7; font-size:12px; margin-top:4px;">
                   どうなればOK？KPI・条件（例：p50 1.5秒 / エラー率0.1%未満）
@@ -183,24 +194,28 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
               <div>
                 <label>現象（必須）</label>
                 <textarea rows="3" [(ngModel)]="editProblem.phenomenon"
+                          (ngModelChange)="onEditProblemChange('phenomenon', editProblem.phenomenon)"
                           style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
               </div>
 
               <div>
                 <label>原因（任意）</label>
                 <textarea rows="3" [(ngModel)]="editProblem.cause"
+                          (ngModelChange)="onEditProblemChange('cause', editProblem.cause)"
                           style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
               </div>
 
               <div>
                 <label>解決策（任意）</label>
                 <textarea rows="3" [(ngModel)]="editProblem.solution"
+                          (ngModelChange)="onEditProblemChange('solution', editProblem.solution)"
                           style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
               </div>
 
               <div>
                 <label>目標（必須）</label>
                 <textarea rows="2" [(ngModel)]="editProblem.goal"
+                          (ngModelChange)="onEditProblemChange('goal', editProblem.goal)"
                           style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
               </div>
 
@@ -260,7 +275,8 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
           <form *ngIf="members.isEditor$ | async"
                 (ngSubmit)="createIssue(pid)"
                 style="display:flex; gap:8px; align-items:center; margin:8px 0;">
-            <input [(ngModel)]="issueTitle" name="issueTitle" placeholder="New Issue title" required />
+            <input [(ngModel)]="issueTitle" name="issueTitle" placeholder="New Issue title"
+                   required (ngModelChange)="onIssueTitleChange($event)" />
             <button mat-raised-button color="primary" type="submit">＋ Add Issue</button>
           </form>
 
@@ -298,7 +314,6 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
                 <ng-template #noLinks><span style="opacity:.7;">（リンクなし）</span></ng-template>
               </div>
 
-
               <!-- Link add form (Editor only) -->
               <form *ngIf="members.isEditor$ | async"
                     (ngSubmit)="onAddLink(pid, i.id!)"
@@ -319,7 +334,8 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
               <form *ngIf="members.isEditor$ | async"
                     (ngSubmit)="createTask(pid, i.id!)"
                     style="display:flex; gap:6px; margin:6px 0 4px 0;">
-                <input [(ngModel)]="taskTitle[i.id!]" name="taskTitle-{{i.id}}" placeholder="New Task title" required />
+                <input [(ngModel)]="taskTitle[i.id!]" name="taskTitle-{{i.id}}" placeholder="New Task title"
+                       required (ngModelChange)="onTaskTitleChange(i.id!, taskTitle[i.id!])" />
                 <button mat-stroked-button type="submit">＋ Add Task</button>
               </form>
 
@@ -428,6 +444,12 @@ export class HomePage {
   linkTarget: Record<string, string | null> = {};      // issueId -> targetIssueId
   linkTypeSel: Record<string, LinkType> = {};          // issueId -> selected type
 
+  // --- Draft timers (Issue/Task/Problem new & edit) ---
+  private issueTitleTimer: any = null;
+  private taskTitleTimers: Record<string, any> = {};
+  private newProblemTimers: Partial<Record<'title'|'phenomenon'|'cause'|'solution'|'goal'|'template', any>> = {};
+  private editProblemTimers: Partial<Record<EditProblemField, any>> = {};
+
   constructor(
     public prefs: PrefsService,
     private theme: ThemeService,
@@ -439,7 +461,8 @@ export class HomePage {
     private currentProject: CurrentProjectService,
     public members: MembersService,
     private invites: InvitesService,
-    private snack: MatSnackBar
+    private snack: MatSnackBar,
+    private drafts: DraftsService
   ) {}
 
   themeMode: 'light' | 'dark' | 'system' = 'system';
@@ -486,7 +509,7 @@ export class HomePage {
       )
     );
 
-    // Issue → Task購読キャッシュ
+    // Issue → Task購読キャッシュ & ドラフト復元 & Link UI 初期化
     this.issues$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(issues => {
@@ -501,7 +524,14 @@ export class HomePage {
             switchMap(pid => (pid && pid !== 'default') ? this.tasks.listByIssue(pid, this.selectedProblemId!, id) : of([]))
           );
 
-          // link UI 初期値
+          // Task タイトルのドラフト復元
+          const keyT = this.draftKeyTaskTitle(this.selectedProblemId, id);
+          const recT = keyT ? this.drafts.get<string>(keyT) : null;
+          if (recT && !this.taskTitle[id]) {
+            this.taskTitle[id] = recT.value || '';
+          }
+
+          // Link UI 初期値
           if (!this.linkTypeSel[id]) this.linkTypeSel[id] = 'relates';
           if (!(id in this.linkTarget)) this.linkTarget[id] = null;
         }
@@ -509,16 +539,30 @@ export class HomePage {
       });
   }
 
- // 共通パターン（TreePage / HomePage 両方）
-private withPid(run: (pid: string) => void) {
-  this.currentProject.projectId$.pipe(take(1)).subscribe(pid => {
-    if (!pid || pid === 'default') {
-      alert('プロジェクト未選択');
-      return;
-    }
-    run(pid);
-  });
-}
+  // 共通パターン（TreePage / HomePage 両方）
+  private withPid(run: (pid: string) => void) {
+    this.currentProject.projectId$.pipe(take(1)).subscribe(pid => {
+      if (!pid || pid === 'default') {
+        alert('プロジェクト未選択');
+        return;
+      }
+      run(pid);
+    });
+  }
+
+  // --- Issue タイトルのドラフト ---
+  private draftKeyIssueTitle(problemId: string | null): string | null {
+    const pid = this.currentProject.getSync();
+    if (!pid || !problemId) return null;
+    return `issueTitle:${pid}:${problemId}`;
+  }
+  onIssueTitleChange(val: string) {
+    if (this.issueTitleTimer) clearTimeout(this.issueTitleTimer);
+    this.issueTitleTimer = setTimeout(() => {
+      const key = this.draftKeyIssueTitle(this.selectedProblemId);
+      if (key) this.drafts.set(key, (val ?? '').toString());
+    }, 600);
+  }
 
   onSelectProblem(val: string | null) {
     if (val === this.NEW_OPTION_VALUE) {
@@ -529,6 +573,16 @@ private withPid(run: (pid: string) => void) {
     }
     this.selectedProblemId = val;
     this.selectedProblem$.next(val);
+
+    // Issue タイトルのドラフト復元
+    const key = this.draftKeyIssueTitle(val);
+    if (key) {
+      const rec = this.drafts.get<string>(key);
+      if (rec && !this.issueTitle) {
+        const ok = confirm('Issue タイトルの下書きがあります。復元しますか？');
+        if (ok) this.issueTitle = rec.value || '';
+      }
+    }
   }
 
   // --- Problem 操作 ---
@@ -550,13 +604,16 @@ private withPid(run: (pid: string) => void) {
       this.selectedProblem$.next(null);
     });
   }
-  
 
   // --- Issue 操作 ---
   createIssue(problemId: string) {
     const t = this.issueTitle.trim();
     if (!t) return;
-    this.withPid(pid => this.issues.create(pid, problemId, { title: t }).then(() => this.issueTitle = ''));
+    this.withPid(pid => this.issues.create(pid, problemId, { title: t }).then(() => {
+      this.issueTitle = '';
+      const key = this.draftKeyIssueTitle(this.selectedProblemId);
+      if (key) this.drafts.clear(key);     // ← クリア
+    }));
   }
   renameIssue(problemId: string, i: Issue) {
     const t = prompt('New Issue title', i.title);
@@ -569,17 +626,14 @@ private withPid(run: (pid: string) => void) {
       await this.softDeleteWithUndo('issue', { projectId: pid, problemId, issueId: i.id! }, i.title);
     });
   }
-  
 
   // === Link 操作 ===
   linkLabel(t: LinkType) { return LINK_TYPE_LABEL[t] || t; }
-
   titleByIssueId(all: Issue[], id?: string | null): string | null {
     if (!id) return null;
     const hit = all?.find(x => x.id === id);
     return hit?.title ?? null;
   }
-
   async onAddLink(problemId: string, fromIssueId: string) {
     const toIssueId = this.linkTarget[fromIssueId];
     const type = this.linkTypeSel[fromIssueId] || 'relates';
@@ -593,19 +647,34 @@ private withPid(run: (pid: string) => void) {
     this.linkTarget[fromIssueId] = null;
     this.linkTypeSel[fromIssueId] = 'relates';
   }
-
   async onRemoveLink(problemId: string, fromIssueId: string, toIssueId: string, type: LinkType) {
     const pid = this.currentProject.getSync();
     if (!pid) { alert('プロジェクト未選択'); return; }
     await this.issues.removeLink(pid, problemId, fromIssueId, toIssueId, type);
   }
 
-  // --- Task 操作 ---
+  // --- Task タイトルのドラフト ---
+  private draftKeyTaskTitle(problemId: string | null, issueId: string): string | null {
+    const pid = this.currentProject.getSync();
+    if (!pid || !problemId) return null;
+    return `taskTitle:${pid}:${problemId}:${issueId}`;
+  }
+  onTaskTitleChange(issueId: string, val: string) {
+    const k = this.draftKeyTaskTitle(this.selectedProblemId, issueId);
+    if (!k) return;
+    if (this.taskTitleTimers[issueId]) clearTimeout(this.taskTitleTimers[issueId]);
+    this.taskTitleTimers[issueId] = setTimeout(() => {
+      this.drafts.set(k, (val ?? '').toString());
+    }, 600);
+  }
+
   createTask(problemId: string, issueId: string) {
     const t = (this.taskTitle[issueId] ?? '').trim();
     if (!t) return;
     this.withPid(pid => this.tasks.create(pid, problemId, issueId, { title: t }).then(() => {
       this.taskTitle[issueId] = '';
+      const key = this.draftKeyTaskTitle(this.selectedProblemId, issueId);
+      if (key) this.drafts.clear(key);     // ← クリア
     }));
   }
   renameTask(problemId: string, issueId: string, task: Task) {
@@ -619,7 +688,6 @@ private withPid(run: (pid: string) => void) {
       await this.softDeleteWithUndo('task', { projectId: pid, problemId, issueId, taskId: t.id! }, t.title);
     });
   }
-  
 
   // 期日・タグ編集
   editTaskDue(problemId: string, issueId: string, t: Task) {
@@ -727,6 +795,18 @@ private withPid(run: (pid: string) => void) {
   openNewProblemDialog() {
     this.newProblemOpen = true;
     this.applyProblemTemplate(this.newProblem.template);
+
+    // ドラフト復元
+    const key = this.draftKeyNewProblem();
+    if (key) {
+      const rec = this.drafts.get<string>(key);
+      if (rec) {
+        const ok = confirm('未投稿の Problem 作成ドラフトがあります。復元しますか？');
+        if (ok) {
+          try { this.newProblem = { ...this.newProblem, ...JSON.parse(rec.value || '{}') }; } catch {}
+        }
+      }
+    }
   }
   closeNewProblemDialog() {
     this.newProblemOpen = false;
@@ -768,10 +848,14 @@ private withPid(run: (pid: string) => void) {
     if (cause) payload.problemDef.cause = cause;         // 空なら送らない
     if (solution) payload.problemDef.solution = solution;
     
-    const ref = await this.problems.create(pid, payload);  
+    const ref = await this.problems.create(pid, payload);
 
     this.selectedProblemId = (ref as any)?.id ?? null;
     this.selectedProblem$.next(this.selectedProblemId);
+
+    // 新規Problem作成ドラフトをクリア
+    const kNew = this.draftKeyNewProblem(); if (kNew) this.drafts.clear(kNew);
+
     this.closeNewProblemDialog();
   }
 
@@ -796,6 +880,18 @@ private withPid(run: (pid: string) => void) {
       solution: p.problemDef?.solution ?? '',
       goal: p.problemDef?.goal ?? '',
     };
+
+    // 編集ドラフト復元
+    const key = this.draftKeyEditProblem(this.selectedProblemId);
+    if (key) {
+      const rec = this.drafts.get<string>(key);
+      if (rec) {
+        const ok = confirm('Problem 編集の下書きがあります。復元しますか？');
+        if (ok) {
+          try { this.editProblem = { ...this.editProblem, ...JSON.parse(rec.value || '{}') }; } catch {}
+        }
+      }
+    }
   }
 
   // 閉じる
@@ -830,54 +926,99 @@ private withPid(run: (pid: string) => void) {
       updatedBy: uid || '',
     });
 
+    // 編集ドラフトクリア
+    const kEdit = this.draftKeyEditProblem(this.selectedProblemId); if (kEdit) this.drafts.clear(kEdit);
+
     this.closeEditProblemDialog();
   }
 
-  // クラス内メソッドとして追加
-visibleLinks(raw: any, all: Issue[] | null | undefined): { issueId: string, type: LinkType }[] {
-  if (!Array.isArray(raw) || !Array.isArray(all)) return [];
-  const set = new Set(all.map(i => i.id));
-  return raw
-    .filter(v => v && typeof v === 'object' && v.issueId && v.type)
-    .filter(v => set.has(String(v.issueId)))          // ← 相手が存在するものだけ
-    .map(v => ({ issueId: String(v.issueId), type: v.type as LinkType }));
-}
-
-
-// home.page.ts 内クラスに追加
-
-/** 共通：ソフトデリート → Undo 5秒 */
-private async softDeleteWithUndo(
-  kind: 'problem'|'issue'|'task',
-  path: { projectId: string; problemId?: string; issueId?: string; taskId?: string },
-  title: string
-){
-  const uid = await firstValueFrom(this.auth.uid$);
-
-  // それぞれに応じて update を発行
-  const patch = { softDeleted: true, deletedAt: (serverTimestamp as any)(), updatedBy: uid || '' } as any;
-
-  if (kind === 'problem') {
-    await this.problems.update(path.projectId, path.problemId!, patch);
-  } else if (kind === 'issue') {
-    await this.issues.update(path.projectId, path.problemId!, path.issueId!, patch);
-  } else {
-    await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, patch);
+  // --- Problem 作成/編集ドラフト: キー関数 ---
+  private draftKeyNewProblem(): string | null {
+    const pid = this.currentProject.getSync();
+    if (!pid) return null;
+    return `problem:new:${pid}`;
+  }
+  private draftKeyEditProblem(problemId: string | null): string | null {
+    const pid = this.currentProject.getSync();
+    if (!pid || !problemId) return null;
+    return `problem:edit:${pid}:${problemId}`;
   }
 
-  const ref = this.snack.open(`「${title}」を削除しました`, '元に戻す', { duration: 5000 });
-  ref.onAction().subscribe(async () => {
-    const unpatch = { softDeleted: false, deletedAt: null, updatedBy: uid || '' } as any;
-    if (kind === 'problem') {
-      await this.problems.update(path.projectId, path.problemId!, unpatch);
-    } else if (kind === 'issue') {
-      await this.issues.update(path.projectId, path.problemId!, path.issueId!, unpatch);
-    } else {
-      await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, unpatch);
-    }
-  });
-}
+  // --- Problem 作成ドラフト: 変更ハンドラ ---
+  onNewProblemChange<K extends keyof typeof this.newProblem>(field: K, _val: (typeof this.newProblem)[K]) {
+    const key = this.draftKeyNewProblem(); if (!key) return;
+    if (this.newProblemTimers[field]) clearTimeout(this.newProblemTimers[field]);
+    this.newProblemTimers[field] = setTimeout(() => {
+      this.drafts.set(key, JSON.stringify(this.newProblem));
+    }, 600);
+  }
 
+  // --- Problem 編集ドラフト: 変更ハンドラ ---
+  onEditProblemChange<K extends EditProblemField>(field: K, _val: (typeof this.editProblem)[K]) {
+    const key = this.draftKeyEditProblem(this.selectedProblemId); if (!key) return;
+    if (this.editProblemTimers[field]) clearTimeout(this.editProblemTimers[field]!);
+    this.editProblemTimers[field] = setTimeout(() => {
+      this.drafts.set(key, JSON.stringify(this.editProblem));
+    }, 600);
+  }
+
+  // クラス内メソッドとして追加
+  visibleLinks(raw: any, all: Issue[] | null | undefined): { issueId: string, type: LinkType }[] {
+    if (!Array.isArray(raw) || !Array.isArray(all)) return [];
+    const set = new Set(all.map(i => i.id));
+    return raw
+      .filter((v: any) => v && typeof v === 'object' && v.issueId && v.type)
+      .filter((v: any) => set.has(String(v.issueId)))          // ← 相手が存在するものだけ
+      .map((v: any) => ({ issueId: String(v.issueId), type: v.type as LinkType }));
+  }
+
+  /** 共通：ソフトデリート → Undo 5秒 */
+  private async softDeleteWithUndo(
+    kind: 'problem'|'issue'|'task',
+    path: { projectId: string; problemId?: string; issueId?: string; taskId?: string },
+    title: string
+  ){
+    const uid = await firstValueFrom(this.auth.uid$);
+
+    // それぞれに応じて update を発行
+    const patch = { softDeleted: true, deletedAt: (serverTimestamp as any)(), updatedBy: uid || '' } as any;
+
+    if (kind === 'problem') {
+      await this.problems.update(path.projectId, path.problemId!, patch);
+    } else if (kind === 'issue') {
+      await this.issues.update(path.projectId, path.problemId!, path.issueId!, patch);
+    } else {
+      await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, patch);
+    }
+
+    const ref = this.snack.open(`「${title}」を削除しました`, '元に戻す', { duration: 5000 });
+    ref.onAction().subscribe(async () => {
+      const unpatch = { softDeleted: false, deletedAt: null, updatedBy: uid || '' } as any;
+      if (kind === 'problem') {
+        await this.problems.update(path.projectId, path.problemId!, unpatch);
+      } else if (kind === 'issue') {
+        await this.issues.update(path.projectId, path.problemId!, path.issueId!, unpatch);
+      } else {
+        await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, unpatch);
+      }
+    });
+  }
+
+  // 破棄時のタイマー解放（任意）
+  ngOnDestroy() {
+    if (this.issueTitleTimer) { clearTimeout(this.issueTitleTimer); this.issueTitleTimer = null; }
+    for (const k of Object.keys(this.taskTitleTimers)) {
+      if (this.taskTitleTimers[k]) { clearTimeout(this.taskTitleTimers[k]); this.taskTitleTimers[k] = null; }
+    }
+    Object.keys(this.newProblemTimers).forEach(k => {
+      const kk = k as keyof typeof this.newProblemTimers;
+      if (this.newProblemTimers[kk]) clearTimeout(this.newProblemTimers[kk]!);
+    });
+    Object.keys(this.editProblemTimers).forEach(k => {
+      const kk = k as keyof typeof this.editProblemTimers;
+      if (this.editProblemTimers[kk]) clearTimeout(this.editProblemTimers[kk]!);
+    });
+  }
 }
 
 
