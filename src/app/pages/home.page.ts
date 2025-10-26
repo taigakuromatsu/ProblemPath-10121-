@@ -51,7 +51,7 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
   selector: 'pp-home',
   imports: [
     RouterLink, AsyncPipe, NgFor, NgIf, JsonPipe, DatePipe, FormsModule,
-    MatButtonModule, MatSelectModule, MatIconModule
+    MatButtonModule, MatSelectModule, MatIconModule, MatSnackBarModule
   ],
   template: `
     <h2>Home</h2>

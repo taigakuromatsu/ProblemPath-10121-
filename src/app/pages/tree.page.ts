@@ -2,23 +2,21 @@
 import { Component } from '@angular/core';
 import { NgIf, NgFor, AsyncPipe, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-
 import { ProblemsService } from '../services/problems.service';
 import { IssuesService } from '../services/issues.service';
 import { TasksService } from '../services/tasks.service';
 import { CurrentProjectService } from '../services/current-project.service';
 import { AuthService } from '../services/auth.service';
-
 import { MatButtonModule } from '@angular/material/button';
 import { MatTreeNestedDataSource } from '@angular/material/tree';
 import { NestedTreeControl } from '@angular/cdk/tree';
 import { MatTreeModule } from '@angular/material/tree';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
-
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { serverTimestamp } from 'firebase/firestore';
 import { NgChartsModule } from 'ng2-charts';
 import { ChartConfiguration } from 'chart.js';
-
 import { Observable, combineLatest, of, firstValueFrom } from 'rxjs';
 import { map, switchMap, take, tap } from 'rxjs/operators';
 import { MembersService } from '../services/members.service';
@@ -48,7 +46,7 @@ function dlog(...args: any[]) {
   imports: [
     NgIf, NgFor, AsyncPipe, DatePipe, FormsModule,
     MatButtonModule, MatTreeModule, MatIconModule, MatTooltipModule,
-    NgChartsModule
+    NgChartsModule, MatSnackBarModule
   ],
   template: `
     <h3>Problems</h3>
@@ -314,12 +312,13 @@ export class TreePage {
     public auth: AuthService,
     private currentProject: CurrentProjectService,
     public members: MembersService,
-    private comments: CommentsService
+    private comments: CommentsService,
+    private snack: MatSnackBar
   ) {
     this.isEditor$ = this.members.isEditor$;
   }
 
-  // ===== あなたの現行メソッドを保持 =====
+  // ===== 現行メソッドを保持 =====
   renameProblemNode(node: { id: string; name: string }) {
     const t = prompt('New Problem title', node.name);
     if (!t?.trim()) return;
@@ -327,9 +326,10 @@ export class TreePage {
   }
   removeProblemNode(node: { id: string; name: string }) {
     if (!confirm(`Delete "${node.name}"?`)) return;
-    this.withPid(pid => this.problems.remove(pid, node.id));
+    this.withPid(async pid => {
+      await this.softDeleteWithUndo('problem', { projectId: pid, problemId: node.id }, '(Problem)');
+    });
   }
-
   renameIssueNode(node: { id: string; name: string; parentId?: string }) {
     if (!node.parentId) return;
     const t = prompt('New Issue title', node.name);
@@ -339,13 +339,14 @@ export class TreePage {
   removeIssueNode(node: { id: string; name: string; parentId?: string }) {
     if (!node.parentId) return;
     if (!confirm(`Delete Issue "${node.name}"?`)) return;
-    this.withPid(pid => this.issues.remove(pid, node.parentId!, node.id));
+    this.withPid(async pid => {
+      await this.softDeleteWithUndo('issue', { projectId: pid, problemId: node.parentId!, issueId: node.id }, node.name);
+    });
   }
-
-  renameTaskNode(node: { id: string; name: string; parentProblemId?: string; parentIssueId?: string }) {
-    if (!node.parentProblemId || !node.parentIssueId) return;
-    const t = prompt('New Task title', node.name);
-    if (!t?.trim()) return;
+  renameTaskNode(node: { id: string; name: string; parentProblemId?: string; parentIssueId?: string }) { 
+    if (!node.parentProblemId || !node.parentIssueId) return; 
+    const t = prompt('New Task title', node.name); 
+    if (!t?.trim()) return; 
     this.withPid(pid => this.tasks.update(pid, node.parentProblemId!, node.parentIssueId!, node.id, { title: t.trim() }));
   }
   async removeTaskNode(node: { id: string; name: string; parentProblemId?: string; parentIssueId?: string }) {
@@ -353,10 +354,18 @@ export class TreePage {
     if (!confirm(`Delete Task "${node.name}"?`)) return;
     this.busyIds.add(node.id!);
     this.withPid(async pid => {
-      try { await this.tasks.remove(pid, node.parentProblemId!, node.parentIssueId!, node.id!); }
-      finally { this.busyIds.delete(node.id!); }
+      try {
+        await this.softDeleteWithUndo(
+          'task',
+          { projectId: pid, problemId: node.parentProblemId!, issueId: node.parentIssueId!, taskId: node.id! },
+          node.name
+        );
+      } finally {
+        this.busyIds.delete(node.id!);
+      }
     });
   }
+  
   // ===== /保持ここまで =====
 
   ngOnInit() {
@@ -752,5 +761,36 @@ private withPid(run: (pid: string) => void) {
     const prev = this.commentCounts[node.id] ?? 0;
     this.commentCounts[node.id] = Math.max(0, prev + delta);
   }
+
+  /** 共通：ソフトデリート → Undo 5秒 */
+private async softDeleteWithUndo(
+  kind: 'problem'|'issue'|'task',
+  path: { projectId: string; problemId?: string; issueId?: string; taskId?: string },
+  titleForToast: string
+){
+  const uid = await firstValueFrom(this.auth.uid$);
+  const patch = { softDeleted: true, deletedAt: serverTimestamp() as any, updatedBy: uid || '' } as any;
+
+  if (kind === 'problem') {
+    await this.problems.update(path.projectId, path.problemId!, patch);
+  } else if (kind === 'issue') {
+    await this.issues.update(path.projectId, path.problemId!, path.issueId!, patch);
+  } else {
+    await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, patch);
+  }
+
+  const ref = this.snack.open(`「${titleForToast}」を削除しました`, '元に戻す', { duration: 5000 });
+  ref.onAction().subscribe(async () => {
+    const unpatch = { softDeleted: false, deletedAt: null, updatedBy: uid || '' } as any;
+    if (kind === 'problem') {
+      await this.problems.update(path.projectId, path.problemId!, unpatch);
+    } else if (kind === 'issue') {
+      await this.issues.update(path.projectId, path.problemId!, path.issueId!, unpatch);
+    } else {
+      await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, unpatch);
+    }
+  });
+}
+
 }
 

@@ -88,6 +88,7 @@ export class TasksService {
       updatedAt: serverTimestamp(),
       recurrenceRule: t.recurrenceRule ?? null,
       problemId, issueId, projectId: pid,
+      softDeleted: false,
     });
   }
 
@@ -217,7 +218,8 @@ export class TasksService {
       nativeOrderBy('dueDate', 'asc')
     );
 
-    return rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>;
+    return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>)
+    .pipe(map((xs: any[]) => xs.filter((t: any) => !t?.softDeleted)));  
   }
 
   listAllOverdue(
@@ -256,7 +258,8 @@ export class TasksService {
       ...tagFilter,
       nativeOrderBy('dueDate', 'asc')
     );
-    return rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>;
+    return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>)
+    .pipe(map((xs: any[]) => xs.filter((t: any) => !t?.softDeleted)));  
   }
 
   // --- listAllNoDue: オーバーロード2本 + 実装1本だけ ---
@@ -293,7 +296,8 @@ export class TasksService {
       nativeOrderBy('createdAt', 'desc')
     );
 
-    return rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>;
+    return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>)
+    .pipe(map((xs: any[]) => xs.filter((t: any) => !t?.softDeleted)));  
   }
 
 
@@ -334,6 +338,7 @@ export class TasksService {
   return stream.pipe(
     map(items => {
       // openOnly はクライアント側で
+      items = items.filter(t => !(t as any)?.softDeleted); 
       if (openOnly) {
         const open = new Set(OPEN_STATUSES);
         items = items.filter(x => open.has(x.status as Status));
@@ -371,7 +376,7 @@ listMineNoDue(
 
   return stream.pipe(
     map(xs => {
-      let ys = xs;
+      let ys = xs.filter(t => !(t as any)?.softDeleted);
       if (openOnly) ys = ys.filter(t => t.status !== 'done');
       if (tags.length) {
         const set = new Set(tags.slice(0, 10).map(s => s.trim()));
