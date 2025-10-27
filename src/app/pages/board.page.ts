@@ -19,19 +19,20 @@ import { AuthService } from '../services/auth.service';
 import { MembersService } from '../services/members.service';
 import { NetworkService } from '../services/network.service';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { TranslateModule, TranslateService } from '@ngx-translate/core'; // ★ 追加
 
 @Component({
   standalone: true,
   selector: 'pp-board',
-  imports: [AsyncPipe, NgFor, NgIf, FormsModule, MatButtonModule, RouterLink, DragDropModule, MatSnackBarModule],
+  imports: [AsyncPipe, NgFor, NgIf, FormsModule, MatButtonModule, RouterLink, DragDropModule, MatSnackBarModule, TranslateModule],
   template: `
     <div style="display:flex; align-items:center; gap:12px; margin:8px 0 16px;">
-      <a mat-stroked-button routerLink="/tree">← Treeへ</a>
+      <a mat-stroked-button routerLink="/tree">← {{ 'nav.tree' | translate }}</a>
 
       <label>
-        Problem:
+        {{ 'label.problem' | translate }}:
         <select [(ngModel)]="selectedProblemId" (ngModelChange)="onSelectProblem($event)">
-          <option [ngValue]="null">-- 選択してください --</option>
+          <option [ngValue]="null">{{ 'common.selectPrompt' | translate }}</option>
           <option *ngFor="let p of (problems$ | async)" [ngValue]="p.id">{{ p.title }}</option>
         </select>
       </label>
@@ -39,25 +40,25 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
       <span style="flex:1 1 auto;"></span>
 
       <ng-container *ngIf="auth.loggedIn$ | async; else signinB">
-        <span style="opacity:.8; margin-right:6px;">{{ (auth.displayName$ | async) || 'signed in' }}</span>
-        <button mat-stroked-button type="button" (click)="auth.signOut()">Sign out</button>
+        <span style="opacity:.8; margin-right:6px;">{{ (auth.displayName$ | async) || ('auth.signedIn' | translate) }}</span>
+        <button mat-stroked-button type="button" (click)="auth.signOut()">{{ 'auth.signOut' | translate }}</button>
       </ng-container>
       <ng-template #signinB>
-        <button mat-raised-button color="primary" type="button" (click)="auth.signInWithGoogle()">Sign in</button>
+        <button mat-raised-button color="primary" type="button" (click)="auth.signInWithGoogle()">{{ 'auth.signIn' | translate }}</button>
       </ng-template>
     </div>
 
     <div *ngIf="!(isOnline$ | async)" style="margin:-8px 0 12px; font-size:12px; color:#b45309; background:#fffbeb; border:1px solid #fcd34d; padding:6px 8px; border-radius:6px;">
-      現在オフラインです。カードの移動・更新・担当者変更はできません。
+      {{ 'board.offlineNotice' | translate }}
     </div>
 
-    <div *ngIf="!selectedProblemId" style="opacity:.7">Problemを選ぶとカンバンを表示します。</div>
+    <div *ngIf="!selectedProblemId" style="opacity:.7">{{ 'board.selectProblemHint' | translate }}</div>
 
     <ng-container *ngIf="selectedProblemId as pid">
-      <div *ngIf="(issues$ | async) === null">Loading issues...</div>
+      <div *ngIf="(issues$ | async) === null">{{ 'issue.loading' | translate }}</div>
 
       <div *ngIf="(issues$ | async) as issues">
-        <div *ngIf="!issues.length" style="opacity:.7">（このProblemにIssueはありません）</div>
+        <div *ngIf="!issues.length" style="opacity:.7">{{ 'issue.noneYet' | translate }}</div>
 
         <div *ngIf="issues.length" style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px;">
           <div
@@ -65,7 +66,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
             style="border:1px solid #eee; border-radius:10px; padding:10px; min-height:80px;"
           >
             <div style="font-weight:600; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
-              <span>{{ statusLabel[col] }}</span>
+              <span>{{ ('board.col.' + col) | translate }}</span>
               <span style="display:inline-block; min-width:20px; padding:2px 6px; font-size:12px; line-height:1; text-align:center; border-radius:999px; border:1px solid #e5e7eb; background:#f8fafc;">
                 {{ totals[col] }}
               </span>
@@ -90,7 +91,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
                     <!-- Issueグループのヘッダ -->
                     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
                       <div style="font-weight:600;">{{ i.title }}</div>
-                      <span style="font-size:12px; opacity:.7;">{{ ts.length }} 件</span>
+                      <span style="font-size:12px; opacity:.7;">{{ ts.length }} {{ 'board.items' | translate }}</span>
                     </div>
 
                     <!-- カード本体 -->
@@ -115,7 +116,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
                         <button mat-button *ngFor="let next of statusCols"
                                 [disabled]="next===t.status || isBusy(t.id!) || !(canEdit$ | async)"
                                 (click)="setTaskStatus(pid, i.id!, t, next)">
-                          {{ statusLabel[next] }}
+                          {{ ('board.col.' + next) | translate }}
                         </button>
                       </div>
 
@@ -124,13 +125,13 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
                                 *ngIf="(members.isEditor$ | async) && !(t.assignees || []).includes((auth.uid$ | async) || '')"
                                 [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
                                 (click)="assignToMe(pid, i.id!, t)">
-                          Assign to me
+                          {{ 'board.assignToMe' | translate }}
                         </button>
                         <button mat-stroked-button
                                 *ngIf="(members.isEditor$ | async) && (t.assignees || []).includes((auth.uid$ | async) || '')"
                                 [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
                                 (click)="unassignMe(pid, i.id!, t)">
-                          Unassign
+                          {{ 'board.unassign' | translate }}
                         </button>
                         <span
                           style="font-size:12px; opacity:.75; align-self:center;"
@@ -145,7 +146,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
                     <!-- 空プレースホルダ -->
                     <div *ngIf="ts.length === 0"
                          style="padding:8px; border:1px dashed #d1d5db; border-radius:8px; text-align:center; opacity:.6; min-height: 100px;">
-                      ここにドロップ
+                      {{ 'board.dropHere' | translate }}
                     </div>
                   </div>
                 </ng-container>
@@ -158,34 +159,26 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
   `
 })
 export class BoardPage {
-  // 列定義
+  // 列定義（表示は翻訳キーで行う）
   statusCols = ['not_started','in_progress','done'] as const;
-  statusLabel: Record<'not_started'|'in_progress'|'done', string> = {
-    not_started:'未着手', in_progress:'対応中', done:'完了'
-  };
 
   problems$!: Observable<Problem[]>;
   selectedProblemId: string | null = null;
 
   private selectedProblem$ = new BehaviorSubject<string | null>(null);
-  issues$: Observable<Issue[] | null> = of(null); // null=Loading, []=Empty
+  issues$: Observable<Issue[] | null> = of(null);
 
-  // 集計（列合計）
-  totals: Record<'not_started'|'in_progress'|'done', number> = {
-    not_started: 0, in_progress: 0, done: 0
-  };
+  totals: Record<'not_started'|'in_progress'|'done', number> = { not_started: 0, in_progress: 0, done: 0 };
 
   isEditor$!: Observable<boolean>;
   isOnline$!: Observable<boolean>;
   canEdit$!: Observable<boolean>;
 
-  // DnD中のタスク制御
   busyTaskIds = new Set<string>();
   isBusy(id: string | undefined | null): boolean { return !!id && this.busyTaskIds.has(id); }
 
-  // IssueIDごとの購読キャッシュ
   tasksMap: Record<string, Observable<Task[]>> = {};
-  private taskCountSubs = new Map<string, import('rxjs').Subscription>(); // key=pid_issueId
+  private taskCountSubs = new Map<string, import('rxjs').Subscription>();
   private tasksSnapshot: Record<string, Task[]> = {};
 
   constructor(
@@ -200,6 +193,7 @@ export class BoardPage {
     public members: MembersService,
     private network: NetworkService,
     private snack: MatSnackBar,
+    private tr: TranslateService, // ★ 追加
   ) {
     this.isEditor$ = this.members.isEditor$;
     this.isOnline$ = this.network.isOnline$;
@@ -211,17 +205,12 @@ export class BoardPage {
   allowDnD = false;
 
   ngOnInit() {
-    // 問題一覧：pidに追従
     this.problems$ = this.currentProject.projectId$.pipe(
       switchMap(pid => (pid && pid !== 'default') ? this.problems.list(pid) : of([]))
     );
 
-    // DnD 有効/無効（編集可否に追従）
-    this.canEdit$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(v => {
-      this.allowDnD = !!v;
-    });
+    this.canEdit$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(v => this.allowDnD = !!v);
 
-    // 選択中ProblemのIssue一覧（pid×problemId）
     this.issues$ = this.selectedProblem$.pipe(
       switchMap(problemId => this.currentProject.projectId$.pipe(
         switchMap(pid => (pid && pid !== 'default' && problemId) ? this.issues.listByProblem(pid, problemId) : of([])),
@@ -229,19 +218,16 @@ export class BoardPage {
       ))
     );
 
-    // URLクエリの pid=problemId を復元
     this.route.queryParamMap
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(m => {
-        const pid = m.get('pid'); // problemId を 'pid' で引き回し
+        const pid = m.get('pid');
         this.selectedProblemId = pid;
         this.selectedProblem$.next(pid);
       });
   }
 
-  // Problem セレクト変更
   onSelectProblem(problemId: string | null) {
-    // 全リセット（視覚的にも合計をゼロへ）
     this.taskCountSubs.forEach(s => s.unsubscribe());
     this.taskCountSubs.clear();
     this.tasksSnapshot = {};
@@ -252,9 +238,7 @@ export class BoardPage {
     this.router.navigate([], { queryParams: { pid: problemId }, queryParamsHandling: 'merge' });
   }
 
-  // ===== タスク購読のセットアップ＆合計の再計算 =====
   private setupTaskStreams(problemId: string | null, issues: Issue[]) {
-    // 生存キーを計算（古い購読は掃除）
     const aliveKeys = new Set((issues ?? []).map(i => this.key(problemId!, i.id!)));
     for (const [k, sub] of this.taskCountSubs.entries()) {
       if (!aliveKeys.has(k)) {
@@ -264,7 +248,6 @@ export class BoardPage {
       }
     }
 
-    // 必要な購読を貼る（pid追従）
     if (!problemId) return;
     for (const i of issues ?? []) {
       const k = this.key(problemId, i.id!);
@@ -298,7 +281,6 @@ export class BoardPage {
     this.totals = t;
   }
 
-  // ===== CRUD（必ず pid を先頭で渡す） =====
   async setTaskStatus(
     problemId: string,
     issueId: string,
@@ -312,19 +294,14 @@ export class BoardPage {
     this.busyTaskIds.add(t.id);
     this.withPid(async pid => {
       try { await this.tasks.update(pid, problemId, issueId, t.id!, { status, progress }); }
-      catch (e) { console.error(e); this.snack.open('更新に失敗しました', 'OK', { duration: 3000 }); }
+      catch (e) { console.error(e); this.snack.open(this.tr.instant('board.err.update'), 'OK', { duration: 3000 }); }
       finally { this.busyTaskIds.delete(t.id!); }
     });
   }
 
-  async onListDrop(
-    ev: CdkDragDrop<Task[]>,
-    problemId: string,
-    issueId: string
-  ) {
+  async onListDrop(ev: CdkDragDrop<Task[]>, problemId: string, issueId: string) {
     if (!(await this.requireCanEdit())) return;
 
-    // ID -> status を復元（dl-<status>-<issueId>）
     const parse = (id: string) => id.split('-')[1] as 'not_started'|'in_progress'|'done';
     const srcStatus  = parse(ev.previousContainer.id);
     const destStatus = parse(ev.container.id);
@@ -332,32 +309,27 @@ export class BoardPage {
     const src = ev.previousContainer.data ?? [];
     const dst = ev.container.data ?? [];
 
-    // 同一リスト内＝並べ替えのみ
     if (ev.previousContainer === ev.container) {
       moveItemInArray(dst, ev.previousIndex, ev.currentIndex);
-      await this.persistOrder(problemId, issueId, dst);   // 10,20,30…で保存
+      await this.persistOrder(problemId, issueId, dst);
       return;
     }
 
-    // 列間移動
     transferArrayItem(src, dst, ev.previousIndex, ev.currentIndex);
 
-    // 移動した Task
     const moved = dst[ev.currentIndex];
     if (!moved?.id || this.isBusy(moved.id)) return;
 
     const id = moved.id!;
     const progress = destStatus === 'done' ? 100 : destStatus === 'not_started' ? 0 : 50;
 
-    // 1) ステータス更新
     this.busyTaskIds.add(moved.id);
     this.withPid(async pid => {
       try { await this.tasks.update(pid, problemId, issueId, id, { status: destStatus, progress }); }
-      catch (e) { console.error(e); this.snack.open('ステータス更新に失敗しました', 'OK', { duration: 3000 }); }
+      catch (e) { console.error(e); this.snack.open(this.tr.instant('board.err.statusUpdate'), 'OK', { duration: 3000 }); }
       finally { this.busyTaskIds.delete(id); }
     });
 
-    // 2) 両リストの order を再採番
     await Promise.all([
       this.persistOrder(problemId, issueId, src),
       this.persistOrder(problemId, issueId, dst),
@@ -372,17 +344,15 @@ export class BoardPage {
         if (!u.id || this.isBusy(u.id)) continue;
         this.busyTaskIds.add(u.id);
         try { await this.tasks.update(pid, problemId, issueId, u.id, { order: u.order }); }
-        catch (e) { console.error(e); this.snack.open('順序の保存に失敗しました', 'OK', { duration: 3000 }); }
+        catch (e) { console.error(e); this.snack.open(this.tr.instant('board.err.orderSave'), 'OK', { duration: 3000 }); }
         finally { this.busyTaskIds.delete(u.id); }
       }
     });
   }
 
-  // ===== ユーティリティ =====
   trackTask = (_: number, t: Task) => t.id;
   key(problemId: string, issueId: string) { return `${problemId}_${issueId}`; }
 
-  // ある Issue に属する3列（not_started / in_progress / done）を接続
   listIds(issueId: string): string[] {
     return (['not_started','in_progress','done'] as const).map(s => this.listId(s, issueId));
   }
@@ -402,22 +372,20 @@ export class BoardPage {
     this.taskCountSubs.clear();
   }
 
-  // 共通パターン（TreePage / HomePage 両方）
   private withPid(run: (pid: string) => void) {
     this.currentProject.projectId$.pipe(take(1)).subscribe(pid => {
       if (!pid || pid === 'default') {
-        this.snack.open('プロジェクト未選択', 'OK', { duration: 2500 });
+        this.snack.open(this.tr.instant('common.projectNotSelected'), 'OK', { duration: 2500 });
         return;
       }
       run(pid);
     });
   }
 
-  // BoardPage クラス内に追加
   private bucket(s: Task['status'] | undefined): 'not_started'|'in_progress'|'done' {
     if (s === 'done') return 'done';
     if (s === 'in_progress' || s === 'review_wait' || s === 'fixing') return 'in_progress';
-    return 'not_started'; // undefined もここへ
+    return 'not_started';
   }
 
   tasksByStatus(tasks: Task[] | null | undefined, status: 'not_started'|'in_progress'|'done'): Task[] {
@@ -431,7 +399,7 @@ export class BoardPage {
     this.withPid(async pid => {
       this.busyTaskIds.add(t.id!);
       try { await this.tasks.assignMe(pid, problemId, issueId, t.id!, uid); }
-      catch (e) { console.error(e); this.snack.open('Assignに失敗しました', 'OK', { duration: 3000 }); }
+      catch (e) { console.error(e); this.snack.open(this.tr.instant('board.err.assign'), 'OK', { duration: 3000 }); }
       finally { this.busyTaskIds.delete(t.id!); }
     });
   }
@@ -443,23 +411,22 @@ export class BoardPage {
     this.withPid(async pid => {
       this.busyTaskIds.add(t.id!);
       try { await this.tasks.unassignMe(pid, problemId, issueId, t.id!, uid); }
-      catch (e) { console.error(e); this.snack.open('Unassignに失敗しました', 'OK', { duration: 3000 }); }
+      catch (e) { console.error(e); this.snack.open(this.tr.instant('board.err.unassign'), 'OK', { duration: 3000 }); }
       finally { this.busyTaskIds.delete(t.id!); }
     });
   }
 
-  // ===== オンライン/権限ガード =====
   private async requireCanEdit(): Promise<boolean> {
     const [isEditor, online] = await Promise.all([
       firstValueFrom(this.members.isEditor$),
       firstValueFrom(this.isOnline$),
     ]);
     if (!isEditor) {
-      this.snack.open('編集権限がありません（Viewer）', 'OK', { duration: 3000 });
+      this.snack.open(this.tr.instant('warn.noEditPermission'), 'OK', { duration: 3000 });
       return false;
     }
     if (!online) {
-      this.snack.open('オフラインのため編集できません', 'OK', { duration: 3000 });
+      this.snack.open(this.tr.instant('warn.offlineNoEdit'), 'OK', { duration: 3000 });
       return false;
     }
     return true;

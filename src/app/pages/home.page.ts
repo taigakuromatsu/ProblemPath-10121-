@@ -23,7 +23,8 @@ import { switchMap, take, map, startWith } from 'rxjs/operators';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { serverTimestamp } from 'firebase/firestore';
 import { DraftsService } from '../services/drafts.service';
-import { NetworkService } from '../services/network.service'; // ← 追加
+import { NetworkService } from '../services/network.service'; 
+import { TranslateModule } from '@ngx-translate/core';
 
 // ---- このページ専用の拡張型 ----
 type ProblemWithDef = Problem & {
@@ -53,75 +54,77 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
   selector: 'pp-home',
   imports: [
     RouterLink, AsyncPipe, NgFor, NgIf, JsonPipe, DatePipe, FormsModule,
-    MatButtonModule, MatSelectModule, MatFormFieldModule, MatIconModule, MatSnackBarModule
+    MatButtonModule, MatSelectModule, MatFormFieldModule, MatIconModule, MatSnackBarModule, TranslateModule
   ],
   template: `
-    <h2>Home</h2>
+      <h2>{{ 'home.title' | translate }}</h2>
 
     <div style="display:flex; align-items:center; gap:12px; margin:8px 0;">
       <span style="flex:1 1 auto;"></span>
       <ng-container *ngIf="auth.loggedIn$ | async; else signin">
-        <span style="opacity:.8; margin-right:6px;">{{ (auth.displayName$ | async) || 'signed in' }}</span>
-        <button mat-stroked-button type="button" (click)="auth.signOut()">Sign out</button>
+        <span style="opacity:.8; margin-right:6px;">{{ (auth.displayName$ | async) || ('auth.signedIn' | translate) }}</span>
+        <button mat-stroked-button type="button" (click)="auth.signOut()">{{ 'auth.signOut' | translate }}</button>
       </ng-container>
       <ng-template #signin>
-        <button mat-raised-button color="primary" type="button" (click)="auth.signInWithGoogle()">Sign in with Google</button>
-        <button mat-stroked-button type="button" (click)="switchAccount()">Switch account</button>
+        <button mat-raised-button color="primary" type="button" (click)="auth.signInWithGoogle()">{{ 'auth.signInWithGoogle' | translate }}</button>
+        <button mat-stroked-button type="button" (click)="switchAccount()">{{ 'auth.switchAccount' | translate }}</button>
       </ng-template>
     </div>
 
     <!-- オフライン注意 -->
     <div *ngIf="(auth.loggedIn$ | async) && !(isOnline$ | async)"
          style="padding:8px 10px; border:1px solid #fca5a5; border-radius:8px; background:#fff1f2; margin:8px 0; font-size:12px; color:#991b1b;">
-      オフラインのため <strong>追加・編集・削除</strong> はできません（入力はドラフトとして保存されます）。
+      {{ 'warn.offlineEditBlocked' | translate }}
     </div>
 
     <div *ngIf="(auth.loggedIn$ | async) && !(members.isEditor$ | async)"
          style="padding:8px 10px; border:1px solid #e5e7eb; border-radius:8px; background:#fafafa; margin:8px 0; font-size:12px;">
-      現在のプロジェクトでは <strong>閲覧のみ（Viewer）</strong> です。編集ボタンは非表示になります。
+      {{ 'warn.viewerOnly' | translate }}
     </div>
 
-    <p>ここで Problem を選んで、その配下の Issue / Task を編集します。</p>
+    <p>{{ 'home.lead' | translate }}</p>
 
     <ng-container *ngIf="auth.loggedIn$ | async; then editor; else needSignIn"></ng-container>
 
     <ng-template #needSignIn>
       <div style="padding:12px; border:1px solid #e5e7eb; border-radius:10px; margin:12px 0;">
-        編集にはサインインが必要です。右上の「Sign in」からログインしてください。<br>
-        閲覧は <a routerLink="/tree">Tree</a> / <a routerLink="/board">Board</a> / <a routerLink="/schedule">Schedule</a> で可能です。
+        {{ 'home.needSignIn' | translate }}<br>
+        {{ 'home.viewOnlyHint' | translate }}
+        <!-- 参照リンクのラベル -->
+        (<a routerLink="/tree">{{ 'nav.tree' | translate }}</a> / <a routerLink="/board">{{ 'nav.board' | translate }}</a> / <a routerLink="/schedule">{{ 'nav.schedule' | translate }}</a>)
       </div>
     </ng-template>
 
     <ng-template #editor>
       <nav style="margin-bottom:12px;">
-        <a routerLink="/tree">🌳 Tree</a> |
-        <a routerLink="/board">📋 Board</a> |
-        <a routerLink="/schedule">📆 Schedule</a>
+        <a routerLink="/tree">🌳 {{ 'nav.tree' | translate }}</a> |
+        <a routerLink="/board">📋 {{ 'nav.board' | translate }}</a> |
+        <a routerLink="/schedule">📆 {{ 'nav.schedule' | translate }}</a>
       </nav>
 
-      <!-- Problem セレクト -->
+      <!-- 問題セレクト -->
       <div style="display:flex; align-items:center; gap:12px; margin:8px 0 12px;">
-        <label>Problem:
+        <label>{{ 'label.problem' | translate }}：
           <select [(ngModel)]="selectedProblemId" (ngModelChange)="onSelectProblem($event)">
-            <option [ngValue]="null">-- 選択してください --</option>
+            <option [ngValue]="null">{{ 'common.selectPrompt' | translate }}</option>
             <option *ngFor="let p of (problems$ | async)" [ngValue]="p.id">{{ p.title }}</option>
-            <option *ngIf="members.isEditor$ | async" [ngValue]="NEW_OPTION_VALUE">＋ 新規作成…</option>
+            <option *ngIf="members.isEditor$ | async" [ngValue]="NEW_OPTION_VALUE">＋ {{ 'common.createNewEllipsis' | translate }}</option>
           </select>
         </label>
 
-        <!-- 新規 Problem 作成モーダル -->
+        <!-- 新規 問題 作成モーダル -->
         <div *ngIf="newProblemOpen"
             style="position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,.35); z-index:1000;">
           <div style="width:min(720px, 92vw); background:#fff; color:#111; border-radius:12px; padding:14px 16px;">
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-              <h3 style="margin:0; font-size:16px;">Problem を作成</h3>
+              <h3 style="margin:0; font-size:16px;">{{ 'problem.create' | translate }}</h3>
               <span style="flex:1 1 auto"></span>
               <button mat-icon-button (click)="closeNewProblemDialog()"><mat-icon>close</mat-icon></button>
             </div>
 
             <div style="display:grid; gap:10px;">
               <div>
-                <label>タイトル（必須）</label>
+                <label>{{ 'field.titleRequired' | translate }}</label>
                 <input
                   [(ngModel)]="newProblem.title"
                   (ngModelChange)="onNewProblemChange('title', newProblem.title)"
@@ -129,110 +132,110 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
               </div>
 
               <div style="display:flex; gap:8px; align-items:center;">
-                <label>テンプレ</label>
+                <label>{{ 'field.template' | translate }}</label>
                 <select
                   [(ngModel)]="newProblem.template"
                   (ngModelChange)="applyProblemTemplate($event); onNewProblemChange('template', newProblem.template)">
-                  <option value="bug">バグ/不具合</option>
-                  <option value="improve">改善/パフォーマンス</option>
+                  <option value="bug">{{ 'template.bug' | translate }}</option>
+                  <option value="improve">{{ 'template.improve' | translate }}</option>
                 </select>
               </div>
 
               <div>
-                <label>現象（必須）</label>
+                <label>{{ 'problem.phenomenonRequired' | translate }}</label>
                 <textarea rows="3" [(ngModel)]="newProblem.phenomenon"
                           (ngModelChange)="onNewProblemChange('phenomenon', newProblem.phenomenon)"
                           style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
                 <div style="opacity:.7; font-size:12px; margin-top:4px;">
-                  何が起きている？再現手順・ユーザー影響・発生率 など
+                  {{ 'hint.phenomenon' | translate }}
                 </div>
               </div>
 
               <div>
-                <label>原因（任意）</label>
+                <label>{{ 'problem.causeOptional' | translate }}</label>
                 <textarea rows="3" [(ngModel)]="newProblem.cause"
                           (ngModelChange)="onNewProblemChange('cause', newProblem.cause)"
                           style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
               </div>
 
               <div>
-                <label>解決策（任意）</label>
+                <label>{{ 'problem.solutionOptional' | translate }}</label>
                 <textarea rows="3" [(ngModel)]="newProblem.solution"
                           (ngModelChange)="onNewProblemChange('solution', newProblem.solution)"
                           style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
               </div>
 
               <div>
-                <label>目標（必須）</label>
+                <label>{{ 'problem.goalRequired' | translate }}</label>
                 <textarea rows="2" [(ngModel)]="newProblem.goal"
                           (ngModelChange)="onNewProblemChange('goal', newProblem.goal)"
                           style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
                 <div style="opacity:.7; font-size:12px; margin-top:4px;">
-                  どうなればOK？KPI・条件（例：p50 1.5秒 / エラー率0.1%未満）
+                  {{ 'hint.goalKpi' | translate }}
                 </div>
               </div>
 
               <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:4px;">
-                <button mat-stroked-button (click)="closeNewProblemDialog()">キャンセル</button>
+                <button mat-stroked-button (click)="closeNewProblemDialog()">{{ 'common.cancel' | translate }}</button>
                 <button mat-raised-button color="primary" (click)="createProblemWithDefinition()"
                         [disabled]="!(canEdit$ | async)">
-                  作成
+                  {{ 'common.create' | translate }}
                 </button>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Problem 定義：編集モーダル -->
+        <!-- 問題定義：編集モーダル -->
         <div *ngIf="editProblemOpen"
             style="position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,.35); z-index:1000;">
           <div style="width:min(720px, 92vw); background:#fff; color:#111; border-radius:12px; padding:14px 16px;">
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-              <h3 style="margin:0; font-size:16px;">Problem 定義を編集</h3>
+              <h3 style="margin:0; font-size:16px;">{{ 'problemDef.edit' | translate }}</h3>
               <span style="flex:1 1 auto"></span>
               <button mat-icon-button (click)="closeEditProblemDialog()"><mat-icon>close</mat-icon></button>
             </div>
 
             <div style="display:grid; gap:10px;">
               <div>
-                <label>タイトル（参照）</label>
+                <label>{{ 'field.titleReadonly' | translate }}</label>
                 <input [value]="editProblem.title" readonly
                       style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px; background:#f7f7f7;">
               </div>
 
               <div>
-                <label>現象（必須）</label>
+                <label>{{ 'problem.phenomenonRequired' | translate }}</label>
                 <textarea rows="3" [(ngModel)]="editProblem.phenomenon"
                           (ngModelChange)="onEditProblemChange('phenomenon', editProblem.phenomenon)"
                           style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
               </div>
 
               <div>
-                <label>原因（任意）</label>
+                <label>{{ 'problem.causeOptional' | translate }}</label>
                 <textarea rows="3" [(ngModel)]="editProblem.cause"
                           (ngModelChange)="onEditProblemChange('cause', editProblem.cause)"
                           style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
               </div>
 
               <div>
-                <label>解決策（任意）</label>
+                <label>{{ 'problem.solutionOptional' | translate }}</label>
                 <textarea rows="3" [(ngModel)]="editProblem.solution"
                           (ngModelChange)="onEditProblemChange('solution', editProblem.solution)"
                           style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
               </div>
 
               <div>
-                <label>目標（必須）</label>
+                <label>{{ 'problem.goalRequired' | translate }}</label>
                 <textarea rows="2" [(ngModel)]="editProblem.goal"
                           (ngModelChange)="onEditProblemChange('goal', editProblem.goal)"
                           style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"></textarea>
               </div>
 
               <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:4px;">
-                <button mat-stroked-button (click)="closeEditProblemDialog()">キャンセル</button>
+                <button mat-stroked-button (click)="closeEditProblemDialog()">{{ 'common.cancel' | translate }}</button>
                 <button mat-raised-button color="primary" (click)="saveEditedProblemDef()"
                         [disabled]="!(canEdit$ | async)">
-                  保存
+                  {{ 'common.save' | translate }}
                 </button>
               </div>
             </div>
@@ -243,56 +246,56 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
 
         <ng-container *ngIf="members.isEditor$ | async">
           <button *ngIf="selectedProblemId" mat-stroked-button (click)="renameSelected()"
-                  [disabled]="!(canEdit$ | async)">Rename</button>
+                  [disabled]="!(canEdit$ | async)">{{ 'common.rename' | translate }}</button>
           <button *ngIf="selectedProblemId" mat-stroked-button color="warn" (click)="removeSelected()"
-                  [disabled]="!(canEdit$ | async)">Delete</button>
+                  [disabled]="!(canEdit$ | async)">{{ 'common.delete' | translate }}</button>
         </ng-container>
       </div>
 
-      <!-- 選択中 Problem の情報 -->
+      <!-- 選択中の問題の情報 -->
       <ng-container *ngIf="selectedProblemId as pid">
         <div *ngIf="selectedProblemDoc$ | async as p"
              style="padding:12px; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:12px;">
           <h3 style="margin:0 0 8px; display:flex; align-items:center; gap:8px;">
-            <span>Problem 定義</span>
+            <span>{{ 'problemDef.title' | translate }}</span>
             <span style="flex:1 1 auto;"></span>
             <button *ngIf="members.isEditor$ | async"
                     mat-stroked-button
                     (click)="openEditProblemDef(p)">
-              Edit
+              {{ 'common.edit' | translate }}
             </button>
           </h3>
           <div style="display:grid; gap:6px; font-size:14px;">
-            <div><span style="font-weight:600;">現象：</span>
+            <div><span style="font-weight:600;">{{ 'field.phenomenon' | translate }}：</span>
               <span>{{ p.problemDef?.phenomenon || '—' }}</span>
             </div>
-            <div *ngIf="p.problemDef?.cause"><span style="font-weight:600;">原因：</span>
+            <div *ngIf="p.problemDef?.cause"><span style="font-weight:600;">{{ 'field.cause' | translate }}：</span>
               <span>{{ p.problemDef?.cause }}</span>
             </div>
-            <div *ngIf="p.problemDef?.solution"><span style="font-weight:600;">解決策：</span>
+            <div *ngIf="p.problemDef?.solution"><span style="font-weight:600;">{{ 'field.solution' | translate }}：</span>
               <span>{{ p.problemDef?.solution }}</span>
             </div>
-            <div><span style="font-weight:600;">目標：</span>
+            <div><span style="font-weight:600;">{{ 'field.goal' | translate }}：</span>
               <span>{{ p.problemDef?.goal || '—' }}</span>
             </div>
             <div style="opacity:.65; font-size:12px; margin-top:4px;"
                 *ngIf="getUpdatedAtDate(p) as d">
-              最終更新：{{ d | date:'yyyy/MM/dd HH:mm' }}
+              {{ 'common.lastUpdated' | translate }}：{{ d | date:'yyyy/MM/dd HH:mm' }}
             </div>
           </div>
         </div>
 
-        <!-- Issues + Link UI -->
+        <!-- 課題 + リンク UI -->
         <div style="padding:12px; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:16px;">
-          <h3 style="margin:0 0 8px;">Issues</h3>
+          <h3 style="margin:0 0 8px;">{{ 'issue.listTitle' | translate }}</h3>
 
           <form *ngIf="members.isEditor$ | async"
                 (ngSubmit)="createIssue(pid)"
                 style="display:flex; gap:8px; align-items:center; margin:8px 0;">
-            <input [(ngModel)]="issueTitle" name="issueTitle" placeholder="New Issue title"
+            <input [(ngModel)]="issueTitle" name="issueTitle" [placeholder]="'issue.placeholderNewTitle' | translate"
                    required (ngModelChange)="onIssueTitleChange($event)" />
             <button mat-raised-button color="primary" type="submit"
-                    [disabled]="!(canEdit$ | async)">＋ Add Issue</button>
+                    [disabled]="!(canEdit$ | async)">＋ {{ 'issue.add' | translate }}</button>
           </form>
 
           <ul *ngIf="issues$ | async as issues; else loadingIssues" style="margin:0; padding-left:1rem;">
@@ -301,14 +304,14 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
                 <strong>{{ i.title }}</strong>
                 <span style="flex:1 1 auto"></span>
                 <ng-container *ngIf="members.isEditor$ | async">
-                  <button mat-button (click)="renameIssue(pid, i)" [disabled]="!(canEdit$ | async)">Rename</button>
-                  <button mat-button color="warn" (click)="removeIssue(pid, i)" [disabled]="!(canEdit$ | async)">Delete</button>
+                  <button mat-button (click)="renameIssue(pid, i)" [disabled]="!(canEdit$ | async)">{{ 'common.rename' | translate }}</button>
+                  <button mat-button color="warn" (click)="removeIssue(pid, i)" [disabled]="!(canEdit$ | async)">{{ 'common.delete' | translate }}</button>
                 </ng-container>
               </div>
 
-              <!-- Link list -->
+              <!-- リンク一覧 -->
               <div style="margin:6px 0 2px 0; font-size:13px;">
-                <span style="font-weight:600;">Links：</span>
+                <span style="font-weight:600;">{{ 'link.title' | translate }}：</span>
                 <ng-container *ngIf="(visibleLinks(i.links, issues).length) > 0; else noLinks">
                   <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:4px;">
                     <ng-container *ngFor="let lk of visibleLinks(i.links, issues)">
@@ -317,7 +320,7 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
                         <span> {{ titleByIssueId(issues, lk.issueId) }} </span>
                         <button *ngIf="members.isEditor$ | async"
                                 mat-icon-button
-                                aria-label="Remove link"
+                                aria-label="{{ 'link.removeAria' | translate }}"
                                 (click)="onRemoveLink(pid, i.id!, lk.issueId, lk.type)"
                                 [disabled]="!(canEdit$ | async)"
                                 style="vertical-align:middle; margin-left:2px;">
@@ -327,15 +330,15 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
                     </ng-container>
                   </div>
                 </ng-container>
-                <ng-template #noLinks><span style="opacity:.7;">（リンクなし）</span></ng-template>
+                <ng-template #noLinks><span style="opacity:.7;">{{ 'link.none' | translate }}</span></ng-template>
               </div>
 
-              <!-- Link add form (Editor only) -->
+              <!-- リンク追加フォーム（編集者のみ） -->
               <form *ngIf="members.isEditor$ | async"
                     (ngSubmit)="onAddLink(pid, i.id!)"
                     style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:6px 0 4px 0;">
                 <select [(ngModel)]="linkTarget[i.id!]" name="linkTarget-{{i.id}}" style="min-width:180px;">
-                  <option [ngValue]="null">-- 対象 Issue を選択 --</option>
+                  <option [ngValue]="null">{{ 'link.selectIssuePrompt' | translate }}</option>
                   <option *ngFor="let j of issues" [ngValue]="j.id" [disabled]="j.id===i.id">
                     {{ j.title }}
                   </option>
@@ -343,16 +346,16 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
                 <select [(ngModel)]="linkTypeSel[i.id!]" name="linkType-{{i.id}}" style="min-width:140px;">
                   <option *ngFor="let t of linkTypes" [ngValue]="t">{{ linkLabel(t) }}</option>
                 </select>
-                <button mat-stroked-button type="submit" [disabled]="!(canEdit$ | async)">＋ Link</button>
+                <button mat-stroked-button type="submit" [disabled]="!(canEdit$ | async)">＋ {{ 'link.add' | translate }}</button>
               </form>
 
-              <!-- Tasks -->
+              <!-- タスク -->
               <form *ngIf="members.isEditor$ | async"
                     (ngSubmit)="createTask(pid, i.id!)"
                     style="display:flex; gap:6px; margin:6px 0 4px 0;">
-                <input [(ngModel)]="taskTitle[i.id!]" name="taskTitle-{{i.id}}" placeholder="New Task title"
+                <input [(ngModel)]="taskTitle[i.id!]" name="taskTitle-{{i.id}}" [placeholder]="'task.placeholderNewTitle' | translate"
                        required (ngModelChange)="onTaskTitleChange(i.id!, taskTitle[i.id!])" />
-                <button mat-stroked-button type="submit" [disabled]="!(canEdit$ | async)">＋ Add Task</button>
+                <button mat-stroked-button type="submit" [disabled]="!(canEdit$ | async)">＋ {{ 'task.add' | translate }}</button>
               </form>
 
               <ul *ngIf="tasksMap[i.id!] | async as tasks" style="margin:0; padding-left:1rem;">
@@ -360,76 +363,89 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
                   <div style="display:flex; align-items:center; gap:8px;">
                     <span style="flex:1 1 auto;">
                       {{ t.title }}
-                      <span *ngIf="t.dueDate" style="font-size:12px; opacity:.8; margin-left:6px;">(due: {{ t.dueDate }})</span>
+                      <span *ngIf="t.dueDate" style="font-size:12px; opacity:.8; margin-left:6px;">{{ 'task.dueShort' | translate:{ date: t.dueDate } }}</span>
                       <span style="font-size:12px; opacity:.85; margin-left:6px;">
                         <ng-container *ngIf="(t.tags?.length ?? 0) > 0; else noTags">
                           #{{ t.tags!.join(' #') }}
                         </ng-container>
-                        <ng-template #noTags>（タグなし）</ng-template>
+                        <ng-template #noTags>{{ 'tag.none' | translate }}</ng-template>
                       </span>
                     </span>
 
                     <ng-container *ngIf="members.isEditor$ | async">
-                      <button mat-button (click)="renameTask(pid, i.id!, t)" [disabled]="!(canEdit$ | async)">Rename</button>
-                      <button mat-button (click)="editTaskDue(pid, i.id!, t)" [disabled]="!(canEdit$ | async)">Due</button>
-                      <button mat-button (click)="editTaskTags(pid, i.id!, t)" [disabled]="!(canEdit$ | async)">Tags</button>
-                      <button mat-button color="warn" (click)="removeTask(pid, i.id!, t)" [disabled]="!(canEdit$ | async)">Delete</button>
+                      <button mat-button (click)="renameTask(pid, i.id!, t)" [disabled]="!(canEdit$ | async)">{{ 'common.rename' | translate }}</button>
+                      <button mat-button (click)="editTaskDue(pid, i.id!, t)" [disabled]="!(canEdit$ | async)">{{ 'task.editDue' | translate }}</button>
+                      <button mat-button (click)="editTaskTags(pid, i.id!, t)" [disabled]="!(canEdit$ | async)">{{ 'task.editTags' | translate }}</button>
+                      <button mat-button color="warn" (click)="removeTask(pid, i.id!, t)" [disabled]="!(canEdit$ | async)">{{ 'common.delete' | translate }}</button>
                     </ng-container>
                   </div>
                 </li>
-                <li *ngIf="tasks.length === 0" style="opacity:.7">（Taskはまだありません）</li>
+                <li *ngIf="tasks.length === 0" style="opacity:.7">{{ 'task.noneYet' | translate }}</li>
               </ul>
             </li>
-            <li *ngIf="issues.length === 0" style="opacity:.7">（Issueはまだありません）</li>
+            <li *ngIf="issues.length === 0" style="opacity:.7">{{ 'issue.noneYet' | translate }}</li>
           </ul>
-          <ng-template #loadingIssues>Loading issues...</ng-template>
+          <ng-template #loadingIssues>{{ 'issue.loading' | translate }}</ng-template>
         </div>
       </ng-container>
 
       <!-- === 招待（Adminのみ） === -->
       <div *ngIf="(members.isAdmin$ | async)" style="padding:12px; border:1px solid #e5e7eb; border-radius:10px; margin:12px 0;">
-        <h3 style="margin:0 0 8px;">Invite by Email</h3>
+        <h3 style="margin:0 0 8px;">{{ 'invite.byEmailTitle' | translate }}</h3>
         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
           <input [(ngModel)]="inviteEmail" placeholder="email@example.com"
                 style="padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; min-width:240px;">
           <select [(ngModel)]="inviteRole">
-            <option value="admin">admin</option>
-            <option value="member" selected>member</option>
-            <option value="viewer">viewer</option>
+            <option value="admin">{{ 'role.adminLabel' | translate }}</option>
+            <option value="member" selected>{{ 'role.memberLabel' | translate }}</option>
+            <option value="viewer">{{ 'role.viewerLabel' | translate }}</option>
           </select>
           <button mat-raised-button color="primary" (click)="createInvite()" [disabled]="isCreatingInvite || !(isOnline$ | async)">
-            {{ isCreatingInvite ? 'Creating...' : 'Create invite link' }}
+            {{ isCreatingInvite ? ('common.creating' | translate) : ('invite.createLink' | translate) }}
           </button>
           <ng-container *ngIf="inviteUrl">
             <input [value]="inviteUrl" readonly
                   style="flex:1 1 auto; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px;">
-            <button mat-stroked-button (click)="copyInviteUrl()">Copy</button>
+            <button mat-stroked-button (click)="copyInviteUrl()">{{ 'common.copy' | translate }}</button>
           </ng-container>
         </div>
-        <p style="opacity:.7; margin-top:6px;">生成されたURLをメールで送ってください。相手は開いてログイン→「参加する」でメンバーになります。</p>
+        <p style="opacity:.7; margin-top:6px;">{{ 'invite.helpText' | translate }}</p>
       </div>
 
-      <!-- Settings 表示 -->
+      <!-- 設定 表示 -->
       <section style="margin-top:16px;">
-        <h3>Settings (準備のみ／表示)</h3>
+        <h3>{{ 'settings.titlePreview' | translate }}</h3>
         <p style="opacity:.75; margin:0 0 8px;">
-          将来ここで「性格タイプ／言語／テーマ／アクセント色」を編集します。今は下地だけ入っています。
+          {{ 'settings.lead' | translate }}
         </p>
         <pre style="padding:8px; border:1px solid #eee; border-radius:8px; background:#fafafa;">
 {{ (prefs.prefs$ | async) | json }}
         </pre>
       </section>
+
+      <section style="margin-top:16px;">
+        <h3>{{ 'settings.languageTitle' | translate }}</h3>
+
+        <mat-form-field appearance="outline" style="min-width:240px; width:100%; max-width:360px; margin-top:8px;">
+          <mat-label>{{ 'settings.languageSelect' | translate }}</mat-label>
+          <mat-select [(ngModel)]="lang" (selectionChange)="onLangChange($event.value)">
+            <mat-option value="ja">日本語</mat-option>
+            <mat-option value="en">English</mat-option>
+          </mat-select>
+          <mat-icon matSuffix>expand_more</mat-icon>
+        </mat-form-field>
+      </section>
       
       <!-- テーマ設定 UI -->
       <section style="margin-top:16px;">
-        <h3>テーマ設定</h3>
+        <h3>{{ 'settings.themeTitle' | translate }}</h3>
 
         <mat-form-field appearance="outline" style="min-width:240px; width:100%; max-width:360px; margin-top:8px;">
-          <mat-label>テーマを選択</mat-label>
+          <mat-label>{{ 'settings.themeSelect' | translate }}</mat-label>
           <mat-select [(ngModel)]="themeMode" (selectionChange)="onThemeChange($event.value)">
-            <mat-option value="light">ライト</mat-option>
-            <mat-option value="dark">ダーク</mat-option>
-            <mat-option value="system">システムに合わせる</mat-option>
+            <mat-option value="light">{{ 'theme.light' | translate }}</mat-option>
+            <mat-option value="dark">{{ 'theme.dark' | translate }}</mat-option>
+            <mat-option value="system">{{ 'theme.system' | translate }}</mat-option>
           </mat-select>
           <mat-icon matSuffix>expand_more</mat-icon>
         </mat-form-field>
@@ -437,6 +453,7 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
       </section>
 
     </ng-template>
+
   `
 })
 export class HomePage {
@@ -490,6 +507,12 @@ export class HomePage {
       map(([isEditor, online]) => !!isEditor && !!online)
     );
   }
+  
+  onLangChange(next: 'ja' | 'en') {
+    this.prefs.update({ lang: next });
+  }
+
+  lang: 'ja' | 'en' = 'ja';
 
   themeMode: 'light' | 'dark' | 'system' = 'system';
 
@@ -499,6 +522,7 @@ export class HomePage {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(p => {
         this.themeMode = (p?.theme ?? 'system') as any;
+        this.lang = (p?.lang === 'en' ? 'en' : 'ja');
       });
 
     // サインアウト時の掃除

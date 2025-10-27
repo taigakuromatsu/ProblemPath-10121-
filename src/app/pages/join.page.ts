@@ -1,4 +1,3 @@
-// src/app/pages/join.page.ts
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, ActivatedRoute, RouterLink } from '@angular/router';
@@ -8,31 +7,40 @@ import { InvitesService } from '../services/invites.service';
 import { CurrentProjectService } from '../services/current-project.service';
 import { Firestore } from '@angular/fire/firestore';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { TranslateModule } from '@ngx-translate/core';
 
 @Component({
   standalone: true,
   selector: 'pp-join',
-  imports: [CommonModule, RouterLink, MatButtonModule],
+  imports: [CommonModule, RouterLink, MatButtonModule, TranslateModule],
   template: `
-    <h2>Join Project</h2>
+    <h2>{{ 'join.title' | translate }}</h2>
 
-    <div *ngIf="error" style="padding:12px; border:1px solid #fca5a5; background:#fef2f2; border-radius:8px;">
-      {{ error }}
+    <div *ngIf="errorKey" style="padding:12px; border:1px solid #fca5a5; background:#fef2f2; border-radius:8px;">
+      {{ errorKey | translate }}
     </div>
 
-    <ng-container *ngIf="!error">
-      <p *ngIf="!invite">招待を確認中...</p>
+    <ng-container *ngIf="!errorKey">
+      <p *ngIf="!invite">{{ 'join.loading' | translate }}</p>
 
       <div *ngIf="invite">
-        <p>このプロジェクトに <strong>{{ invite.role }}</strong> 権限で参加します。</p>
+        <p>
+          {{ 'join.willJoinAs' | translate:{ role: (('role.' + invite.role + 'Label') | translate) } }}
+        </p>
 
         <ng-container *ngIf="authUser; else needLogin">
-          <button mat-raised-button color="primary" (click)="accept()">参加する</button>
-          <a mat-stroked-button routerLink="/tree" style="margin-left:8px;">キャンセル</a>
+          <button mat-raised-button color="primary" (click)="accept()">
+            {{ 'join.accept' | translate }}
+          </button>
+          <a mat-stroked-button routerLink="/tree" style="margin-left:8px;">
+            {{ 'common.cancel' | translate }}
+          </a>
         </ng-container>
 
         <ng-template #needLogin>
-          <button mat-raised-button color="primary" (click)="login()">ログインして続行</button>
+          <button mat-raised-button color="primary" (click)="login()">
+            {{ 'join.loginToContinue' | translate }}
+          </button>
         </ng-template>
       </div>
     </ng-container>
@@ -42,7 +50,9 @@ export class JoinPage {
   pid = '';
   token = '';
   invite: { role: 'admin'|'member'|'viewer', email?: string } | null = null;
-  error: string | null = null;
+
+  /** エラーは翻訳キーで保持 */
+  errorKey: string | null = null;
 
   get authUser() { return (this.auth as any).auth?.currentUser ?? null; }
 
@@ -60,11 +70,14 @@ export class JoinPage {
     this.token = this.route.snapshot.queryParamMap.get('token') || '';
     
     if (!this.pid || !this.token) {
-      this.error = '無効な招待URLです。';
+      this.errorKey = 'join.invalidUrl';
       return;
     }
     const inv = await this.invites.get(this.pid, this.token);
-    if (!inv) { this.error = '招待が見つかりません（使用済み/期限切れの可能性）。'; return; }
+    if (!inv) {
+      this.errorKey = 'join.notFound';
+      return;
+    }
     this.invite = { role: inv.role, email: inv.email };
   }
 
@@ -78,16 +91,16 @@ export class JoinPage {
       const u = (this.auth as any).auth.currentUser;
       if (!u) { await this.login(); return; }
       const uid = u.uid;
-  
-      // もし招待に email 指定があるなら照合（任意）
+
+      // 招待に email 指定がある場合は照合
       if (this.invite?.email && u.email && this.invite.email !== u.email) {
-        this.error = 'この招待は別のメールアドレス用です。正しいアカウントでログインしてください。';
+        this.errorKey = 'join.emailMismatch';
         return;
       }
-  
+
       const mRef = doc(this.fs as any, `users/${uid}/memberships/${this.pid}`);
       await setDoc(mRef, { role: this.invite!.role, joinedAt: serverTimestamp() }, { merge: true });
-  
+
       const pRef = doc(this.fs as any, `projects/${this.pid}/members/${uid}`);
       await setDoc(
         pRef,
@@ -95,20 +108,20 @@ export class JoinPage {
           role: this.invite!.role,
           joinedAt: serverTimestamp(),
           inviteId: this.token,
-          invitedBy: (u.email ?? 'unknown'),  // 文字列ならOK（ルールは値内容を強制していない）
+          invitedBy: (u.email ?? 'unknown'),
           displayName: u.displayName ?? 'User',
-          email: u.email ?? null, 
+          email: u.email ?? null,
         },
-        { merge: true } // 既に doc が存在しても update 許可により通る
+        { merge: true }
       );
-  
+
       await this.invites.markRedeemed(this.pid, this.token, uid);
-  
+
       this.current.set(this.pid);
       this.router.navigateByUrl('/tree');
-    } catch (e: any) {
-      this.error = e?.message ?? '参加に失敗しました。';
+    } catch (_e: any) {
+      this.errorKey = 'join.acceptFailed';
     }
   }
-  
 }
+

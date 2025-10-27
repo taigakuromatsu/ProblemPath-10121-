@@ -16,6 +16,7 @@ import { Task } from '../models/types';
 import { take } from 'rxjs/operators';
 import { Firestore } from '@angular/fire/firestore';
 import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
+import { TranslateModule } from '@ngx-translate/core';
 
 type Vm = {
   overdue: Task[]; today: Task[]; tomorrow: Task[];
@@ -27,20 +28,27 @@ const EMPTY: Vm = { overdue:[], today:[], tomorrow:[], thisWeekRest:[], nextWeek
 @Component({
   standalone: true,
   selector: 'pp-item',
-  imports: [NgIf, RouterLink, MatButtonModule, MatIconModule],
+  imports: [NgIf, RouterLink, MatButtonModule, MatIconModule, TranslateModule],
   template: `
     <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid #e5e7eb; border-radius:8px; margin-bottom:6px;">
       <span [style.opacity]="t.status==='done' ? .6 : 1" style="flex:1 1 auto;">
         <strong>{{ t.title }}</strong>
         <span *ngIf="t.priority" style="font-size:12px; margin-left:6px; opacity:.8;">[{{ t.priority }}]</span>
-        <span *ngIf="t.dueDate" style="font-size:12px; margin-left:8px; opacity:.8;">due: {{ t.dueDate }}</span>
+        <span *ngIf="t.dueDate" style="font-size:12px; margin-left:8px; opacity:.8;">
+          {{ 'task.dueShort' | translate:{ date: t.dueDate } }}
+        </span>
       </span>
-      <a *ngIf="t.problemId && t.issueId" mat-stroked-button [routerLink]="['/board']" [queryParams]="{ pid: t.problemId }">Board</a>
+      <a *ngIf="t.problemId && t.issueId"
+         mat-stroked-button
+         [routerLink]="['/board']"
+         [queryParams]="{ pid: t.problemId }">
+        {{ 'nav.board' | translate }}
+      </a>
     </div>
   `
 })
 export class MyItem {
-  @Input() t!: Task; // ← Input を明示
+  @Input() t!: Task;
 }
 
 @Component({
@@ -49,51 +57,73 @@ export class MyItem {
   imports: [
     AsyncPipe, NgFor, NgIf, FormsModule,
     MatButtonModule, MatSelectModule, MatIconModule, RouterLink,
-    MyItem // ← 子コンポーネントを宣言
+    MyItem, TranslateModule
   ],
   template: `
   <div style="display:flex; align-items:center; gap:12px; margin:8px 0 16px;">
-    <a mat-stroked-button routerLink="/tree">← Treeへ</a>
-    <h3 style="margin:0;">My Tasks</h3>
+    <a mat-stroked-button routerLink="/tree">← {{ 'nav.tree' | translate }}</a>
+    <h3 style="margin:0;">{{ 'myTasks.title' | translate }}</h3>
     <span style="flex:1 1 auto;"></span>
 
-    <button mat-stroked-button (click)="exportCurrent('csv')">CSV</button>
-    <button mat-stroked-button style="margin-left:6px;" (click)="exportCurrent('json')">JSON</button>
+    <button mat-stroked-button (click)="exportCurrent('csv')">{{ 'export.csv' | translate }}</button>
+    <button mat-stroked-button style="margin-left:6px;" (click)="exportCurrent('json')">{{ 'export.json' | translate }}</button>
 
-    <label>表示:
+    <label>{{ 'filter.show' | translate }}:
       <select [(ngModel)]="openOnly" (ngModelChange)="reload()">
-        <option [ngValue]="true">未完了のみ</option>
-        <option [ngValue]="false">すべて</option>
+        <option [ngValue]="true">{{ 'filter.openOnly' | translate }}</option>
+        <option [ngValue]="false">{{ 'filter.all' | translate }}</option>
       </select>
     </label>
-    <label style="margin-left:8px;">タグ:
-      <input [(ngModel)]="tagQuery" (ngModelChange)="reload()" placeholder="#bug #UI（スペース区切り）"
-        style="padding:4px 8px; border:1px solid #e5e7eb; border-radius:6px;"/>
+    <label style="margin-left:8px;">{{ 'filter.tags' | translate }}:
+      <input [(ngModel)]="tagQuery"
+             (ngModelChange)="reload()"
+             [placeholder]="'filter.tagsPlaceholder' | translate"
+             style="padding:4px 8px; border:1px solid #e5e7eb; border-radius:6px;"/>
     </label>
   </div>
 
   <ng-container *ngIf="vm$ | async as vm">
-    <section><h4>⚠️ 期限切れ（{{ vm.overdue.length }}）</h4>
-      <div *ngIf="!vm.overdue.length" style="opacity:.6">（なし）</div>
-      <ul><li *ngFor="let t of vm.overdue; trackBy: track"><pp-item [t]="t"></pp-item></li></ul></section>
-    <section><h4>📅 今日（{{ vm.today.length }}）</h4>
-      <div *ngIf="!vm.today.length" style="opacity:.6">（なし）</div>
-      <ul><li *ngFor="let t of vm.today; trackBy: track"><pp-item [t]="t"></pp-item></li></ul></section>
-    <section><h4>🗓 明日（{{ vm.tomorrow.length }}）</h4>
-      <div *ngIf="!vm.tomorrow.length" style="opacity:.6">（なし）</div>
-      <ul><li *ngFor="let t of vm.tomorrow; trackBy: track"><pp-item [t]="t"></pp-item></li></ul></section>
-    <section><h4>🗓 今週の残り（{{ vm.thisWeekRest.length }}）</h4>
-      <div *ngIf="!vm.thisWeekRest.length" style="opacity:.6">（なし）</div>
-      <ul><li *ngFor="let t of vm.thisWeekRest; trackBy: track"><pp-item [t]="t"></pp-item></li></ul></section>
-    <section><h4>🗓 来週（{{ vm.nextWeek.length }}）</h4>
-      <div *ngIf="!vm.nextWeek.length" style="opacity:.6">（なし）</div>
-      <ul><li *ngFor="let t of vm.nextWeek; trackBy: track"><pp-item [t]="t"></pp-item></li></ul></section>
-    <section><h4>📆 以降（{{ vm.later.length }}）</h4>
-      <div *ngIf="!vm.later.length" style="opacity:.6">（なし）</div>
-      <ul><li *ngFor="let t of vm.later; trackBy: track"><pp-item [t]="t"></pp-item></li></ul></section>
-    <section><h4>— 期限未設定（{{ vm.nodue.length }}）</h4>
-      <div *ngIf="!vm.nodue.length" style="opacity:.6">（なし）</div>
-      <ul><li *ngFor="let t of vm.nodue; trackBy: track"><pp-item [t]="t"></pp-item></li></ul></section>
+    <section>
+      <h4>⚠️ {{ 'myTasks.overdue' | translate }}（{{ vm.overdue.length }}）</h4>
+      <div *ngIf="!vm.overdue.length" style="opacity:.6">{{ 'common.none' | translate }}</div>
+      <ul><li *ngFor="let t of vm.overdue; trackBy: track"><pp-item [t]="t"></pp-item></li></ul>
+    </section>
+
+    <section>
+      <h4>📅 {{ 'myTasks.today' | translate }}（{{ vm.today.length }}）</h4>
+      <div *ngIf="!vm.today.length" style="opacity:.6">{{ 'common.none' | translate }}</div>
+      <ul><li *ngFor="let t of vm.today; trackBy: track"><pp-item [t]="t"></pp-item></li></ul>
+    </section>
+
+    <section>
+      <h4>🗓 {{ 'myTasks.tomorrow' | translate }}（{{ vm.tomorrow.length }}）</h4>
+      <div *ngIf="!vm.tomorrow.length" style="opacity:.6">{{ 'common.none' | translate }}</div>
+      <ul><li *ngFor="let t of vm.tomorrow; trackBy: track"><pp-item [t]="t"></pp-item></li></ul>
+    </section>
+
+    <section>
+      <h4>🗓 {{ 'myTasks.thisWeekRest' | translate }}（{{ vm.thisWeekRest.length }}）</h4>
+      <div *ngIf="!vm.thisWeekRest.length" style="opacity:.6">{{ 'common.none' | translate }}</div>
+      <ul><li *ngFor="let t of vm.thisWeekRest; trackBy: track"><pp-item [t]="t"></pp-item></li></ul>
+    </section>
+
+    <section>
+      <h4>🗓 {{ 'myTasks.nextWeek' | translate }}（{{ vm.nextWeek.length }}）</h4>
+      <div *ngIf="!vm.nextWeek.length" style="opacity:.6">{{ 'common.none' | translate }}</div>
+      <ul><li *ngFor="let t of vm.nextWeek; trackBy: track"><pp-item [t]="t"></pp-item></li></ul>
+    </section>
+
+    <section>
+      <h4>📆 {{ 'myTasks.later' | translate }}（{{ vm.later.length }}）</h4>
+      <div *ngIf="!vm.later.length" style="opacity:.6">{{ 'common.none' | translate }}</div>
+      <ul><li *ngFor="let t of vm.later; trackBy: track"><pp-item [t]="t"></pp-item></li></ul>
+    </section>
+
+    <section>
+      <h4>— {{ 'myTasks.nodue' | translate }}（{{ vm.nodue.length }}）</h4>
+      <div *ngIf="!vm.nodue.length" style="opacity:.6">{{ 'common.none' | translate }}</div>
+      <ul><li *ngFor="let t of vm.nodue; trackBy: track"><pp-item [t]="t"></pp-item></li></ul>
+    </section>
   </ng-container>
   `
 })
@@ -144,7 +174,7 @@ export class MyTasksPage {
         const thisWeekRest$  = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(this.addDays(tomorrow,1)), this.ymd(endOfWeek), tags);
         const nextWeek$      = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(startOfNextWeek), this.ymd(endOfNextWeek), tags);
         const later$         = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(this.addDays(endOfNextWeek,1)), far, tags);
-        const nodue$ = this.tasks.listMineNoDue(pid, uid, this.openOnly, tags);
+        const nodue$         = this.tasks.listMineNoDue(pid, uid, this.openOnly, tags);
 
         return combineLatest([overdue$, today$, tomorrow$, thisWeekRest$, nextWeek$, later$, nodue$]).pipe(
           map(([overdue, today, tomorrow, thisWeekRest, nextWeek, later, nodue]) => ({
@@ -155,7 +185,6 @@ export class MyTasksPage {
     );
   }
 
-
   private flattenVm(vm: Vm){
     // 表示順のまま結合。必要なら dedupe 可
     return [
@@ -163,9 +192,9 @@ export class MyTasksPage {
       ...vm.thisWeekRest, ...vm.nextWeek, ...vm.later, ...vm.nodue
     ];
   }
-  
+
   // 置き換え版：toCsv（第3引数 dir を追加）
-private toCsv(tasks: Task[], nameMap: Map<string,string>, dir: Map<string,string>): string {
+  private toCsv(tasks: Task[], nameMap: Map<string,string>, dir: Map<string,string>): string {
     const headers = ['ID','タイトル','状態','優先度','期日','担当者','プロジェクト','Problem','Issue','タグ','進捗(%)','作成日時','更新日時'];
     const esc = (v: any) => `"${(v ?? '').toString().replace(/"/g,'""')}"`;
     const fmtTs = (x: any) => {
@@ -174,7 +203,7 @@ private toCsv(tasks: Task[], nameMap: Map<string,string>, dir: Map<string,string
     };
     const joinAssignees = (xs: any) =>
       Array.isArray(xs) ? xs.map((u: string) => dir.get(u) ?? u).join(', ') : (xs ?? '');
-  
+
     const rows = tasks.map(t => {
       const pj = t.projectId ? (nameMap.get(`project:${t.projectId}`) ?? t.projectId) : '';
       const pr = (t.projectId && t.problemId) ? (nameMap.get(`problem:${t.projectId}:${t.problemId}`) ?? t.problemId) : '';
@@ -193,10 +222,10 @@ private toCsv(tasks: Task[], nameMap: Map<string,string>, dir: Map<string,string
         fmtTs((t as any).updatedAt),
       ].map(esc).join(',');
     });
-  
+
     return [headers.join(','), ...rows].join('\n');
   }
-  
+
   // 置き換え版：toJson（第3引数 dir を追加）
   private toJson(tasks: Task[], nameMap: Map<string,string>, dir: Map<string,string>): string {
     const mapped = tasks.map(t => ({
@@ -213,16 +242,14 @@ private toCsv(tasks: Task[], nameMap: Map<string,string>, dir: Map<string,string
       progress: (t as any).progress ?? null,
       createdAt: (t as any).createdAt?.toDate?.() ?? null,
       updatedAt: (t as any).updatedAt?.toDate?.() ?? null,
-      // IDも残すなら:
+      // IDs (optional; useful for joins)
       projectId: t.projectId ?? null,
       problemId: t.problemId ?? null,
       issueId: t.issueId ?? null,
     }));
     return JSON.stringify(mapped, null, 2);
   }
-  
-  
-  
+
   private download(filename: string, content: string, mime = 'text/plain') {
     const bom = mime === 'text/csv' ? '\uFEFF' : ''; // Excel対策（CSVのみBOM付与）
     const blob = new Blob([bom + content], { type: mime + ';charset=utf-8' });
@@ -232,14 +259,12 @@ private toCsv(tasks: Task[], nameMap: Map<string,string>, dir: Map<string,string
     a.click();
     URL.revokeObjectURL(a.href);
   }
-  
+
   exportCurrent(kind: 'csv'|'json') {
     this.vm$.pipe(take(1)).subscribe(async vm => {
       const data = this.flattenVm(vm);
-  
-      const nameMap = await this.resolveNames(data);                 // Project/Problem/Issue のタイトル解決（前回導入）
-      const assigneeDir = await this.resolveAssigneeDirectory(data); // ★ 追加：UID→表示名
-  
+      const nameMap = await this.resolveNames(data);
+      const assigneeDir = await this.resolveAssigneeDirectory(data);
       if (kind === 'csv') {
         const csv = this.toCsv(data, nameMap, assigneeDir);
         this.download('my-tasks.csv', csv, 'text/csv');
@@ -255,20 +280,20 @@ private toCsv(tasks: Task[], nameMap: Map<string,string>, dir: Map<string,string
     const needProject = new Set<string>();
     const needProblem: Array<{pid:string; problemId:string}> = [];
     const needIssue: Array<{pid:string; problemId:string; issueId:string}> = [];
-  
+
     for (const t of tasks) {
       if (t.projectId) needProject.add(t.projectId);
       if (t.projectId && t.problemId) needProblem.push({ pid: t.projectId, problemId: t.problemId });
       if (t.projectId && t.problemId && t.issueId) needIssue.push({ pid: t.projectId, problemId: t.problemId, issueId: t.issueId });
     }
-  
+
     // projects
     await Promise.all(Array.from(needProject).map(async pid => {
       const snap = await getDoc(doc(this.fs as any, `projects/${pid}`));
       const name = snap.exists() ? (snap.data() as any)?.meta?.name ?? pid : pid;
       nameMap.set(`project:${pid}`, name);
     }));
-  
+
     // problems
     await Promise.all(needProblem.map(async x => {
       const key = `problem:${x.pid}:${x.problemId}`;
@@ -277,7 +302,7 @@ private toCsv(tasks: Task[], nameMap: Map<string,string>, dir: Map<string,string
       const title = snap.exists() ? (snap.data() as any)?.title ?? x.problemId : x.problemId;
       nameMap.set(key, title);
     }));
-  
+
     // issues
     await Promise.all(needIssue.map(async x => {
       const key = `issue:${x.pid}:${x.problemId}:${x.issueId}`;
@@ -286,15 +311,15 @@ private toCsv(tasks: Task[], nameMap: Map<string,string>, dir: Map<string,string
       const title = snap.exists() ? (snap.data() as any)?.title ?? x.issueId : x.issueId;
       nameMap.set(key, title);
     }));
-  
+
     return nameMap;
   }
-  
-/** 各プロジェクトの members を読み、uid -> 表示名(なければemail) の辞書を作る */
-private async resolveAssigneeDirectory(tasks: Task[]): Promise<Map<string,string>> {
+
+  /** 各プロジェクトの members を読み、uid -> 表示名(なければemail) の辞書を作る */
+  private async resolveAssigneeDirectory(tasks: Task[]): Promise<Map<string,string>> {
     const byUid = new Map<string,string>();
     const pids = Array.from(new Set(tasks.map(t => t.projectId).filter(Boolean))) as string[];
-  
+
     for (const pid of pids) {
       const col = collection(this.fs as any, `projects/${pid}/members`);
       const snap = await getDocs(col);
@@ -306,6 +331,6 @@ private async resolveAssigneeDirectory(tasks: Task[]): Promise<Map<string,string
     }
     return byUid;
   }
-  
 }
+
 

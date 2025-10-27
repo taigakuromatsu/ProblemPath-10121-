@@ -22,7 +22,8 @@ import { map, switchMap, take, tap } from 'rxjs/operators';
 import { MembersService } from '../services/members.service';
 import { CommentsService, CommentDoc, CommentTarget } from '../services/comments.service';
 import { DraftsService } from '../services/drafts.service';
-import { NetworkService } from '../services/network.service'; // ★ 追加
+import { NetworkService } from '../services/network.service';
+import { TranslateModule, TranslateService } from '@ngx-translate/core'; 
 
 type Status = 'not_started' | 'in_progress' | 'done';
 
@@ -48,26 +49,26 @@ function dlog(...args: any[]) {
   imports: [
     NgIf, NgFor, AsyncPipe, DatePipe, FormsModule,
     MatButtonModule, MatTreeModule, MatIconModule, MatTooltipModule,
-    NgChartsModule, MatSnackBarModule
+    NgChartsModule, MatSnackBarModule, TranslateModule
   ],
   template: `
-    <h3>Problems</h3>
+    <h3>{{ 'tree.title' | translate }}</h3>
 
     <div style="display:flex; align-items:center; gap:12px; margin:8px 0;">
       <span style="flex:1 1 auto;"></span>
       <ng-container *ngIf="auth.loggedIn$ | async; else signinT">
-        <span style="opacity:.8; margin-right:6px;">{{ (auth.displayName$ | async) || 'signed in' }}</span>
-        <button mat-stroked-button type="button" (click)="auth.signOut()">Sign out</button>
+        <span style="opacity:.8; margin-right:6px;">{{ (auth.displayName$ | async) || ('auth.signedIn' | translate) }}</span>
+        <button mat-stroked-button type="button" (click)="auth.signOut()">{{ 'auth.signOut' | translate }}</button>
       </ng-container>
       <ng-template #signinT>
-        <button mat-raised-button color="primary" type="button" (click)="auth.signInWithGoogle()">Sign in</button>
+        <button mat-raised-button color="primary" type="button" (click)="auth.signInWithGoogle()">{{ 'auth.signIn' | translate }}</button>
       </ng-template>
     </div>
 
     <!-- ===== Dashboard ===== -->
     <div style="display:flex; align-items:center; gap:8px; margin:8px 0 12px;">
       <button mat-stroked-button type="button" (click)="showDash = !showDash">
-        {{ showDash ? 'Hide Dashboard' : 'Show Dashboard' }}
+        {{ showDash ? ('tree.hideDashboard' | translate) : ('tree.showDashboard' | translate) }}
       </button>
     </div>
 
@@ -75,7 +76,7 @@ function dlog(...args: any[]) {
          style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:12px; margin-bottom:12px;">
       <!-- 左：円グラフ -->
       <div style="border:1px solid #e5e7eb; border-radius:10px; padding:8px;">
-        <div style="font-weight:600; margin-bottom:6px; font-size:13px;">Overall Status</div>
+        <div style="font-weight:600; margin-bottom:6px; font-size:13px;">{{ 'tree.overallStatus' | translate }}</div>
         <div style="height:180px;">
           <canvas baseChart
             [type]="'doughnut'"
@@ -84,16 +85,16 @@ function dlog(...args: any[]) {
           </canvas>
         </div>
         <div style="display:flex; gap:10px; margin-top:6px; font-size:12px; opacity:.8;">
-          <span>Open: {{ d.openTotal }}</span>
-          <span>Done: {{ d.doneTotal }}</span>
-          <span>Total: {{ d.openTotal + d.doneTotal }}</span>
-          <span>Progress: {{ d.progressPct }}%</span>
+          <span>{{ 'tree.open' | translate }}: {{ d.openTotal }}</span>
+          <span>{{ 'tree.done' | translate }}: {{ d.doneTotal }}</span>
+          <span>{{ 'tree.total' | translate }}: {{ d.openTotal + d.doneTotal }}</span>
+          <span>{{ 'tree.progress' | translate }}: {{ d.progressPct }}%</span>
         </div>
       </div>
 
       <!-- 右：棒グラフ -->
       <div style="border:1px solid #e5e7eb; border-radius:10px; padding:8px;">
-        <div style="font-weight:600; margin-bottom:6px; font-size:13px;">Open Tasks by Due</div>
+        <div style="font-weight:600; margin-bottom:6px; font-size:13px;">{{ 'tree.openTasksByDue' | translate }}</div>
         <div style="height:200px;">
           <canvas baseChart
             [type]="'bar'"
@@ -102,33 +103,31 @@ function dlog(...args: any[]) {
           </canvas>
         </div>
         <div style="display:flex; gap:10px; margin-top:6px; font-size:12px; opacity:.8;">
-          <span>Overdue: {{ d.overdue }}</span>
-          <span>Today: {{ d.today }}</span>
-          <span>This week: {{ d.thisWeek }}</span>
-          <span>Next week: {{ d.nextWeek }}</span>
-          <span>Later: {{ d.later }}</span>
-          <span>No due: {{ d.nodue }}</span>
+          <span>{{ 'tree.overdue' | translate }}: {{ d.overdue }}</span>
+          <span>{{ 'tree.today' | translate }}: {{ d.today }}</span>
+          <span>{{ 'tree.thisWeek' | translate }}: {{ d.thisWeek }}</span>
+          <span>{{ 'tree.nextWeek' | translate }}: {{ d.nextWeek }}</span>
+          <span>{{ 'tree.later' | translate }}: {{ d.later }}</span>
+          <span>{{ 'tree.noDue' | translate }}: {{ d.nodue }}</span>
         </div>
       </div>
     </div>
     <!-- ===== /Dashboard ===== -->
 
-    <!-- ===== 2カラム：左=ツリー / 右=コメントパネル ===== -->
     <div style="display:grid; grid-template-columns: 1fr 360px; gap:12px; align-items:start;">
 
       <!-- 左：ツリー -->
       <div>
-        <!-- エラー表示＆再試行 -->
         <div *ngIf="loadError" style="padding:8px 12px; border:1px solid #f44336; background:#ffebee; color:#b71c1c; border-radius:6px; margin:8px 0;">
           {{ loadError }}
           <button mat-button color="warn" type="button" (click)="retryProblems()" style="margin-left:8px;">
-            再試行
+            {{ 'common.retry' | translate }}
           </button>
         </div>
 
         <mat-tree [dataSource]="dataSource" [treeControl]="tree" class="mat-elevation-z1">
 
-          <!-- Problem（親） -->
+          <!-- Problem -->
           <mat-nested-tree-node *matTreeNodeDef="let node; when: isProblem">
             <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-bottom:1px solid rgba(0,0,0,.06);">
               <button mat-icon-button matTreeNodeToggle [disabled]="!(node.children?.length)">
@@ -137,18 +136,17 @@ function dlog(...args: any[]) {
               <span style="font-weight:600">{{ node.name }}</span>
               <span style="flex:1 1 auto"></span>
 
-              <!-- 💬 コメント（件数バッジ付き） -->
               <button mat-button type="button" (click)="openComments(node)">
-                💬 Comments ({{ commentCounts[node.id] ?? 0 }})
+                💬 {{ 'comment.title' | translate }} ({{ commentCounts[node.id] ?? 0 }})
               </button>
 
-              <button mat-button type="button" (click)="renameProblemNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">Rename</button>
-              <button mat-button type="button" color="warn" (click)="removeProblemNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">Delete</button>
+              <button mat-button type="button" (click)="renameProblemNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">{{ 'common.rename' | translate }}</button>
+              <button mat-button type="button" color="warn" (click)="removeProblemNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">{{ 'common.delete' | translate }}</button>
             </div>
             <div *ngIf="tree.isExpanded(node)"><ng-container matTreeNodeOutlet></ng-container></div>
           </mat-nested-tree-node>
 
-          <!-- Issue（中間） -->
+          <!-- Issue -->
           <mat-nested-tree-node *matTreeNodeDef="let node; when: isIssue">
             <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-bottom:1px solid rgba(0,0,0,.06); margin-left:24px;">
               <button mat-icon-button matTreeNodeToggle [disabled]="!(node.children?.length)">
@@ -157,18 +155,17 @@ function dlog(...args: any[]) {
               <span>{{ node.name }}</span>
               <span style="flex:1 1 auto"></span>
 
-              <!-- 💬 コメント（件数バッジ付き） -->
               <button mat-button type="button" (click)="openComments(node)">
-                💬 Comments ({{ commentCounts[node.id] ?? 0 }})
+                💬 {{ 'comment.title' | translate }} ({{ commentCounts[node.id] ?? 0 }})
               </button>
 
-              <button mat-button type="button" (click)="renameIssueNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">Rename</button>
-              <button mat-button type="button" color="warn" (click)="removeIssueNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">Delete</button>
+              <button mat-button type="button" (click)="renameIssueNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">{{ 'common.rename' | translate }}</button>
+              <button mat-button type="button" color="warn" (click)="removeIssueNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">{{ 'common.delete' | translate }}</button>
             </div>
             <div *ngIf="tree.isExpanded(node)"><ng-container matTreeNodeOutlet></ng-container></div>
           </mat-nested-tree-node>
 
-          <!-- Task（葉） -->
+          <!-- Task -->
           <mat-nested-tree-node *matTreeNodeDef="let node">
             <div style="display:flex; align-items:center; gap:8px; padding:6px 8px;
                         border-bottom:1px solid rgba(0,0,0,.06); margin-left:56px;
@@ -176,7 +173,7 @@ function dlog(...args: any[]) {
               <button mat-icon-button disabled><mat-icon>task_alt</mat-icon></button>
               <span style="display:flex; align-items:center; gap:6px; max-width: 520px;">
                 <span [style.color]="statusColor(node.status)"
-                      matTooltip="{{ node.status==='done' ? '完了' : node.status==='in_progress' ? '対応中' : '未着手' }}">
+                      matTooltip="{{ node.status==='done' ? ('status.done' | translate) : node.status==='in_progress' ? ('status.inProgress' | translate) : ('status.notStarted' | translate) }}">
                   {{ statusIcon(node.status) }}
                 </span>
                 <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1 1 auto;"
@@ -187,13 +184,12 @@ function dlog(...args: any[]) {
 
               <span style="flex:1 1 auto"></span>
 
-              <!-- 💬 コメント（件数バッジ付き） -->
               <button mat-button type="button" (click)="openComments(node)">
-                💬 Comments ({{ commentCounts[node.id] ?? 0 }})
+                💬 {{ 'comment.title' | translate }} ({{ commentCounts[node.id] ?? 0 }})
               </button>
 
-              <button mat-button type="button" (click)="renameTaskNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">Rename</button>
-              <button mat-button type="button" color="warn" (click)="removeTaskNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">Delete</button>
+              <button mat-button type="button" (click)="renameTaskNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">{{ 'common.rename' | translate }}</button>
+              <button mat-button type="button" color="warn" (click)="removeTaskNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">{{ 'common.delete' | translate }}</button>
             </div>
           </mat-nested-tree-node>
 
@@ -202,15 +198,15 @@ function dlog(...args: any[]) {
 
       <!-- 右：コメントパネル -->
       <aside style="border:1px solid #e5e7eb; border-radius:10px; padding:10px; position:sticky; top:12px; height:fit-content;">
-        <div *ngIf="!selectedNode" style="opacity:.65;">左のツリーから対象を選んでコメントを表示</div>
+        <div *ngIf="!selectedNode" style="opacity:.65;">{{ 'comment.emptyHint' | translate }}</div>
 
         <ng-container *ngIf="selectedNode">
           <div style="font-weight:700; margin-bottom:8px;">
-            💬 Comments — {{ selectedNode.kind }}: {{ selectedNode.name }}
+            💬 {{ 'comment.header' | translate:{ kind: selectedNode.kind, name: selectedNode.name } }}
           </div>
 
           <div *ngIf="!(isOnline$ | async)" style="margin-bottom:6px; font-size:12px; color:#b45309; background:#fffbeb; border:1px solid #fcd34d; padding:6px 8px; border-radius:6px;">
-            現在オフラインです。コメントの投稿・編集・削除はできません。
+            {{ 'warn.offlineComments' | translate }}
           </div>
 
           <div style="display:flex; gap:6px; margin-bottom:8px;">
@@ -218,18 +214,18 @@ function dlog(...args: any[]) {
                       (ngModelChange)="onCommentBodyChange($event)"
                       [disabled]="!(canEdit$ | async)"
                       rows="3" style="flex:1; width:100%;"
-                      placeholder="コメントを入力…"></textarea>
+                      [placeholder]="'comment.placeholder' | translate"></textarea>
           </div>
           <div style="display:flex; gap:8px; margin-bottom:12px;">
             <button mat-raised-button color="primary" (click)="editingId ? saveEdit() : addComment()"
                     [disabled]="!newBody.trim() || !(canEdit$ | async)">
-              {{ editingId ? '更新' : '投稿' }}
+              {{ editingId ? ('comment.update' | translate) : ('comment.post' | translate) }}
             </button>
-            <button mat-stroked-button (click)="cancelEdit()" *ngIf="editingId">キャンセル</button>
+            <button mat-stroked-button (click)="cancelEdit()" *ngIf="editingId">{{ 'common.cancel' | translate }}</button>
           </div>
 
           <div *ngIf="comments$ | async as cs; else loadingC">
-            <div *ngIf="!cs.length" style="opacity:.65;">まだコメントはありません</div>
+            <div *ngIf="!cs.length" style="opacity:.65;">{{ 'comment.noneYet' | translate }}</div>
             <div *ngFor="let c of cs" style="border-top:1px solid #eee; padding:8px 0;">
               <div style="font-size:12px; opacity:.75;">
                 <span>{{ c.authorName || c.authorId }}</span> ・
@@ -239,16 +235,15 @@ function dlog(...args: any[]) {
 
               <div style="display:flex; gap:6px; margin-top:6px;"
                    *ngIf="(members.isAdmin$ | async) || ((auth.uid$ | async) === c.authorId)">
-                <button mat-button (click)="startEdit(c.id!, c.body)" [disabled]="!(canEdit$ | async)">編集</button>
-                <button mat-button color="warn" (click)="deleteComment(c.id!)" [disabled]="!(canEdit$ | async)">削除</button>
+                <button mat-button (click)="startEdit(c.id!, c.body)" [disabled]="!(canEdit$ | async)">{{ 'common.edit' | translate }}</button>
+                <button mat-button color="warn" (click)="deleteComment(c.id!)" [disabled]="!(canEdit$ | async)">{{ 'common.delete' | translate }}</button>
               </div>
             </div>
           </div>
-          <ng-template #loadingC><div style="opacity:.65;">読み込み中…</div></ng-template>
+          <ng-template #loadingC><div style="opacity:.65;">{{ 'common.loading' | translate }}</div></ng-template>
         </ng-container>
       </aside>
     </div>
-    <!-- ===== /2カラム ===== -->
   `
 })
 export class TreePage {
@@ -326,10 +321,10 @@ export class TreePage {
     private comments: CommentsService,
     private snack: MatSnackBar,
     private drafts: DraftsService,
-    private network: NetworkService,     // ★ 追加
+    private network: NetworkService, 
+    private tr: TranslateService,
   ) {
     this.isEditor$ = this.members.isEditor$;
-    // フィールド初期化は constructor で代入（順序問題を避ける）
     this.isOnline$ = this.network.isOnline$;
     this.canEdit$ = combineLatest([this.members.isEditor$, this.network.isOnline$]).pipe(
       map(([isEditor, online]) => !!isEditor && !!online)
@@ -339,13 +334,13 @@ export class TreePage {
   // ===== 既存メソッド（ガード追加） =====
   async renameProblemNode(node: { id: string; name: string }) {
     if (!(await this.requireCanEdit())) return;
-    const t = prompt('New Problem title', node.name);
+    const t = prompt(this.tr.instant('tree.prompt.renameProblem'), node.name);
     if (!t?.trim()) return;
     this.withPid(pid => this.problems.update(pid, node.id, { title: t.trim() }));
   }
   async removeProblemNode(node: { id: string; name: string }) {
     if (!(await this.requireCanEdit())) return;
-    if (!confirm(`Delete "${node.name}"?`)) return;
+    if (!confirm(this.tr.instant('tree.confirm.deleteProblem', { name: node.name }))) return;
     this.withPid(async pid => {
       await this.softDeleteWithUndo('problem', { projectId: pid, problemId: node.id }, '(Problem)');
     });
@@ -353,29 +348,29 @@ export class TreePage {
   async renameIssueNode(node: { id: string; name: string; parentId?: string }) {
     if (!node.parentId) return;
     if (!(await this.requireCanEdit())) return;
-    const t = prompt('New Issue title', node.name);
+    const t = prompt(this.tr.instant('tree.prompt.renameIssue'), node.name);
     if (!t?.trim()) return;
     this.withPid(pid => this.issues.update(pid, node.parentId!, node.id, { title: t.trim() }));
   }
   async removeIssueNode(node: { id: string; name: string; parentId?: string }) {
     if (!node.parentId) return;
     if (!(await this.requireCanEdit())) return;
-    if (!confirm(`Delete Issue "${node.name}"?`)) return;
+    if (!confirm(this.tr.instant('tree.confirm.deleteIssue', { name: node.name }))) return;
     this.withPid(async pid => {
       await this.softDeleteWithUndo('issue', { projectId: pid, problemId: node.parentId!, issueId: node.id }, node.name);
     });
   }
-  async renameTaskNode(node: { id: string; name: string; parentProblemId?: string; parentIssueId?: string }) { 
-    if (!node.parentProblemId || !node.parentIssueId) return; 
+  async renameTaskNode(node: { id: string; name: string; parentProblemId?: string; parentIssueId?: string }) {
+    if (!node.parentProblemId || !node.parentIssueId) return;
     if (!(await this.requireCanEdit())) return;
-    const t = prompt('New Task title', node.name); 
-    if (!t?.trim()) return; 
+    const t = prompt(this.tr.instant('tree.prompt.renameTask'), node.name);
+    if (!t?.trim()) return;
     this.withPid(pid => this.tasks.update(pid, node.parentProblemId!, node.parentIssueId!, node.id, { title: t.trim() }));
   }
   async removeTaskNode(node: { id: string; name: string; parentProblemId?: string; parentIssueId?: string }) {
     if (!node.parentProblemId || !node.parentIssueId || this.isBusyId(node.id)) return;
     if (!(await this.requireCanEdit())) return;
-    if (!confirm(`Delete Task "${node.name}"?`)) return;
+    if (!confirm(this.tr.instant('tree.confirm.deleteTask', { name: node.name }))) return;
     this.busyIds.add(node.id!);
     this.withPid(async pid => {
       try {
@@ -604,13 +599,20 @@ export class TreePage {
 
   doughnutData(open: number, done: number) {
     return {
-      labels: ['Open', 'Done'],
+      labels: [this.tr.instant('tree.open'), this.tr.instant('tree.done')],
       datasets: [{ data: [open, done] }]
     } as ChartConfiguration<'doughnut'>['data'];
   }
   barData(d: { overdue: number; today: number; thisWeek: number; nextWeek: number; later: number; nodue: number; }) {
     return {
-      labels: ['Overdue', 'Today', 'This week', 'Next week', 'Later', 'No due'],
+      labels: [
+        this.tr.instant('tree.overdue'),
+        this.tr.instant('tree.today'),
+        this.tr.instant('tree.thisWeek'),
+        this.tr.instant('tree.nextWeek'),
+        this.tr.instant('tree.later'),
+        this.tr.instant('tree.noDue'),
+      ],
       datasets: [{ data: [d.overdue, d.today, d.thisWeek, d.nextWeek, d.later, d.nodue], maxBarThickness: 22 }]
     } as ChartConfiguration<'bar'>['data'];
   }
@@ -861,11 +863,11 @@ export class TreePage {
       firstValueFrom(this.isOnline$),
     ]);
     if (!isEditor) {
-      this.snack.open('編集権限がありません（Viewer）', 'OK', { duration: 3000 });
+      this.snack.open(this.tr.instant('warn.noEditPermission'), 'OK', { duration: 3000 });
       return false;
     }
     if (!online) {
-      this.snack.open('オフラインのため編集できません', 'OK', { duration: 3000 });
+      this.snack.open(this.tr.instant('warn.offlineNoEdit'), 'OK', { duration: 3000 });
       return false;
     }
     return true;

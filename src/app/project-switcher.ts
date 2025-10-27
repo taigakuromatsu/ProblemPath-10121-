@@ -1,10 +1,10 @@
-// src/app/project-switcher.ts
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, ChangeDetectorRef, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
+import { TranslateModule } from '@ngx-translate/core';
 
 import { ProjectDirectoryService, MyProject } from './services/project-directory.service';
 import { CurrentProjectService } from './services/current-project.service';
@@ -24,21 +24,21 @@ import { arrayRemove } from 'firebase/firestore';
 @Component({
   standalone: true,
   selector: 'pp-project-switcher',
-  imports: [CommonModule, FormsModule, MatSelectModule, MatFormFieldModule, MatButtonModule],
+  imports: [CommonModule, FormsModule, MatSelectModule, MatFormFieldModule, MatButtonModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div style="display:flex; align-items:center; gap:8px;">
       <mat-form-field appearance="outline" style="min-width:240px; margin:0;">
-        <mat-label>Project</mat-label>
+        <mat-label>{{ 'projectSwitcher.project' | translate }}</mat-label>
         <mat-select
           [(ngModel)]="selected"
           (ngModelChange)="onChange($event)"
           [disabled]="loading || !projects.length || !(isOnline$ | async)"
         >
-          <mat-option *ngIf="loading" [disabled]="true">Loading...</mat-option>
+          <mat-option *ngIf="loading" [disabled]="true">{{ 'projectSwitcher.loading' | translate }}</mat-option>
           <ng-container *ngIf="!loading && projects.length; else noItems">
             <mat-option *ngFor="let p of projects" [value]="p.pid">
-              {{ p.name }} — {{ p.role }}
+              {{ p.name }} — {{ ('role.' + p.role + 'Label') | translate }}
             </mat-option>
           </ng-container>
         </mat-select>
@@ -47,43 +47,40 @@ import { arrayRemove } from 'firebase/firestore';
       <!-- 右側アクション（オフライン時は抑止） -->
       <button mat-stroked-button (click)="createProject()"
               [disabled]="creating || loading || !(isOnline$ | async)">
-        ＋ 新規作成
+        ＋ {{ 'projectSwitcher.new' | translate }}
       </button>
 
       <button mat-stroked-button color="warn"
               (click)="deleteProject()"
               [disabled]="deleting || loading || !canDelete || !(isOnline$ | async)">
-        🗑️ 削除
+        🗑️ {{ 'projectSwitcher.delete' | translate }}
       </button>
 
       <button mat-stroked-button
               (click)="leaveProject()"
               [disabled]="leaving || loading || !canLeave || !(isOnline$ | async)">
-        🚪 退出
+        🚪 {{ 'projectSwitcher.leave' | translate }}
       </button>
     </div>
 
     <ng-template #noItems>
-      <mat-option [disabled]="true">No projects</mat-option>
+      <mat-option [disabled]="true">{{ 'projectSwitcher.noProjects' | translate }}</mat-option>
     </ng-template>
   `
 })
 export class ProjectSwitcher implements OnDestroy {
   projects: MyProject[] = [];
   selected: string | null = null;
-  private prevSelected: string | null = null; // オフラインで変更された時に戻す用
+  private prevSelected: string | null = null;
   loading = true;
 
-  // ボタンのスピナー用
   creating = false;
   deleting = false;
   leaving  = false;
 
-  // オンライン監視
   isOnline$!: Observable<boolean>;
-  private onlineNow = true; // 同期ガード用
+  private onlineNow = true;
 
-  // “削除された側”対策：選択中プロジェクトの membership を番犬監視
   private stopMembershipWatch?: () => void;
   private currentUid: string | null = null;
 
@@ -97,7 +94,6 @@ export class ProjectSwitcher implements OnDestroy {
   ) {}
 
   async ngOnInit() {
-    // ネットワーク状態購読
     this.isOnline$ = this.network.isOnline$;
     this.isOnline$.subscribe(v => { this.onlineNow = !!v; });
 
@@ -111,7 +107,7 @@ export class ProjectSwitcher implements OnDestroy {
     if (curr && this.projects.some(p => p.pid === curr)) {
       this.selected = curr;
       this.prevSelected = curr;
-      this.startMembershipWatch(curr, uid); // 起動時にも番犬
+      this.startMembershipWatch(curr, uid);
     } else {
       this.selected = this.projects[0]?.pid ?? null;
       this.prevSelected = this.selected;
@@ -121,11 +117,8 @@ export class ProjectSwitcher implements OnDestroy {
     this.cdr.markForCheck();
   }
 
-  ngOnDestroy(): void {
-    this.stopMembershipWatch?.();
-  }
+  ngOnDestroy(): void { this.stopMembershipWatch?.(); }
 
-  // オンライン必須（実行時ガード）
   private async requireOnline(): Promise<boolean> {
     const ok = await firstValueFrom(this.isOnline$);
     if (!ok) { alert('オフラインのため操作できません'); }
@@ -133,15 +126,12 @@ export class ProjectSwitcher implements OnDestroy {
   }
 
   onChange(pid: string | null) {
-    // 念のため実行時ガード（テンプレ側でも disable 済み）
     if (!this.onlineNow) {
       alert('オフラインのためプロジェクトを切り替えられません');
-      // UIを元に戻す
       this.selected = this.prevSelected;
       this.cdr.markForCheck();
       return;
     }
-
     this.current.set(pid);
     this.selected = pid;
     this.prevSelected = pid;
@@ -150,21 +140,18 @@ export class ProjectSwitcher implements OnDestroy {
     this.cdr.markForCheck();
   }
 
-  // 選択中プロジェクトの自分のロールから権限を判定
   private get selectedRole(): 'admin'|'member'|'viewer'|null {
     return this.projects.find(p => p.pid === this.selected)?.role ?? null;
   }
   get canDelete() { return this.selectedRole === 'admin'; }
   get canLeave()  { return this.selectedRole === 'member' || this.selectedRole === 'viewer'; }
 
-  // membership番犬：自分の membership が消える or 読めなくなったら即座に current を解除
   private startMembershipWatch(pid: string, uid: string) {
     const ref = doc(this.fs as any, `projects/${pid}/members/${uid}`);
     this.stopMembershipWatch = onSnapshot(
       ref,
       (snap) => {
         if (!snap.exists()) {
-          // 退会/削除/権限消失 → ただちに購読解除
           this.current.set(null);
           this.selected = null;
           this.prevSelected = null;
@@ -172,9 +159,7 @@ export class ProjectSwitcher implements OnDestroy {
           this.stopMembershipWatch?.();
         }
       },
-      (err: any) => {
-        // permission-denied を含む監視エラー → ただちに購読解除
-        console.info('membership watch error, auto-detach current', err?.code || err);
+      (_err: any) => {
         this.current.set(null);
         this.selected = null;
         this.prevSelected = null;
@@ -184,23 +169,18 @@ export class ProjectSwitcher implements OnDestroy {
     );
   }
 
-  // 例外に強い reload（permission-denied を拾ってUIを健全化）
   private async reload(uid: string) {
     this.loading = true; this.cdr.markForCheck();
     try {
       try {
         this.projects = await this.dir.listMine(uid);
-      } catch (e: any) {
-        // ここは情報レベルに落とす（削除された側で頻出する想定のため）
-        console.info('dir.listMine failed, fallback to memberships path');
+      } catch {
         this.projects = await this.listMineByMemberships(uid);
       }
-    } catch (e) {
-      console.warn('Both primary and fallback listing failed, set empty list', e);
-      this.projects = []; // ← 最後の砦
+    } catch {
+      this.projects = [];
     } finally {
       if (this.selected && !this.projects.find(p => p.pid === this.selected)) {
-        // 選択中のプロジェクトがもう無い/読めない → 即 current を解除
         this.current.set(null);
         this.selected = null;
         this.prevSelected = null;
@@ -210,7 +190,6 @@ export class ProjectSwitcher implements OnDestroy {
     }
   }
 
-  // ============== 新規作成（誰でも） ==============
   async createProject() {
     if (!await this.requireOnline()) return;
     try {
@@ -221,13 +200,11 @@ export class ProjectSwitcher implements OnDestroy {
       const name = prompt('新規プロジェクト名を入力してください', `${u.displayName || 'My'} Project`);
       if (!name) return;
 
-      // projects
       const projRef = await addDoc(collection(this.fs as any, 'projects'), {
         meta: { name, createdBy: u.uid, createdAt: serverTimestamp() }
       });
       const pid = projRef.id;
 
-      // members/{uid}（自分をadminで登録）
       await setDoc(doc(this.fs as any, `projects/${pid}/members/${u.uid}`), {
         role: 'admin',
         joinedAt: serverTimestamp(),
@@ -235,13 +212,11 @@ export class ProjectSwitcher implements OnDestroy {
         email: u.email ?? null,
       }, { merge: true });
 
-      // users/{uid}/memberships/{pid}
       await setDoc(doc(this.fs as any, `users/${u.uid}/memberships/${pid}`), {
         role: 'admin',
         joinedAt: serverTimestamp(),
       }, { merge: true });
 
-      // 再読込＆選択
       await this.reload(u.uid);
       this.selected = pid;
       this.prevSelected = pid;
@@ -254,56 +229,32 @@ export class ProjectSwitcher implements OnDestroy {
     }
   }
 
-  // ============== 共通ユーティリティ ==============
   private async safeDelete(path: string) {
-    try {
-      await deleteDoc(doc(this.fs as any, path));
-      console.log('[DEL] OK', path);
-    } catch (e: any) {
-      console.error('[DEL] FAIL', path, e?.code, e?.message);
-      throw e; // どこで止まったか追えるように再throw
-    }
+    await deleteDoc(doc(this.fs as any, path)).catch((e) => { throw e; });
   }
 
-  // ============== カスケード削除（memberships → members → 本体：複数バッチでも安全） ==============
   private async deleteProjectCascade(pid: string, adminUid: string): Promise<void> {
-    // 1) 現メンバーを収集
     const membersSnap = await getDocs(collection(this.fs as any, `projects/${pid}/members`));
     const allUids = membersSnap.docs.map(d => d.id);
-
-    // 2) Admin を最後に回す（プロジェクト delete 権限を確保）
     const otherUids = allUids.filter(u => u !== adminUid);
 
-    // ヘルパ：バッチ管理
     const commits: Promise<void>[] = [];
     let batch = writeBatch(this.fs as any);
     let ops = 0;
     const FLUSH_AT = 450;
-    const pushCommit = () => { commits.push(batch.commit()); batch = writeBatch(this.fs as any); ops = 0; };
+    const flush = () => { commits.push(batch.commit()); batch = writeBatch(this.fs as any); ops = 0; };
 
-    // 3) まず他人分を “users/*/memberships → projects/*/members” の順で複数バッチに分けて削除
-    for (const uid of otherUids) {
-      batch.delete(doc(this.fs as any, `users/${uid}/memberships/${pid}`)); ops++;
-      if (ops >= FLUSH_AT) pushCommit();
-    }
-    for (const uid of otherUids) {
-      batch.delete(doc(this.fs as any, `projects/${pid}/members/${uid}`)); ops++;
-      if (ops >= FLUSH_AT) pushCommit();
-    }
-    // ここまでで Admin は残っている
+    for (const uid of otherUids) { batch.delete(doc(this.fs as any, `users/${uid}/memberships/${pid}`)); if (++ops >= FLUSH_AT) flush(); }
+    for (const uid of otherUids) { batch.delete(doc(this.fs as any, `projects/${pid}/members/${uid}`)); if (++ops >= FLUSH_AT) flush(); }
 
-    // 4) 最終バッチ：① projects 本体 delete ② Admin の members ③ Admin の memberships
-    //    ※ ルール判定は“バッチ開始時点のDB”で行われるため、同一バッチ内なら Admin を消しても projects delete は通る
     batch.delete(doc(this.fs as any, `projects/${pid}`)); ops++;
     batch.delete(doc(this.fs as any, `projects/${pid}/members/${adminUid}`)); ops++;
     batch.delete(doc(this.fs as any, `users/${adminUid}/memberships/${pid}`)); ops++;
-    pushCommit();
+    flush();
 
-    // 5) 実行
     await Promise.all(commits);
   }
 
-  // ============== 削除（Adminのみ） ==============
   async deleteProject() {
     if (!await this.requireOnline()) return;
     try {
@@ -312,25 +263,19 @@ export class ProjectSwitcher implements OnDestroy {
       const pid = this.selected;
       if (!u || !pid) return;
 
-      // ロール再確認
       const snap = await getDoc(doc(this.fs as any, `projects/${pid}/members/${u.uid}`));
       const myRole = snap.exists() ? (snap.data() as any).role : null;
       if (myRole !== 'admin') { alert('管理者だけが削除できます'); return; }
 
       if (!confirm('このプロジェクトを完全に削除します。よろしいですか？（元に戻せません）')) return;
 
-      // ★ 先に自分のUIから購読を切る
       this.current.set(null);
-      this.selected = null;
-      this.prevSelected = null;
-      this.stopMembershipWatch?.();
-      this.cdr.markForCheck();
+      this.selected = null; this.prevSelected = null; this.stopMembershipWatch?.(); this.cdr.markForCheck();
 
-      // 0) invites / problems cleanup はベストエフォート
       try {
         const invs = await getDocs(collection(this.fs as any, `projects/${pid}/invites`));
         for (const d of invs.docs) { await this.safeDelete(d.ref.path); }
-      } catch (e) { console.warn('invites cleanup skipped', e); }
+      } catch {}
 
       try {
         const probs = await getDocs(collection(this.fs as any, `projects/${pid}/problems`));
@@ -343,12 +288,9 @@ export class ProjectSwitcher implements OnDestroy {
           }
           await this.safeDelete(p.ref.path);
         }
-      } catch (e) { console.warn('problems cleanup skipped', e); }
+      } catch {}
 
-      // ★ 最重要：カスケード削除
       await this.deleteProjectCascade(pid, u.uid);
-
-      // 再読込（自分のプロジェクト一覧を更新）
       await this.reload(u.uid);
 
       alert('プロジェクトを削除しました');
@@ -357,7 +299,6 @@ export class ProjectSwitcher implements OnDestroy {
     }
   }
 
-  // ============== 退出（Member/Viewerのみ） ==============
   private async unassignAllTasksForUser(pid: string, uid: string) {
     const probs = await getDocs(collection(this.fs as any, `projects/${pid}/problems`)).catch(() => null);
     if (!probs) return;
@@ -394,21 +335,12 @@ export class ProjectSwitcher implements OnDestroy {
 
       if (!confirm('このプロジェクトから退出します。よろしいですか？\n（担当タスクの割り当ても外れます）')) return;
 
-      // ★ 自分のUIから購読を切る（退出時も）
       this.current.set(null);
-      this.selected = null;
-      this.prevSelected = null;
-      this.stopMembershipWatch?.();
-      this.cdr.markForCheck();
+      this.selected = null; this.prevSelected = null; this.stopMembershipWatch?.(); this.cdr.markForCheck();
 
-      // ① 先にタスクから自分を Unassign
       await this.unassignAllTasksForUser(pid, u.uid);
-
-      // ② users/*/memberships → ③ projects/*/members
       await deleteDoc(doc(this.fs as any, `users/${u.uid}/memberships/${pid}`)).catch(() => {});
       await deleteDoc(memberRef).catch(() => {});
-
-      // ④ 自分の一覧を再取得
       await this.reload(u.uid);
 
       alert('退出しました');
@@ -418,21 +350,18 @@ export class ProjectSwitcher implements OnDestroy {
   }
 
   private async listMineByMemberships(uid: string): Promise<MyProject[]> {
-    // users/{uid}/memberships は rules で本人 read 許可済み
     const ms = await getDocs(collection(this.fs as any, `users/${uid}/memberships`));
     const items = await Promise.all(ms.docs.map(async (m) => {
       const pid = m.id;
       const role = (m.data() as any)?.role ?? 'viewer';
-      // projects/{pid} は isMember(pid) で許可。自分の members がある間は読める
       const pSnap = await getDoc(doc(this.fs as any, `projects/${pid}`)).catch(() => null);
       const name = pSnap?.exists() ? ((pSnap.data() as any)?.meta?.name ?? '(no name)') : '(deleted)';
       return { pid, name, role } as MyProject;
     }));
-
-    // 既に消えた/権限消失のプロジェクトは除外
     return items.filter(p => p.name !== '(deleted)');
   }
 }
+
 
 
 

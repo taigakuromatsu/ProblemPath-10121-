@@ -1,0 +1,246 @@
+
+{
+    "home": {
+      "title": "Home",
+      "lead": "Select a Problem and edit its child Issues / Tasks.",
+      "needSignIn": "Sign-in is required to edit. Use the “Sign in” button above.",
+      "viewOnlyHint": "You can view via Tree / Board / Schedule."
+    },
+    "auth": {
+      "signedIn": "signed in",
+      "signOut": "Sign out",
+      "signInWithGoogle": "Sign in with Google",
+      "switchAccount": "Switch account",
+      "signIn": "Sign in"
+    },
+    "warn": {
+      "offlineEditBlocked": "You are offline. Create/Update/Delete are disabled (inputs will be saved as drafts).",
+      "viewerOnly": "You are a Viewer in this project. Edit buttons are hidden.",
+      "offlineComments": "You are offline. You cannot post, edit, or delete comments.",
+      "noEditPermission": "You don't have edit permission (Viewer).",
+      "offlineNoEdit": "You are offline and cannot edit."
+    },
+    "nav": {
+      "tree": "Tree",
+      "board": "Board",
+      "schedule": "Schedule",
+      "home": "Home",
+      "my": "My"
+    },
+    "label": {
+      "problem": "Problem"
+    },
+    "common": {
+      "selectPrompt": "-- Please select --",
+      "createNewEllipsis": "Create new…",
+      "cancel": "Cancel",
+      "create": "Create",
+      "save": "Save",
+      "rename": "Rename",
+      "delete": "Delete",
+      "edit": "Edit",
+      "lastUpdated": "Last updated",
+      "creating": "Creating...",
+      "copy": "Copy",
+      "retry": "Retry",
+      "loading": "Loading…",
+      "projectNotSelected": "Project is not selected",
+      "none": "(None)"
+    },
+    "template": {
+      "bug": "Bug/Issue",
+      "improve": "Improvement/Performance"
+    },
+    "field": {
+      "titleRequired": "Title (required)",
+      "template": "Template",
+      "titleReadonly": "Title (read-only)",
+      "phenomenon": "Phenomenon",
+      "cause": "Cause",
+      "solution": "Solution",
+      "goal": "Goal"
+    },
+    "problem": {
+      "create": "Create Problem",
+      "phenomenonRequired": "Phenomenon (required)",
+      "causeOptional": "Cause (optional)",
+      "solutionOptional": "Solution (optional)",
+      "goalRequired": "Goal (required)"
+    },
+    "problemDef": {
+      "edit": "Edit Problem Definition",
+      "title": "Problem Definition"
+    },
+    "hint": {
+      "phenomenon": "What happens? Repro steps, user impact, frequency, etc.",
+      "goalKpi": "What’s success? KPI/criteria (e.g., p50 1.5s / error rate <0.1%)"
+    },
+    "issue": {
+      "listTitle": "Issues",
+      "placeholderNewTitle": "New issue title",
+      "add": "Add Issue",
+      "noneYet": "(No issues yet)",
+      "loading": "Loading issues..."
+    },
+    "link": {
+      "title": "Links",
+      "removeAria": "Remove link",
+      "none": "(No links)",
+      "selectIssuePrompt": "-- Select target issue --",
+      "add": "Link"
+    },
+    "task": {
+      "placeholderNewTitle": "New task title",
+      "add": "Add Task",
+      "dueShort": "(due: {{ date }})",
+      "editDue": "Due",
+      "editTags": "Tags",
+      "noneYet": "(No tasks yet)"
+    },
+    "tag": {
+      "none": "(No tags)"
+    },
+    "invite": {
+      "byEmailTitle": "Invite by Email",
+      "createLink": "Create invite link",
+      "helpText": "Send the generated URL by email. The recipient opens it, signs in, and joins the project."
+    },
+    "role": {
+      "adminLabel": "admin",
+      "memberLabel": "member",
+      "viewerLabel": "viewer"
+    },
+    "settings": {
+      "titlePreview": "Settings (preview only)",
+      "lead": "You will edit personality / language / theme / accent color here in the future.",
+      "themeTitle": "Theme",
+      "themeSelect": "Choose a theme",
+      "languageTitle": "Language setting",
+      "languageSelect": "Choose a language"
+    },
+    "theme": {
+      "light": "Light",
+      "dark": "Dark",
+      "system": "Follow system"
+    },
+    "tree": {
+    "title": "Tree",
+    "showDashboard": "Show Dashboard",
+    "hideDashboard": "Hide Dashboard",
+    "overallStatus": "Overall Status",
+    "openTasksByDue": "Open Tasks by Due",
+    "open": "Open",
+    "done": "Done",
+    "total": "Total",
+    "progress": "Progress",
+    "overdue": "Overdue",
+    "today": "Today",
+    "thisWeek": "This week",
+    "nextWeek": "Next week",
+    "later": "Later",
+    "noDue": "No due",
+    "prompt": {
+      "renameProblem": "New Problem title",
+      "renameIssue": "New Issue title",
+      "renameTask": "New Task title"
+    },
+    "confirm": {
+      "deleteProblem": "Delete \"{{name}}\"?",
+      "deleteIssue": "Delete Issue \"{{name}}\"?",
+      "deleteTask": "Delete Task \"{{name}}\"?"
+    }
+  },
+  "status": {
+    "done": "Done",
+    "inProgress": "In progress",
+    "notStarted": "Not started"
+  },
+  "comment": {
+    "title": "Comments",
+    "emptyHint": "Select a node on the left to view comments",
+    "header": "Comments — {{kind}}: {{name}}",
+    "placeholder": "Type a comment…",
+    "post": "Post",
+    "update": "Update",
+    "noneYet": "No comments yet"
+  },
+  "board": {
+    "offlineNotice": "You are offline. Moving/updating cards and changing assignees are disabled.",
+    "selectProblemHint": "Select a Problem to show the Kanban.",
+    "items": "items",
+    "dropHere": "Drop here",
+    "assignToMe": "Assign to me",
+    "unassign": "Unassign",
+    "col": {
+      "not_started": "Not started",
+      "in_progress": "In progress",
+      "done": "Done"
+    },
+    "err": {
+      "update": "Failed to update.",
+      "statusUpdate": "Failed to update status.",
+      "orderSave": "Failed to save order.",
+      "assign": "Failed to assign.",
+      "unassign": "Failed to unassign."
+    }
+  },
+  "schedule": {
+    "export": { "csv": "CSV", "json": "JSON" },
+    "view": { "label": "View", "onlyOpen": "Open only", "all": "All" },
+    "tags": { "label": "Tags", "placeholder": "#bug #UI (space separated)" },
+    "openInBoard": "Open in Board",
+    "section": {
+      "overdue": "Overdue",
+      "today": "Today",
+      "tomorrow": "Tomorrow",
+      "thisWeekRest": "Rest of this week",
+      "nextWeek": "Next week",
+      "later": "Later",
+      "noDue": "No due date"
+    },
+    "none": "None"
+  },
+  "myTasks": {
+    "title": "My Tasks",
+    "overdue": "Overdue",
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "thisWeekRest": "Rest of this week",
+    "nextWeek": "Next week",
+    "later": "Later",
+    "nodue": "No due date"
+  },
+  "filter": {
+    "show": "Show",
+    "openOnly": "Open only",
+    "all": "All",
+    "tags": "Tags",
+    "tagsPlaceholder": "#bug #UI (space-separated)"
+  },
+  "export": {
+    "csv": "CSV",
+    "json": "JSON"
+  },
+  "join": {
+    "title": "Join Project",
+    "loading": "Checking the invite…",
+    "invalidUrl": "Invalid invite URL.",
+    "notFound": "Invite not found (maybe already used or expired).",
+    "emailMismatch": "This invite is for a different email. Please sign in with the correct account.",
+    "accept": "Join",
+    "loginToContinue": "Sign in to continue",
+    "willJoinAs": "You will join this project as {{role}}.",
+    "acceptFailed": "Failed to join the project."
+  },
+  "projectSwitcher": {
+    "project": "Project",
+    "loading": "Loading...",
+    "noProjects": "No projects",
+    "new": "New",
+    "delete": "Delete",
+    "leave": "Leave"
+  }
+      
+  }
+  
+  

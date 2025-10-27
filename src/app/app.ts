@@ -1,13 +1,13 @@
-// src/app/app.ts
 import { Component } from '@angular/core';
 import { RouterOutlet, RouterLink } from '@angular/router';
 import { ProjectSwitcher } from './project-switcher';
 import { ThemeService } from './services/theme.service';
+import { TranslateModule } from '@ngx-translate/core';
 
 @Component({
   standalone: true,
   selector: 'app-root',
-  imports: [RouterOutlet, RouterLink, ProjectSwitcher],
+  imports: [RouterOutlet, RouterLink, ProjectSwitcher, TranslateModule],
   template: `
     <header style="
       position: sticky; top: 0;
@@ -15,11 +15,11 @@ import { ThemeService } from './services/theme.service';
       display:flex; gap:12px; align-items:center;
       padding:8px 12px; border-bottom:1px solid #eee;">
       <strong>ProblemPath</strong>
-      <a routerLink="/">Home</a>
-      <a routerLink="/tree">Tree</a>
-      <a routerLink="/board">Board</a>
-      <a routerLink="/schedule">Schedule</a>
-      <a routerLink="/my">My</a>
+      <a routerLink="/">{{ 'nav.home' | translate }}</a>
+      <a routerLink="/tree">{{ 'nav.tree' | translate }}</a>
+      <a routerLink="/board">{{ 'nav.board' | translate }}</a>
+      <a routerLink="/schedule">{{ 'nav.schedule' | translate }}</a>
+      <a routerLink="/my">{{ 'nav.my' | translate }}</a>
       <span style="flex:1 1 auto;"></span>
       <pp-project-switcher></pp-project-switcher>
     </header>
@@ -31,9 +31,8 @@ import { ThemeService } from './services/theme.service';
 })
 export class App {
   constructor(private theme: ThemeService) {}
-  ngOnInit() {
-    this.theme.init();
-  }
+  ngOnInit() { this.theme.init(); }
 }
+
 
 
