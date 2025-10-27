@@ -22,6 +22,16 @@ export interface BaseNode {
   updatedAt?: any;                // Firestore Timestamp
 }
 
+export interface ProblemDef {
+  phenomenon: string;
+  goal: string;
+  cause?: string | null;
+  solution?: string | null;
+  updatedAt?: any;   // Firestore Timestamp or FieldValue
+  updatedBy?: string;
+}
+
+
 // Problemだけが持つテンプレ（任意）
 export interface Problem extends BaseNode {
   template?: {
@@ -30,6 +40,7 @@ export interface Problem extends BaseNode {
     solution?: string;
     goal?: string;
   };
+  problemDef?: ProblemDef;
 }
 
 // 先行定義（次ステップ以降で使う）

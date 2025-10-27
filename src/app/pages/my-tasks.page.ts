@@ -17,6 +17,8 @@ import { take } from 'rxjs/operators';
 import { Firestore } from '@angular/fire/firestore';
 import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
 import { TranslateModule } from '@ngx-translate/core';
+import { interval } from 'rxjs';
+import { filter, distinctUntilChanged } from 'rxjs/operators';
 
 type Vm = {
   overdue: Task[]; today: Task[]; tomorrow: Task[];
@@ -146,36 +148,49 @@ export class MyTasksPage {
   private addDays(base: Date, n: number){ const d = new Date(base); d.setDate(d.getDate()+n); return d; }
   private parseTags(q: string){ return (q||'').split(/\s+/).map(s=>s.replace(/^#/,'').trim()).filter(Boolean).slice(0,10); }
 
+  private readonly midnightTick$ = interval(60_000).pipe( // 1分ごと
+    startWith(0),
+    map(() => {
+      const d = new Date(); d.setSeconds(0,0);
+      return d.getHours() === 0 && d.getMinutes() === 0;
+    }),
+    distinctUntilChanged(),
+    filter(Boolean) // 00:00 の瞬間だけ流す
+  );
+
   reload(){
-    const today = new Date(); today.setHours(0,0,0,0);
-    const tomorrow = this.addDays(today, 1);
-    const day = today.getDay(); const diffToMon = (day===0? -6 : 1-day);
-    const startOfWeek = this.addDays(today, diffToMon);
-    const endOfWeek = this.addDays(startOfWeek, 6);
-    const startOfNextWeek = this.addDays(endOfWeek, 1);
-    const endOfNextWeek = this.addDays(startOfNextWeek, 6);
     const far = '9999-12-31';
     const tags = this.parseTags(this.tagQuery);
-
-    const trig$ = of(null).pipe(startWith(null));
-
-    this.vm$ = combineLatest([this.current.projectId$, this.auth.uid$, trig$]).pipe(
+  
+    const params$ = this.midnightTick$.pipe(startWith(null)); // ★ 初回+深夜にトリガー
+  
+    this.vm$ = combineLatest([this.current.projectId$, this.auth.uid$, params$]).pipe(
       switchMap(([pid, uid]) => {
-        if (!pid || !uid) return of(EMPTY);
-
-        // 今日までの全件を一度取得して、そこで overdue/today を切り分ける
+        if (!pid || pid === 'default' || !uid) return of(EMPTY); // ★ default guard 追加
+  
+        // ←← ここで “その時点の今日” を毎回計算（深夜後も正しくなる）
+        const today = new Date(); today.setHours(0,0,0,0);
+        const tomorrow = this.addDays(today, 1);
+  
+        const day = today.getDay();
+        const diffToMon = (day===0? -6 : 1-day);
+        const startOfWeek = this.addDays(today, diffToMon);
+        const endOfWeek = this.addDays(startOfWeek, 6);
+        const startOfNextWeek = this.addDays(endOfWeek, 1);
+        const endOfNextWeek = this.addDays(startOfNextWeek, 6);
+  
+        // 今日までまとめて取り、overdue/today をクライアントで分岐（重複クエリ回避）
         const allToToday$ = this.tasks.listMine(
           pid, uid, this.openOnly, '0000-01-01', this.ymd(today), tags
         );
-
-        const overdue$       = allToToday$.pipe(map(xs => xs.filter(x => (x.dueDate ?? '') <  this.ymd(today))));
-        const today$         = allToToday$.pipe(map(xs => xs.filter(x => x.dueDate === this.ymd(today))));
-        const tomorrow$      = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(tomorrow), this.ymd(tomorrow), tags);
-        const thisWeekRest$  = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(this.addDays(tomorrow,1)), this.ymd(endOfWeek), tags);
-        const nextWeek$      = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(startOfNextWeek), this.ymd(endOfNextWeek), tags);
-        const later$         = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(this.addDays(endOfNextWeek,1)), far, tags);
-        const nodue$         = this.tasks.listMineNoDue(pid, uid, this.openOnly, tags);
-
+        const overdue$      = allToToday$.pipe(map(xs => xs.filter(x => (x.dueDate ?? '') <  this.ymd(today))));
+        const today$        = allToToday$.pipe(map(xs => xs.filter(x => x.dueDate === this.ymd(today))));
+        const tomorrow$     = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(tomorrow), this.ymd(tomorrow), tags);
+        const thisWeekRest$ = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(this.addDays(tomorrow,1)), this.ymd(endOfWeek), tags);
+        const nextWeek$     = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(startOfNextWeek), this.ymd(endOfNextWeek), tags);
+        const later$        = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(this.addDays(endOfNextWeek,1)), far, tags);
+        const nodue$        = this.tasks.listMineNoDue(pid, uid, this.openOnly, tags);
+  
         return combineLatest([overdue$, today$, tomorrow$, thisWeekRest$, nextWeek$, later$, nodue$]).pipe(
           map(([overdue, today, tomorrow, thisWeekRest, nextWeek, later, nodue]) => ({
             overdue, today, tomorrow, thisWeekRest, nextWeek, later, nodue

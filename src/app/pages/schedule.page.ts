@@ -8,15 +8,15 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
 import { Observable, combineLatest, of } from 'rxjs';
-import { map, switchMap, startWith } from 'rxjs/operators';
-
+import { map, switchMap, startWith, filter, distinctUntilChanged } from 'rxjs/operators';
 import { TasksService } from '../services/tasks.service';
 import { CurrentProjectService } from '../services/current-project.service';
 import { Task } from '../models/types';
 import { take } from 'rxjs/operators';
 import { Firestore } from '@angular/fire/firestore';
 import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
-import { TranslateModule } from '@ngx-translate/core'; // ★ 追加
+import { TranslateModule } from '@ngx-translate/core';
+import { interval } from 'rxjs';
 
 type Vm = {
   overdue: Task[];
@@ -158,6 +158,19 @@ export class SchedulePage {
     private fs: Firestore
   ) {}
 
+// クラスフィールドとして追加
+private readonly midnightTick$ = interval(60_000).pipe(            // 1分おき
+  startWith(0),
+  map(() => {
+    const d = new Date();
+    d.setSeconds(0, 0);
+    return d.getHours() === 0 && d.getMinutes() === 0;    // 00:00 の瞬間だけ true
+  }),
+  distinctUntilChanged(),                                   // true/false の連続重複を抑制
+  filter(Boolean)                                           // true のときだけ流す
+);
+
+
   ngOnInit() { this.reload(); }
 
   trackTask = (_: number, t: Task) => t.id;
@@ -182,28 +195,30 @@ export class SchedulePage {
   }
 
   reload() {
-    const today = new Date(); today.setHours(0,0,0,0);
-    const tomorrow = this.addDays(today, 1);
-
-    // 今週（月曜始まり）
-    const day = today.getDay(); // Sun=0
-    const diffToMon = (day === 0 ? -6 : 1 - day);
-    const startOfWeek = this.addDays(today, diffToMon);
-    const endOfWeek   = this.addDays(startOfWeek, 6);
-
-    // 来週
-    const startOfNextWeek = this.addDays(endOfWeek, 1);
-    const endOfNextWeek   = this.addDays(startOfNextWeek, 6);
-
     const FAR_FUTURE = '9999-12-31';
     const tags = this.parseTags(this.tagQuery);
-
-    const params$ = of(null).pipe(startWith(null));
-
+  
+    // 「初回にも流す」ため startWith(null) を付ける
+    const params$ = this.midnightTick$.pipe(startWith(null));
+  
     this.vm$ = combineLatest([this.currentProject.projectId$, params$]).pipe(
       switchMap(([pid]) => {
-        if (!pid) return of(EMPTY_VM);
-
+        if (!pid || pid === 'default') return of(EMPTY_VM);
+  
+        // ←← ここで “その時点の今日” を毎回計算する（重要）
+        const today = new Date(); today.setHours(0,0,0,0);
+        const tomorrow = this.addDays(today, 1);
+  
+        // 今週（月曜始まり）
+        const dow = today.getDay();                     // Sun=0
+        const diffToMon = (dow === 0 ? -6 : 1 - dow);
+        const startOfWeek = this.addDays(today, diffToMon);
+        const endOfWeek   = this.addDays(startOfWeek, 6);
+  
+        // 来週
+        const startOfNextWeek = this.addDays(endOfWeek, 1);
+        const endOfNextWeek   = this.addDays(startOfNextWeek, 6);
+  
         const overdue$      = this.tasks.listAllOverdue(pid, this.ymd(today), this.openOnly, tags);
         const today$        = this.tasks.listAllByDueRange(pid, this.ymd(today), this.ymd(today), this.openOnly, tags);
         const tomorrow$     = this.tasks.listAllByDueRange(pid, this.ymd(tomorrow), this.ymd(tomorrow), this.openOnly, tags);
@@ -211,7 +226,7 @@ export class SchedulePage {
         const nextWeek$     = this.tasks.listAllByDueRange(pid, this.ymd(startOfNextWeek), this.ymd(endOfNextWeek), this.openOnly, tags);
         const later$        = this.tasks.listAllByDueRange(pid, this.ymd(this.addDays(endOfNextWeek, 1)), FAR_FUTURE, this.openOnly, tags);
         const nodue$        = this.tasks.listAllNoDue(pid, this.openOnly, tags);
-
+  
         return combineLatest([overdue$, today$, tomorrow$, thisWeekRest$, nextWeek$, later$, nodue$]).pipe(
           map(([overdue, today, tomorrow, thisWeekRest, nextWeek, later, nodue]) => ({
             overdue, today, tomorrow, thisWeekRest, nextWeek, later, nodue
@@ -220,6 +235,7 @@ export class SchedulePage {
       })
     );
   }
+  
 
   private flattenVm(vm: Vm){
     return [

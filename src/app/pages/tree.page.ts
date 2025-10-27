@@ -347,6 +347,13 @@ export class TreePage {
     this.dataSource.data = [...this.data];
   }
 
+  private clearBadgeSubs() {
+    this.commentCountSubs.forEach(s => s.unsubscribe());
+    this.attachmentCountSubs.forEach(s => s.unsubscribe());
+    this.commentCountSubs.clear();
+    this.attachmentCountSubs.clear();
+  }
+
   isLoadingProblems = true;
   loadError: string | null = null;
 
@@ -378,6 +385,11 @@ export class TreePage {
 
   attachments$?: Observable<AttachmentDoc[]>;
   uploadBusy = false;
+
+  // TreePage クラス内の他の Map 群の近くに追加
+private commentCountSubs   = new Map<string, import('rxjs').Subscription>();
+private attachmentCountSubs = new Map<string, import('rxjs').Subscription>();
+
   // ==== 添付ファイルのクライアントバリデーション ====
 private readonly MAX_FILE_BYTES = 20 * 1024 * 1024; // 20MB
 private readonly ALLOWED_MIME = [
@@ -497,6 +509,7 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
       })
     ).subscribe({
       next: async rows => {
+        this.clearBadgeSubs();
         this.data = rows.map(r => ({
           id: r.id!,
           name: r.title,
@@ -510,10 +523,12 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
 
         // 件数をProblem単位で先にロード
         try {
-          await Promise.all(this.data.map(n => Promise.all([
-            this.loadCountFor(n),       // コメント件数
-            this.loadAttachCountFor(n), // 添付件数 ←追加
-          ])));          
+          await Promise.all(this.data.map(async n => {
+            // 先に単発ロード（既存）：初期表示を速く
+            await Promise.all([ this.loadCountFor(n), this.loadAttachCountFor(n) ]);
+            // 続いてリアルタイム購読
+            await this.attachBadgeStreams(n);
+          }));
         } catch {}
 
         // Issue購読を貼り直し
@@ -539,6 +554,10 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
     this.issueSubs.forEach(s => s.unsubscribe());
     this.taskSubs.forEach(s => s.unsubscribe());
     if (this.commentSaveTimer) { clearTimeout(this.commentSaveTimer); this.commentSaveTimer = null; }
+    this.commentCountSubs.forEach(s => s.unsubscribe());
+    this.attachmentCountSubs.forEach(s => s.unsubscribe());
+    this.commentCountSubs.clear();
+    this.attachmentCountSubs.clear();
   }
 
   dataSource = new MatTreeNestedDataSource<TreeNode>();
@@ -588,11 +607,24 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
 
       // 件数ロード：親Problem自身＋子Issue
       try {
-        await Promise.all([
-          Promise.all([ this.loadCountFor(pNode), this.loadAttachCountFor(pNode) ]),
-          ...kids.map(k => Promise.all([ this.loadCountFor(k), this.loadAttachCountFor(k) ])),
-        ]);        
+        // 親 Problem
+        await this.attachBadgeStreams(pNode);
+        // 子 Issue
+        await Promise.all(kids.map(k => this.attachBadgeStreams(k)));
       } catch {}
+      
+      // --- 不要になった件数購読の掃除（Issue が減った場合） ---
+      const aliveIssueIds = new Set(kids.map(k => k.id));
+      for (const [id, sub] of this.commentCountSubs.entries()) {
+        if (id !== pNode.id && !aliveIssueIds.has(id) && (this.data.findIndex(n => n.id === id) === -1)) {
+          sub.unsubscribe(); this.commentCountSubs.delete(id);
+        }
+      }
+      for (const [id, sub] of this.attachmentCountSubs.entries()) {
+        if (id !== pNode.id && !aliveIssueIds.has(id) && (this.data.findIndex(n => n.id === id) === -1)) {
+          sub.unsubscribe(); this.attachmentCountSubs.delete(id);
+        }
+      }
 
       this.recomputeProblemStatus(pNode.id);
 
@@ -645,12 +677,25 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
 
           // 件数ロード：当該Issue＋子Task
           try {
-            await Promise.all([
-              Promise.all([ this.loadCountFor(issueNode), this.loadAttachCountFor(issueNode) ]),
-              ...kids.map(k => Promise.all([ this.loadCountFor(k), this.loadAttachCountFor(k) ])),
-            ]);            
+            // 当該 Issue
+            await this.attachBadgeStreams(issueNode);
+            // 子 Task
+            await Promise.all(kids.map(k => this.attachBadgeStreams(k)));
           } catch {}
-
+          
+          // --- 不要になった件数購読の掃除（Task が減った場合） ---
+          const aliveTaskIds = new Set(kids.map(k => k.id));
+          for (const [id, sub] of this.commentCountSubs.entries()) {
+            // 当該 Issue 配下の Task で生きていないものを掃除
+            if (!aliveTaskIds.has(id) && this.data.every(p => (p.children ?? []).every(i => (i.children ?? []).every(t => t.id !== id)))) {
+              sub.unsubscribe(); this.commentCountSubs.delete(id);
+            }
+          }
+          for (const [id, sub] of this.attachmentCountSubs.entries()) {
+            if (!aliveTaskIds.has(id) && this.data.every(p => (p.children ?? []).every(i => (i.children ?? []).every(t => t.id !== id)))) {
+              sub.unsubscribe(); this.attachmentCountSubs.delete(id);
+            }
+          }
           this.recomputeProblemStatus(problemId);
         }
       }
@@ -1070,5 +1115,35 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
     }
   }
   
+  // TreePage クラス内に追加
+private async attachBadgeStreams(node: TreeNode) {
+  // ---- コメント件数 ----
+  try {
+    const t = await this.toTarget(node);
+    if (t) {
+      this.commentCountSubs.get(node.id)?.unsubscribe();
+      const subC = this.comments
+        // ここは件数上限を広めに（サービス側の第二引数が limit の想定）
+        .listByTarget(t, 1000)
+        .pipe(map(arr => arr.length))
+        .subscribe(n => { this.commentCounts[node.id] = n; });
+      this.commentCountSubs.set(node.id, subC);
+    }
+  } catch {}
+
+  // ---- 添付件数 ----
+  try {
+    const at = await this.toAttachmentTarget(node);
+    if (at) {
+      this.attachmentCountSubs.get(node.id)?.unsubscribe();
+      const subA = this.attachments
+        .list(at) // 添付は list(at) が Observable<AttachmentDoc[]>
+        .pipe(map(arr => arr.length))
+        .subscribe(n => { this.attachmentCounts[node.id] = n; });
+      this.attachmentCountSubs.set(node.id, subA);
+    }
+  } catch {}
+}
+
 }
 

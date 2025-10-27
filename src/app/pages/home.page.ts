@@ -909,7 +909,8 @@ export class HomePage {
       problemDef: {
         phenomenon: p.phenomenon.trim(),
         goal: p.goal.trim(),
-        updatedBy: uid || ''
+        updatedBy: uid || '',
+        updatedAt: serverTimestamp(),
       }
     };
     const cause = p.cause.trim();
@@ -986,6 +987,7 @@ export class HomePage {
       cause: d.cause.trim(),
       solution: d.solution.trim(),
       updatedBy: uid || '',
+      updatedAt: serverTimestamp(),
     });
 
     const kEdit = this.draftKeyEditProblem(this.selectedProblemId); if (kEdit) this.drafts.clear(kEdit);
@@ -1039,7 +1041,7 @@ export class HomePage {
   ){
     const uid = await firstValueFrom(this.auth.uid$);
 
-    const patch = { softDeleted: true, deletedAt: (serverTimestamp as any)(), updatedBy: uid || '' } as any;
+    const patch = { softDeleted: true, deletedAt: serverTimestamp(), updatedBy: uid || '' } as any;
 
     if (kind === 'problem') {
       await this.problems.update(path.projectId, path.problemId!, patch);

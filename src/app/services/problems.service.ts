@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { Firestore } from '@angular/fire/firestore';
 import { Observable, map } from 'rxjs';
 import { Problem } from '../models/types';
+import { ProblemDef } from '../models/types';
 
 
 const DEBUG_PROBLEMS = false; // ← 必要な時だけ true に
@@ -26,6 +27,7 @@ import { collectionData as rxCollectionData } from 'rxfire/firestore';
 @Injectable({ providedIn: 'root' })
 export class ProblemsService {
   constructor(private fs: Firestore) {}
+
 
   private colPath(projectId: string) {
     if (!projectId) throw new Error('[ProblemsService] projectId is required');
@@ -199,30 +201,25 @@ async create(projectId: string, p: Partial<Problem>): Promise<any> {
   async updateProblemDef(
     projectId: string,
     id: string,
-    def: {
-      phenomenon: string;
-      goal: string;
-      cause?: string;
-      solution?: string;
-      updatedBy: string;
-    }
+    def: Partial<ProblemDef> & { phenomenon: string; goal: string; updatedBy: string; }
   ): Promise<void> {
     const ref = nativeDoc(this.fs as any, `${this.colPath(projectId)}/${id}`);
-
-    const body: any = {
-      problemDef: {
-        phenomenon: def.phenomenon,
-        goal: def.goal,
-        updatedBy: def.updatedBy || '',
-        updatedAt: serverTimestamp(),
-      }
-    };
-    if (def.cause && def.cause.trim()) body.problemDef.cause = def.cause.trim();
-    if (def.solution && def.solution.trim()) body.problemDef.solution = def.solution.trim();
-
-    // ルートの updatedAt も更新しておく
-    return nativeUpdateDoc(ref, { ...body, updatedAt: serverTimestamp() }) as any;
+  
+    const patch: any = {};
+    if (def.phenomenon !== undefined) patch['problemDef.phenomenon'] = def.phenomenon;
+    if (def.goal       !== undefined) patch['problemDef.goal']       = def.goal;
+    if (def.cause      !== undefined) patch['problemDef.cause']      = def.cause?.trim() || null;
+    if (def.solution   !== undefined) patch['problemDef.solution']   = def.solution?.trim() || null;
+    if (def.updatedBy  !== undefined) patch['problemDef.updatedBy']  = def.updatedBy;
+    // 外から来なければ内部で付与
+    patch['problemDef.updatedAt'] = def.updatedAt ?? serverTimestamp();
+  
+    // ルートの updatedAt も更新
+    patch['updatedAt'] = serverTimestamp();
+  
+    return nativeUpdateDoc(ref, patch) as any;
   }
+  
   
 
 }

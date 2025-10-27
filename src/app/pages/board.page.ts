@@ -3,7 +3,7 @@ import { Component, DestroyRef } from '@angular/core';
 import { AsyncPipe, NgFor, NgIf } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Observable, BehaviorSubject, of, combineLatest, firstValueFrom } from 'rxjs';
-import { switchMap, shareReplay, take, tap, map } from 'rxjs/operators';
+import { switchMap, shareReplay, take, tap, map, distinctUntilChanged } from 'rxjs/operators';
 import { MatButtonModule } from '@angular/material/button';
 
 import { ProblemsService } from '../services/problems.service';
@@ -212,6 +212,7 @@ export class BoardPage {
     this.canEdit$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(v => this.allowDnD = !!v);
 
     this.issues$ = this.selectedProblem$.pipe(
+      distinctUntilChanged(),
       switchMap(problemId => this.currentProject.projectId$.pipe(
         switchMap(pid => (pid && pid !== 'default' && problemId) ? this.issues.listByProblem(pid, problemId) : of([])),
         tap(list => this.setupTaskStreams(problemId, list))
@@ -232,6 +233,7 @@ export class BoardPage {
     this.taskCountSubs.clear();
     this.tasksSnapshot = {};
     this.totals = { not_started: 0, in_progress: 0, done: 0 };
+    this.tasksMap = {};
 
     this.selectedProblemId = problemId;
     this.selectedProblem$.next(problemId);
