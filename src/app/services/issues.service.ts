@@ -131,12 +131,26 @@ export class IssuesService {
 
   // remove（tasks 再帰削除→issue削除）
   async remove(projectId: string, problemId: string, id: string): Promise<void> {
-    const tasksPath = `${this.base(projectId)}/${problemId}/issues/${id}/tasks`;
+    const base = `${this.base(projectId)}/${problemId}/issues/${id}`;
+  
+    // 1) issue 直下の attachments
+    await this.deleteCollection(`${base}/attachments`);
+  
+    // 2) tasks 配下
+    const tasksPath = `${base}/tasks`;
+    // 各 task の attachments を削除
+    const taskSnap = await nativeGetDocs(nativeQuery(nativeCollection(this.fs as any, tasksPath), nativeLimit(200)));
+    for (const d of taskSnap.docs) {
+      await this.deleteCollection(`${tasksPath}/${d.id}/attachments`);
+    }
+    // tasks 自体を削除
     await this.deleteCollection(tasksPath);
-
+  
+    // 3) issue 自身を削除
     const issueRef = nativeDoc(this.fs as any, this.issueDocPath(projectId, problemId, id));
     return nativeDeleteDoc(issueRef) as any;
   }
+  
 
   // 相互リンク（同一 Problem 内）: 追加 / 削除
 

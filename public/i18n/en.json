@@ -239,8 +239,13 @@
     "new": "New",
     "delete": "Delete",
     "leave": "Leave"
+  },
+  "cf": {
+  "title": "Comments / Files",
+  "header": "Comments / Files — {{name}}",
+  "count": "Comments: {{c}} / Files: {{f}}"
   }
-      
+  
   }
   
   

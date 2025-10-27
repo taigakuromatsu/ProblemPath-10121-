@@ -153,6 +153,11 @@ async create(projectId: string, p: Partial<Problem>): Promise<any> {
     }
   }
 
+  private async deleteProblemAttachments(projectId: string, problemId: string) {
+    const path = `${this.colPath(projectId)}/${problemId}/attachments`;
+    await this.deleteCollection(path);
+  }
+
   private async deleteAllIssuesAndTasks(projectId: string, problemId: string, batchSize = 200): Promise<void> {
     const issuesColPath = `${this.colPath(projectId)}/${problemId}/issues`;
     while (true) {
@@ -160,12 +165,24 @@ async create(projectId: string, p: Partial<Problem>): Promise<any> {
       const q = nativeQuery(issuesColRef, nativeLimit(batchSize));
       const snap = await nativeGetDocs(q);
       if (snap.empty) break;
-
+  
       for (const issueDoc of snap.docs) {
         const issueId = issueDoc.id;
+  
+        // issue 直下の attachments
+        await this.deleteCollection(`${issuesColPath}/${issueId}/attachments`);
+  
+        // tasks 配下
         const tasksPath = `${issuesColPath}/${issueId}/tasks`;
+        // 各 task の attachments を削除
+        const taskSnap = await nativeGetDocs(nativeQuery(nativeCollection(this.fs as any, tasksPath), nativeLimit(batchSize)));
+        for (const taskDoc of taskSnap.docs) {
+          await this.deleteCollection(`${tasksPath}/${taskDoc.id}/attachments`);
+        }
+        // tasks 自体を削除
         await this.deleteCollection(tasksPath);
       }
+  
       const batch = nativeWriteBatch(this.fs as any);
       snap.docs.forEach((d) => batch.delete(d.ref));
       await batch.commit();
@@ -173,6 +190,7 @@ async create(projectId: string, p: Partial<Problem>): Promise<any> {
   }
 
   async remove(projectId: string, id: string): Promise<void> {
+    await this.deleteProblemAttachments(projectId, id);
     await this.deleteAllIssuesAndTasks(projectId, id);
     const problemRef = nativeDoc(this.fs as any, `${this.colPath(projectId)}/${id}`);
     return nativeDeleteDoc(problemRef) as any;
@@ -205,5 +223,6 @@ async create(projectId: string, p: Partial<Problem>): Promise<any> {
     // ルートの updatedAt も更新しておく
     return nativeUpdateDoc(ref, { ...body, updatedAt: serverTimestamp() }) as any;
   }
+  
 
 }

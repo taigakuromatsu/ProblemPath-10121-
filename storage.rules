@@ -1,0 +1,27 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Storage ルールでは Firestore に触れないため、ここでは「サインイン済み」を最低条件にする
+    function isSignedIn() { return request.auth != null; }
+
+    // Problem 添付
+    match /projects/{projectId}/problems/{problemId}/attachments/{fileName=**} {
+      allow read:  if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // Issue 添付（※ problems の下に issues がある階層に合わせる）
+    match /projects/{projectId}/problems/{problemId}/issues/{issueId}/attachments/{fileName=**} {
+      allow read:  if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // Task 添付（※ problems/{p}/issues/{i}/tasks/{t}/attachments/...）
+    match /projects/{projectId}/problems/{problemId}/issues/{issueId}/tasks/{taskId}/attachments/{fileName=**} {
+      allow read:  if isSignedIn();
+      allow write: if isSignedIn();
+    }
+  }
+}
+

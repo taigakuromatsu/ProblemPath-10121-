@@ -161,6 +161,12 @@ export class TasksService {
     const problemId = legacy ? arg1 : arg2;
     const issueId = legacy ? arg2 : arg3;
     const id = legacy ? arg3 : (arg4 as string);
+  
+    const base = `${this.base(pid)}/${problemId}/issues/${issueId}/tasks/${id}`;
+    // 1) task 直下の attachments サブコレ削除
+    await this.deleteCollection(`${base}/attachments`);
+  
+    // 2) task 本体削除
     const ref = nativeDoc(this.fs as any, `${this.base(pid)}/${problemId}/issues/${issueId}/tasks/${id}`);
     return nativeDeleteDoc(ref) as any;
   }
@@ -385,6 +391,17 @@ listMineNoDue(
       return ys;
     })
   );
+}
+private async deleteCollection(path: string, batchSize = 300): Promise<void> {
+  const colRef = nativeCollection(this.fs as any, path);
+  while (true) {
+    const q = nativeQuery(colRef, nativeLimit(batchSize));
+    const snap = await nativeGetDocs(q);
+    if (snap.empty) break;
+    const batch = nativeWriteBatch(this.fs as any);
+    snap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  }
 }
 
 }

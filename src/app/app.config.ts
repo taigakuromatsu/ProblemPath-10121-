@@ -6,6 +6,7 @@ import { routes } from './app.routes';
 import { provideHttpClient, withFetch, HttpClient } from '@angular/common/http';
 import { TranslateModule, TranslateLoader } from '@ngx-translate/core';
 import { I18nService } from './i18n/i18n.service';
+import { provideStorage, getStorage } from '@angular/fire/storage';
 
 // loader はそのまま
 class SimpleHttpTranslateLoader implements TranslateLoader {
@@ -27,6 +28,7 @@ export const appConfig: ApplicationConfig = {
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes),
     provideHttpClient(withFetch()),
+    provideStorage(() => getStorage()),
 
     importProvidersFrom(
       TranslateModule.forRoot({

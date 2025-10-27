@@ -6,7 +6,7 @@ export const environment = {
     authDomain: "kensyu10121.firebaseapp.com",
     projectId: "kensyu10121",
     //  バケット名に修正（ドメインではなく）
-    storageBucket: "kensyu10121.appspot.com",
+    storageBucket: "kensyu10121.firebasestorage.app",
     messagingSenderId: "210275340301",
     appId: "1:210275340301:web:6f6d12b2c000bd883a8544",
     measurementId: "G-DFR7RTB005"

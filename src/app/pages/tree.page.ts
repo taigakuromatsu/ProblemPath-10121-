@@ -1,6 +1,6 @@
 // src/app/pages/tree.page.ts
 import { Component } from '@angular/core';
-import { NgIf, NgFor, AsyncPipe, DatePipe } from '@angular/common';
+import { NgIf, NgFor, AsyncPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ProblemsService } from '../services/problems.service';
 import { IssuesService } from '../services/issues.service';
@@ -24,6 +24,7 @@ import { CommentsService, CommentDoc, CommentTarget } from '../services/comments
 import { DraftsService } from '../services/drafts.service';
 import { NetworkService } from '../services/network.service';
 import { TranslateModule, TranslateService } from '@ngx-translate/core'; 
+import { AttachmentsService, AttachmentDoc, AttachmentTarget } from '../services/attachments.service';
 
 type Status = 'not_started' | 'in_progress' | 'done';
 
@@ -47,7 +48,7 @@ function dlog(...args: any[]) {
   standalone: true,
   selector: 'pp-tree',
   imports: [
-    NgIf, NgFor, AsyncPipe, DatePipe, FormsModule,
+    NgIf, NgFor, AsyncPipe, DatePipe, DecimalPipe, FormsModule,
     MatButtonModule, MatTreeModule, MatIconModule, MatTooltipModule,
     NgChartsModule, MatSnackBarModule, TranslateModule
   ],
@@ -137,7 +138,10 @@ function dlog(...args: any[]) {
               <span style="flex:1 1 auto"></span>
 
               <button mat-button type="button" (click)="openComments(node)">
-                💬 {{ 'comment.title' | translate }} ({{ commentCounts[node.id] ?? 0 }})
+                  💬 {{ 'cf.count' | translate:{
+                        c: (commentCounts[node.id] ?? 0),
+                        f: (attachmentCounts[node.id] ?? 0)
+                      } }}
               </button>
 
               <button mat-button type="button" (click)="renameProblemNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">{{ 'common.rename' | translate }}</button>
@@ -156,7 +160,10 @@ function dlog(...args: any[]) {
               <span style="flex:1 1 auto"></span>
 
               <button mat-button type="button" (click)="openComments(node)">
-                💬 {{ 'comment.title' | translate }} ({{ commentCounts[node.id] ?? 0 }})
+                  💬 {{ 'cf.count' | translate:{
+                        c: (commentCounts[node.id] ?? 0),
+                        f: (attachmentCounts[node.id] ?? 0)
+                      } }}
               </button>
 
               <button mat-button type="button" (click)="renameIssueNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">{{ 'common.rename' | translate }}</button>
@@ -185,7 +192,10 @@ function dlog(...args: any[]) {
               <span style="flex:1 1 auto"></span>
 
               <button mat-button type="button" (click)="openComments(node)">
-                💬 {{ 'comment.title' | translate }} ({{ commentCounts[node.id] ?? 0 }})
+                  💬 {{ 'cf.count' | translate:{
+                        c: (commentCounts[node.id] ?? 0),
+                        f: (attachmentCounts[node.id] ?? 0)
+                      } }}
               </button>
 
               <button mat-button type="button" (click)="renameTaskNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">{{ 'common.rename' | translate }}</button>
@@ -202,7 +212,7 @@ function dlog(...args: any[]) {
 
         <ng-container *ngIf="selectedNode">
           <div style="font-weight:700; margin-bottom:8px;">
-            💬 {{ 'comment.header' | translate:{ kind: selectedNode.kind, name: selectedNode.name } }}
+            💬 {{ 'cf.header' | translate:{ kind: selectedNode.kind, name: selectedNode.name } }}
           </div>
 
           <div *ngIf="!(isOnline$ | async)" style="margin-bottom:6px; font-size:12px; color:#b45309; background:#fffbeb; border:1px solid #fcd34d; padding:6px 8px; border-radius:6px;">
@@ -242,6 +252,54 @@ function dlog(...args: any[]) {
           </div>
           <ng-template #loadingC><div style="opacity:.65;">{{ 'common.loading' | translate }}</div></ng-template>
         </ng-container>
+
+        <!-- ========== 添付ブロック ========== -->
+        <div *ngIf="selectedNode"
+             style="border-top:1px solid #eee; margin:10px 0 0; padding-top:10px;">
+          <div style="font-weight:700; margin-bottom:8px;">
+            📎 添付ファイル
+          </div>
+
+          <div style="display:flex; gap:8px; margin-bottom:10px; align-items:center;">
+            <input type="file"
+                  multiple
+                  accept="image/*,.pdf"
+                  (change)="onPickFiles($event)"
+                  [disabled]="uploadBusy || !(canEdit$ | async)">
+            <span *ngIf="uploadBusy" style="font-size:12px; opacity:.75;">アップロード中…</span>
+          </div>
+
+          <div *ngIf="attachments$ | async as ats; else loadingAts">
+            <div *ngIf="!ats.length" style="opacity:.65;">（まだありません）</div>
+            <div *ngFor="let a of ats" style="display:flex; gap:8px; align-items:center; border-top:1px solid #eee; padding:8px 0;">
+              <!-- サムネ（画像のみ） -->
+              <img *ngIf="a.downloadURL && a.contentType?.startsWith('image/')"
+                  [src]="a.downloadURL"
+                  alt=""
+                  style="width:48px; height:48px; object-fit:cover; border:1px solid #e5e7eb; border-radius:6px;">
+              <span *ngIf="!a.contentType?.startsWith('image/')" style="font-size:20px;">📄</span>
+
+              <div style="flex:1 1 auto; min-width:0;">
+                <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                  {{ a.name }}
+                </div>
+                <div style="font-size:12px; opacity:.7;">
+                  {{ a.contentType || 'binary' }} ・ {{ a.size | number }} bytes
+                </div>
+              </div>
+
+              <a *ngIf="a.downloadURL" mat-stroked-button [href]="a.downloadURL" target="_blank" rel="noopener">開く</a>
+              <button mat-button color="warn"
+                      (click)="removeAttachment(a)"
+                      [disabled]="!(canEdit$ | async)">
+                削除
+              </button>
+            </div>
+          </div>
+          <ng-template #loadingAts><div style="opacity:.65;">読み込み中…</div></ng-template>
+        </div>
+        <!-- ========== /添付ブロック ========== -->
+
       </aside>
     </div>
   `
@@ -301,6 +359,13 @@ export class TreePage {
   newBody = '';
   editingId: string | null = null;
 
+  attachmentCounts: Partial<Record<string, number>> = {};
+
+  // 合計（コメント + 添付）
+  totalCount(id: string) {
+    return (this.commentCounts[id] ?? 0) + (this.attachmentCounts[id] ?? 0);
+  }
+
   // コメント件数バッジ（node.id -> count）
   commentCounts: Partial<Record<string, number>> = {};
 
@@ -310,6 +375,32 @@ export class TreePage {
 
   private issueSubs = new Map<string, import('rxjs').Subscription>(); // problemId -> sub
   private taskSubs  = new Map<string, import('rxjs').Subscription>(); // `${problemId}_${issueId}` -> sub
+
+  attachments$?: Observable<AttachmentDoc[]>;
+  uploadBusy = false;
+  // ==== 添付ファイルのクライアントバリデーション ====
+private readonly MAX_FILE_BYTES = 20 * 1024 * 1024; // 20MB
+private readonly ALLOWED_MIME = [
+  'image/png', 'image/jpeg', 'image/gif', 'image/webp',
+  'application/pdf'
+];
+private readonly ALLOWED_EXT = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.pdf'];
+
+private isAllowedFile(file: File): { ok: boolean; reason?: string } {
+  const sizeOk = file.size <= this.MAX_FILE_BYTES;
+  if (!sizeOk) return { ok: false, reason: `「${file.name}」は20MBを超えています` };
+
+  // MIME が空のことがある（環境/拡張子次第）ので、拡張子も見て二重判定
+  const mimeOk = !!file.type && this.ALLOWED_MIME.includes(file.type.toLowerCase());
+  const name = file.name.toLowerCase();
+  const extOk = this.ALLOWED_EXT.some(ext => name.endsWith(ext));
+
+  if (!(mimeOk || extOk)) {
+    return { ok: false, reason: `「${file.name}」は対応していない形式です（画像 or PDF）` };
+  }
+  return { ok: true };
+}
+
 
   constructor(
     private problems: ProblemsService,
@@ -323,6 +414,7 @@ export class TreePage {
     private drafts: DraftsService,
     private network: NetworkService, 
     private tr: TranslateService,
+    private attachments: AttachmentsService,
   ) {
     this.isEditor$ = this.members.isEditor$;
     this.isOnline$ = this.network.isOnline$;
@@ -418,7 +510,10 @@ export class TreePage {
 
         // 件数をProblem単位で先にロード
         try {
-          await Promise.all(this.data.map(n => this.loadCountFor(n)));
+          await Promise.all(this.data.map(n => Promise.all([
+            this.loadCountFor(n),       // コメント件数
+            this.loadAttachCountFor(n), // 添付件数 ←追加
+          ])));          
         } catch {}
 
         // Issue購読を貼り直し
@@ -494,9 +589,9 @@ export class TreePage {
       // 件数ロード：親Problem自身＋子Issue
       try {
         await Promise.all([
-          this.loadCountFor(pNode),
-          ...kids.map(k => this.loadCountFor(k))
-        ]);
+          Promise.all([ this.loadCountFor(pNode), this.loadAttachCountFor(pNode) ]),
+          ...kids.map(k => Promise.all([ this.loadCountFor(k), this.loadAttachCountFor(k) ])),
+        ]);        
       } catch {}
 
       this.recomputeProblemStatus(pNode.id);
@@ -551,9 +646,9 @@ export class TreePage {
           // 件数ロード：当該Issue＋子Task
           try {
             await Promise.all([
-              this.loadCountFor(issueNode),
-              ...kids.map(k => this.loadCountFor(k))
-            ]);
+              Promise.all([ this.loadCountFor(issueNode), this.loadAttachCountFor(issueNode) ]),
+              ...kids.map(k => Promise.all([ this.loadCountFor(k), this.loadAttachCountFor(k) ])),
+            ]);            
           } catch {}
 
           this.recomputeProblemStatus(problemId);
@@ -700,6 +795,13 @@ export class TreePage {
     });
   }
 
+   private async toAttachmentTarget(node: TreeNode): Promise<AttachmentTarget | null> {
+       // 実体の形は同じなので型を合わせて返す
+       const t = await this.toTarget(node);
+       return (t as unknown) as AttachmentTarget | null;
+     }
+  
+
   // コメントターゲットを算出
   private async toTarget(node: TreeNode): Promise<CommentTarget | null> {
     const projectId = await firstValueFrom(this.currentProject.projectId$);
@@ -747,6 +849,23 @@ export class TreePage {
     } catch {}
   }
 
+  private async loadAttachCountFor(node: TreeNode) {
+    const t = await this.toAttachmentTarget(node);
+    if (!t) return;
+    try {
+      const n = await firstValueFrom(this.attachments.list(t).pipe(take(1)));
+      this.attachmentCounts[node.id] = n.length;
+    } catch {}
+  }
+  
+  // 添付件数を即時反映（+1 / -1）
+  private bumpAttachCount(node: TreeNode | null, delta: number) {
+    if (!node) return;
+    const prev = this.attachmentCounts[node.id] ?? 0;
+    this.attachmentCounts[node.id] = Math.max(0, prev + delta);
+  }
+  
+
   private bumpCount(node: TreeNode | null, delta: number) {
     if (!node) return;
     const prev = this.commentCounts[node.id] ?? 0;
@@ -792,6 +911,10 @@ export class TreePage {
         if (ok) this.newBody = rec.value || '';
       }
     }
+    // 添付一覧 ーーーーーーーーーーーーーーーーーー
+    const at = await this.toAttachmentTarget(node);
+    this.attachments$ = at ? this.attachments.list(at) : undefined;
+
   }
 
   // 投稿/更新/キャンセル時はドラフトを消す
@@ -872,5 +995,80 @@ export class TreePage {
     }
     return true;
   }
+
+  async onPickFiles(ev: Event) {
+    if (!(await this.requireCanEdit())) return;
+  
+    const input = ev.target as HTMLInputElement;
+    const selected = Array.from(input.files || []);
+    if (!selected.length || !this.selectedNode) return;
+  
+    // バリデーション
+    const valids: File[] = [];
+    const errors: string[] = [];
+    for (const f of selected) {
+      const r = this.isAllowedFile(f);
+      if (r.ok) valids.push(f);
+      else if (r.reason) errors.push(r.reason);
+    }
+  
+    if (errors.length) {
+      // まとめてユーザーにフィードバック
+      this.snack.open(errors.join(' / '), 'OK', { duration: 5000 });
+    }
+    if (!valids.length) {
+      // 1つも通らなければ終了
+      if (input) input.value = '';
+      return;
+    }
+  
+    const t = await this.toAttachmentTarget(this.selectedNode);
+    if (!t) return;
+  
+    const uid = await firstValueFrom(this.auth.uid$);
+    this.uploadBusy = true;
+  
+    try {
+      // 複数ファイルを順番にアップロード
+      for (const f of valids) {
+        await this.attachments.upload(t, f, uid || '', (pct) => {
+          // 必要なら進捗表示：console.log(`[upload] ${f.name}: ${pct}%`);
+        });
+        this.bumpAttachCount(this.selectedNode, +1);
+        ;
+      }
+      this.snack.open(this.tr.instant('common.uploadDone') || 'アップロードしました', 'OK', { duration: 2500 });
+    } catch (e: any) {
+      console.error(e);
+      const msg =
+        e?.code === 'storage/unauthorized' ? '権限がありません' :
+        e?.code === 'storage/canceled'     ? 'アップロードがキャンセルされました' :
+        e?.code === 'storage/retry-limit-exceeded' ? 'アップロードに失敗しました（再試行上限）' :
+        this.tr.instant('common.uploadFailed') || 'アップロードに失敗しました';
+      this.snack.open(msg, 'OK', { duration: 4000 });
+    } finally {
+      this.uploadBusy = false;
+      if (input) input.value = '';
+    }
+  }
+  
+  
+  async removeAttachment(a: AttachmentDoc) {
+    if (!(await this.requireCanEdit())) return;
+    if (!this.selectedNode) return;
+    const ok = confirm(`「${a.name}」を削除しますか？`);
+    if (!ok) return;
+  
+    const t = await this.toAttachmentTarget(this.selectedNode);
+    if (!t || !a.id) return;
+    try {
+      await this.attachments.remove(t, a.id, a.storagePath);
+      this.bumpAttachCount(this.selectedNode, -1);
+    } catch (e) {
+      console.error(e);
+      this.snack.open(this.tr.instant('common.deleteFailed') || '削除に失敗しました', 'OK', { duration: 3000 });
+    }
+  }
+  
 }
 

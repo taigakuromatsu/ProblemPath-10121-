@@ -1,5 +1,3 @@
-
-// firestore.rules
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -121,6 +119,20 @@ service cloud.firestore {
             && (!('updatedBy' in def) || def.updatedBy == request.auth.uid);
         }
 
+        // 添付メタ（共通バリデータ）
+        function validAttachmentData(d) {
+          return d.keys().hasOnly([
+                   'name','contentType','size','storagePath','downloadURL',
+                   'createdAt','updatedAt','createdBy'
+                 ])
+                 && (d.name is string) && d.name.size() > 0 && d.name.size() <= 200
+                 && (d.contentType is string) && d.contentType.size() > 0
+                 && ((d.size is int) || (d.size is float)) && d.size >= 0 && d.size <= 20 * 1024 * 1024 // 20MB 目安
+                 && (d.storagePath is string) && d.storagePath.size() > 0
+                 && (d.downloadURL is string) && d.downloadURL.size() > 0
+                 && (d.createdBy is string) && d.createdBy == request.auth.uid;
+        }
+
         allow create, update: if isEditor(projectId)
           && (
             // problemDef 無しも許可（後から追記できる）
@@ -129,6 +141,18 @@ service cloud.firestore {
           );
 
         allow delete: if isEditor(projectId);
+
+        // ===== Problem attachments =====
+        match /attachments/{attId} {
+          allow read: if isMember(projectId);
+          // 作成はエディターのみ＋作成時の必須フィールド検証
+          allow create: if isEditor(projectId) && validAttachmentData(request.resource.data);
+          // 更新は名称変更程度に限定（必要に応じて拡張）
+          allow update: if isEditor(projectId)
+            && request.resource.data.keys().hasOnly(['name','updatedAt'])
+            && (request.resource.data.name is string) && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 200;
+          allow delete: if isEditor(projectId);
+        }
 
         // Problem comments
         match /comments/{commentId} {
@@ -158,6 +182,16 @@ service cloud.firestore {
           // ★ delete は request.resource が null なので分離
           allow delete: if isEditor(projectId);
 
+          // ===== Issue attachments =====
+          match /attachments/{attId} {
+            allow read: if isMember(projectId);
+            allow create: if isEditor(projectId) && validAttachmentData(request.resource.data);
+            allow update: if isEditor(projectId)
+              && request.resource.data.keys().hasOnly(['name','updatedAt'])
+              && (request.resource.data.name is string) && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 200;
+            allow delete: if isEditor(projectId);
+          }
+
           // Issue comments
           match /comments/{commentId} {
             allow read: if isMember(projectId);
@@ -173,6 +207,16 @@ service cloud.firestore {
           match /tasks/{taskId} {
             allow read: if isMember(projectId);
             allow create, update, delete: if isEditor(projectId);
+
+            // ===== Task attachments =====
+            match /attachments/{attId} {
+              allow read: if isMember(projectId);
+              allow create: if isEditor(projectId) && validAttachmentData(request.resource.data);
+              allow update: if isEditor(projectId)
+                && request.resource.data.keys().hasOnly(['name','updatedAt'])
+                && (request.resource.data.name is string) && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 200;
+              allow delete: if isEditor(projectId);
+            }
 
             // Task comments
             match /comments/{commentId} {
@@ -214,4 +258,5 @@ service cloud.firestore {
     }
   }
 }
+
 
