@@ -1,5 +1,5 @@
 // src/app/pages/home.page.ts
-import { Component, DestroyRef } from '@angular/core';
+import { Component, DestroyRef, OnInit, OnDestroy } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AsyncPipe, NgFor, NgIf, JsonPipe, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -18,13 +18,14 @@ import { AuthService } from '../services/auth.service';
 import { MembersService } from '../services/members.service';
 import { InvitesService, InviteRole } from '../services/invites.service';
 import { Problem, Issue, Task } from '../models/types';
-import { Observable, BehaviorSubject, of, combineLatest, firstValueFrom } from 'rxjs';
+import { Observable, BehaviorSubject, of, combineLatest, firstValueFrom, Subscription } from 'rxjs';
 import { switchMap, take, map, startWith } from 'rxjs/operators';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { serverTimestamp } from 'firebase/firestore';
 import { DraftsService } from '../services/drafts.service';
-import { NetworkService } from '../services/network.service'; 
+import { NetworkService } from '../services/network.service';
 import { TranslateModule } from '@ngx-translate/core';
+import { MessagingService } from '../services/messaging.service';
 
 // ---- このページ専用の拡張型 ----
 type ProblemWithDef = Problem & {
@@ -80,6 +81,27 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
     <div *ngIf="(auth.loggedIn$ | async) && !(members.isEditor$ | async)"
          style="padding:8px 10px; border:1px solid #e5e7eb; border-radius:8px; background:#fafafa; margin:8px 0; font-size:12px;">
       {{ 'warn.viewerOnly' | translate }}
+    </div>
+
+    <!-- 通知（FCM）: 権限リクエスト＆受信一覧 -->
+    <div *ngIf="auth.loggedIn$ | async" style="padding:10px; border:1px solid #e5e7eb; border-radius:10px; margin:12px 0;">
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <button mat-raised-button color="primary" type="button" (click)="askNotificationPermission()">
+          通知を有効化（権限リクエスト）
+        </button>
+        <span *ngIf="fcmToken" style="font-size:12px; opacity:.8; word-break:break-all;">
+          Token: {{ fcmToken }}
+        </span>
+      </div>
+      <div style="margin-top:8px;">
+        <h4 style="margin:0 0 6px;">最新通知（フォアグラウンド）</h4>
+        <div *ngIf="fgMessages.length === 0" style="opacity:.7;">（まだありません）</div>
+        <ul>
+          <li *ngFor="let m of fgMessages">
+            <strong>{{ m.title || '通知' }}</strong> — {{ m.body || '' }}
+          </li>
+        </ul>
+      </div>
     </div>
 
     <p>{{ 'home.lead' | translate }}</p>
@@ -456,7 +478,7 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
 
   `
 })
-export class HomePage {
+export class HomePage implements OnInit, OnDestroy {
   readonly NEW_OPTION_VALUE = '__NEW__';
 
   problems$!: Observable<Problem[]>;
@@ -487,6 +509,11 @@ export class HomePage {
   isOnline$!: Observable<boolean>;
   canEdit$!: Observable<boolean>;
 
+  // --- FCM（フォアグラウンド表示用） ---
+  fcmToken: string | null = null;
+  fgMessages: Array<{ title?: string; body?: string }> = [];
+  private fgSub?: Subscription;
+
   constructor(
     public prefs: PrefsService,
     private theme: ThemeService,
@@ -501,6 +528,7 @@ export class HomePage {
     private snack: MatSnackBar,
     private drafts: DraftsService,
     private network: NetworkService,
+    private msg: MessagingService,
   ) {
     this.isOnline$ = this.network.isOnline$;
     this.canEdit$ = combineLatest([this.members.isEditor$, this.network.isOnline$]).pipe(
@@ -516,7 +544,7 @@ export class HomePage {
 
   themeMode: 'light' | 'dark' | 'system' = 'system';
 
-  ngOnInit() {
+  async ngOnInit() {
     // テーマ反映
     this.prefs.prefs$
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -587,6 +615,99 @@ export class HomePage {
         }
         this.tasksMap = nextMap;
       });
+
+    // --- FCM: 既に権限があればトークン取得、フォアグラウンド受信を購読 ---
+    try {
+      this.fcmToken = await this.msg.getTokenIfGranted();
+    } catch {}
+    this.fgSub = this.msg.onMessage$.subscribe(n => {
+      this.fgMessages = [{ title: n?.title, body: n?.body }, ...this.fgMessages].slice(0, 20);
+    });    
+  }
+
+  // 通知の権限リクエスト → トークン取得
+  async askNotificationPermission() {
+    try {
+      const t = await this.msg.requestPermissionAndGetToken();
+      this.fcmToken = t;
+      this.snack.open('通知を有効化しました', undefined, { duration: 2000 });
+      // TODO: ここで Firestore に users/{uid}/fcmTokens/{token} を保存すると運用が楽です
+    } catch (e: any) {
+      console.error('[FCM] permission/token error', e);
+      this.snack.open('通知の有効化に失敗しました', undefined, { duration: 2500 });
+    }
+  }
+
+  async switchAccount() {
+    await this.auth.signOut();
+    await this.auth.signInWithGoogle(true);
+  }
+
+  // 招待
+  inviteEmail = '';
+  inviteRole: InviteRole = 'member';
+  inviteUrl: string | null = null;
+  isCreatingInvite = false;
+
+  async createInvite() {
+    if (!(await this.requireOnline())) return;
+    if (!this.inviteEmail.trim()) return;
+    const pid = this.currentProject.getSync();
+    if (!pid) { alert('プロジェクト未選択'); return; }
+    this.isCreatingInvite = true;
+    try {
+      const url = await this.invites.create(pid, this.inviteEmail.trim(), this.inviteRole);
+      this.inviteUrl = url;
+    } finally {
+      this.isCreatingInvite = false;
+    }
+  }
+  copyInviteUrl() {
+    if (this.inviteUrl) navigator.clipboard.writeText(this.inviteUrl);
+  }
+
+  // テーマ
+  onThemeChange(mode: 'light' | 'dark' | 'system') {
+    this.theme.setTheme(mode);
+    if ((this.prefs as any).update) {
+      (this.prefs as any).update({ theme: mode });
+    } else {
+      localStorage.setItem('pp.theme', mode);
+    }
+    this.themeMode = mode;
+  }
+
+  get systemPrefersDark(): boolean {
+    return typeof window !== 'undefined'
+      && !!window.matchMedia
+      && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+  get themeModeLabel(): string {
+    if (this.themeMode === 'system') {
+      return this.systemPrefersDark ? 'システム（ダーク）' : 'システム（ライト）';
+    }
+    return this.themeMode === 'dark' ? 'ダーク' : 'ライト';
+  }
+
+  onSelectProblem(val: string | null) {
+    if (val === this.NEW_OPTION_VALUE) {
+      this.selectedProblemId = null;
+      this.selectedProblem$.next(null);
+      this.openNewProblemDialog();
+      return;
+    }
+    this.selectedProblemId = val;
+    this.selectedProblem$.next(val);
+
+    // Issue タイトルのドラフト復元
+    const key = this.draftKeyIssueTitle(val);
+    if (key) {
+      const rec = this.drafts.get<string>(key);
+      if (rec && !this.issueTitle) {
+        const ok = confirm('Issue タイトルの下書きがあります。復元しますか？');
+        if (ok) this.issueTitle = rec.value || '';
+      }
+    }
   }
 
   // 共通 withPid
@@ -622,27 +743,6 @@ export class HomePage {
       const key = this.draftKeyIssueTitle(this.selectedProblemId);
       if (key) this.drafts.set(key, (val ?? '').toString());
     }, 600);
-  }
-
-  onSelectProblem(val: string | null) {
-    if (val === this.NEW_OPTION_VALUE) {
-      this.selectedProblemId = null;
-      this.selectedProblem$.next(null);
-      this.openNewProblemDialog();
-      return;
-    }
-    this.selectedProblemId = val;
-    this.selectedProblem$.next(val);
-
-    // Issue タイトルのドラフト復元
-    const key = this.draftKeyIssueTitle(val);
-    if (key) {
-      const rec = this.drafts.get<string>(key);
-      if (rec && !this.issueTitle) {
-        const ok = confirm('Issue タイトルの下書きがあります。復元しますか？');
-        if (ok) this.issueTitle = rec.value || '';
-      }
-    }
   }
 
   // --- Problem 操作 ---
@@ -778,55 +878,74 @@ export class HomePage {
     this.withPid(pid => this.tasks.update(pid, problemId, issueId, t.id!, { tags }));
   }
 
-  async switchAccount() {
-    await this.auth.signOut();
-    await this.auth.signInWithGoogle(true);
-  }
-
-  // 招待
-  inviteEmail = '';
-  inviteRole: InviteRole = 'member';
-  inviteUrl: string | null = null;
-  isCreatingInvite = false;
-
-  async createInvite() {
-    if (!(await this.requireOnline())) return;
-    if (!this.inviteEmail.trim()) return;
+  // --- Problem 作成/編集ドラフト: キー関数 ---
+  private draftKeyNewProblem(): string | null {
     const pid = this.currentProject.getSync();
-    if (!pid) { alert('プロジェクト未選択'); return; }
-    this.isCreatingInvite = true;
-    try {
-      const url = await this.invites.create(pid, this.inviteEmail.trim(), this.inviteRole);
-      this.inviteUrl = url;
-    } finally {
-      this.isCreatingInvite = false;
-    }
+    if (!pid) return null;
+    return `problem:new:${pid}`;
   }
-  copyInviteUrl() {
-    if (this.inviteUrl) navigator.clipboard.writeText(this.inviteUrl);
+  private draftKeyEditProblem(problemId: string | null): string | null {
+    const pid = this.currentProject.getSync();
+    if (!pid || !problemId) return null;
+    return `problem:edit:${pid}:${problemId}`;
   }
 
-  // テーマ
-  onThemeChange(mode: 'light' | 'dark' | 'system') {
-    this.theme.setTheme(mode);
-    if ((this.prefs as any).update) {
-      (this.prefs as any).update({ theme: mode });
+  // --- Problem 作成ドラフト: 変更ハンドラ ---
+  onNewProblemChange<K extends keyof typeof this.newProblem>(field: K, _val: (typeof this.newProblem)[K]) {
+    const key = this.draftKeyNewProblem(); if (!key) return;
+    if (this.newProblemTimers[field]) clearTimeout(this.newProblemTimers[field]);
+    this.newProblemTimers[field] = setTimeout(() => {
+      this.drafts.set(key, JSON.stringify(this.newProblem));
+    }, 600);
+  }
+
+  // --- Problem 編集ドラフト: 変更ハンドラ ---
+  onEditProblemChange<K extends EditProblemField>(field: K, _val: (typeof this.editProblem)[K]) {
+    const key = this.draftKeyEditProblem(this.selectedProblemId); if (!key) return;
+    if (this.editProblemTimers[field]) clearTimeout(this.editProblemTimers[field]!);
+    this.editProblemTimers[field] = setTimeout(() => {
+      this.drafts.set(key, JSON.stringify(this.editProblem));
+    }, 600);
+  }
+
+  visibleLinks(raw: any, all: Issue[] | null | undefined): { issueId: string, type: LinkType }[] {
+    if (!Array.isArray(raw) || !Array.isArray(all)) return [];
+    const set = new Set(all.map(i => i.id));
+    return raw
+      .filter((v: any) => v && typeof v === 'object' && v.issueId && v.type)
+      .filter((v: any) => set.has(String(v.issueId)))
+      .map((v: any) => ({ issueId: String(v.issueId), type: v.type as LinkType }));
+  }
+
+  /** 共通：ソフトデリート → Undo 5秒 */
+  private async softDeleteWithUndo(
+    kind: 'problem'|'issue'|'task',
+    path: { projectId: string; problemId?: string; issueId?: string; taskId?: string },
+    title: string
+  ){
+    const uid = await firstValueFrom(this.auth.uid$);
+
+    const patch = { softDeleted: true, deletedAt: serverTimestamp(), updatedBy: uid || '' } as any;
+
+    if (kind === 'problem') {
+      await this.problems.update(path.projectId, path.problemId!, patch);
+    } else if (kind === 'issue') {
+      await this.issues.update(path.projectId, path.problemId!, path.issueId!, patch);
     } else {
-      localStorage.setItem('pp.theme', mode);
+      await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, patch);
     }
-    this.themeMode = mode;
-  }
 
-  get systemPrefersDark(): boolean {
-    return typeof window !== 'undefined'
-      && !!window.matchMedia
-      && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  }
-  get themeModeLabel(): string {
-    if (this.themeMode === 'system') {
-      return this.systemPrefersDark ? 'システム（ダーク）' : 'システム（ライト）';
-    }
-    return this.themeMode === 'dark' ? 'ダーク' : 'ライト';
+    const ref = this.snack.open(`「${title}」を削除しました`, '元に戻す', { duration: 5000 });
+    ref.onAction().subscribe(async () => {
+      const unpatch = { softDeleted: false, deletedAt: null, updatedBy: uid || '' } as any;
+      if (kind === 'problem') {
+        await this.problems.update(path.projectId, path.problemId!, unpatch);
+      } else if (kind === 'issue') {
+        await this.issues.update(path.projectId, path.problemId!, path.issueId!, unpatch);
+      } else {
+        await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, unpatch);
+      }
+    });
   }
 
   // 新規Problemダイアログ用状態
@@ -994,77 +1113,7 @@ export class HomePage {
     this.closeEditProblemDialog();
   }
 
-  // --- Problem 作成/編集ドラフト: キー関数 ---
-  private draftKeyNewProblem(): string | null {
-    const pid = this.currentProject.getSync();
-    if (!pid) return null;
-    return `problem:new:${pid}`;
-  }
-  private draftKeyEditProblem(problemId: string | null): string | null {
-    const pid = this.currentProject.getSync();
-    if (!pid || !problemId) return null;
-    return `problem:edit:${pid}:${problemId}`;
-  }
-
-  // --- Problem 作成ドラフト: 変更ハンドラ ---
-  onNewProblemChange<K extends keyof typeof this.newProblem>(field: K, _val: (typeof this.newProblem)[K]) {
-    const key = this.draftKeyNewProblem(); if (!key) return;
-    if (this.newProblemTimers[field]) clearTimeout(this.newProblemTimers[field]);
-    this.newProblemTimers[field] = setTimeout(() => {
-      this.drafts.set(key, JSON.stringify(this.newProblem));
-    }, 600);
-  }
-
-  // --- Problem 編集ドラフト: 変更ハンドラ ---
-  onEditProblemChange<K extends EditProblemField>(field: K, _val: (typeof this.editProblem)[K]) {
-    const key = this.draftKeyEditProblem(this.selectedProblemId); if (!key) return;
-    if (this.editProblemTimers[field]) clearTimeout(this.editProblemTimers[field]!);
-    this.editProblemTimers[field] = setTimeout(() => {
-      this.drafts.set(key, JSON.stringify(this.editProblem));
-    }, 600);
-  }
-
-  visibleLinks(raw: any, all: Issue[] | null | undefined): { issueId: string, type: LinkType }[] {
-    if (!Array.isArray(raw) || !Array.isArray(all)) return [];
-    const set = new Set(all.map(i => i.id));
-    return raw
-      .filter((v: any) => v && typeof v === 'object' && v.issueId && v.type)
-      .filter((v: any) => set.has(String(v.issueId)))
-      .map((v: any) => ({ issueId: String(v.issueId), type: v.type as LinkType }));
-  }
-
-  /** 共通：ソフトデリート → Undo 5秒 */
-  private async softDeleteWithUndo(
-    kind: 'problem'|'issue'|'task',
-    path: { projectId: string; problemId?: string; issueId?: string; taskId?: string },
-    title: string
-  ){
-    const uid = await firstValueFrom(this.auth.uid$);
-
-    const patch = { softDeleted: true, deletedAt: serverTimestamp(), updatedBy: uid || '' } as any;
-
-    if (kind === 'problem') {
-      await this.problems.update(path.projectId, path.problemId!, patch);
-    } else if (kind === 'issue') {
-      await this.issues.update(path.projectId, path.problemId!, path.issueId!, patch);
-    } else {
-      await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, patch);
-    }
-
-    const ref = this.snack.open(`「${title}」を削除しました`, '元に戻す', { duration: 5000 });
-    ref.onAction().subscribe(async () => {
-      const unpatch = { softDeleted: false, deletedAt: null, updatedBy: uid || '' } as any;
-      if (kind === 'problem') {
-        await this.problems.update(path.projectId, path.problemId!, unpatch);
-      } else if (kind === 'issue') {
-        await this.issues.update(path.projectId, path.problemId!, path.issueId!, unpatch);
-      } else {
-        await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, unpatch);
-      }
-    });
-  }
-
-  // 破棄時のタイマー解放
+  // 破棄時のタイマー解放 & FCM購読解除
   ngOnDestroy() {
     if (this.issueTitleTimer) { clearTimeout(this.issueTitleTimer); this.issueTitleTimer = null; }
     for (const k of Object.keys(this.taskTitleTimers)) {
@@ -1078,8 +1127,11 @@ export class HomePage {
       const kk = k as keyof typeof this.editProblemTimers;
       if (this.editProblemTimers[kk]) clearTimeout(this.editProblemTimers[kk]!);
     });
+
+    this.fgSub?.unsubscribe();
   }
 }
+
 
 
 

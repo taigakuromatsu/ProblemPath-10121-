@@ -7,7 +7,7 @@ import { provideHttpClient, withFetch, HttpClient } from '@angular/common/http';
 import { TranslateModule, TranslateLoader } from '@ngx-translate/core';
 import { I18nService } from './i18n/i18n.service';
 import { provideStorage, getStorage } from '@angular/fire/storage';
-
+import { provideMessaging, getMessaging, } from '@angular/fire/messaging';
 // loader はそのまま
 class SimpleHttpTranslateLoader implements TranslateLoader {
   constructor(private http: HttpClient) {}
@@ -29,6 +29,7 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes),
     provideHttpClient(withFetch()),
     provideStorage(() => getStorage()),
+    provideMessaging(() => getMessaging()),
 
     importProvidersFrom(
       TranslateModule.forRoot({

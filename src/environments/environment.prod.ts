@@ -10,6 +10,9 @@ export const environment = {
       appId: "1:210275340301:web:6f6d12b2c000bd883a8544",
       measurementId: "G-DFR7RTB005"
     },
+    messaging: {
+      vapidKey: 'BKlCOw8Hi6CgWWXI5lEMbNttzad9-7KicIn4QnaFfqL6uMk3O3N5fnhwNmD6_9oyROxzVvgtM8ScEUh3o_WxL5o'
+    },
     appCheck: {
       siteKey: "6LfbAfQrAAAAAC3vk2WxyL2FTZTQ5mkLLZErGEfv"
     }

@@ -22,12 +22,19 @@ import {
 import { environment } from './environments/environment';
 
 // === 1) ローカル開発時だけ Debug トークン（固定値）を設定 ===
-//   ※ Firebase コンソール > App Check > デバッグトークンを管理 に
-//      'dev-local-fixed-token-1234' を登録しておくこと。
-const isLocal =
-  location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 if (isLocal) {
   (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = 'BB6EB0CC-9784-4B6B-B11C-82FED1FDCDA8';
+}
+
+// === 1.5) FCM用 SW を ngsw と“別スコープ”で登録（競合回避） ===
+//  - ファイルは /firebase-messaging-sw.js（プロジェクトroot or public直下）
+//  - スコープは Firebase 推奨の '/firebase-cloud-messaging-push-scope'
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker
+    .register('/firebase-messaging-sw.js', { scope: '/firebase-cloud-messaging-push-scope' })
+    .then(reg => console.log('[FCM SW] registered:', reg.scope))
+    .catch(err => console.error('[FCM SW] register error', err));
 }
 
 // === 2) アプリ起動 ===
@@ -36,53 +43,40 @@ bootstrapApplication(App, {
   providers: [
     ...(appConfig.providers ?? []),
 
-        /**
-     * Service Worker を production のときだけ有効化。
-     * ngsw-worker.js は angular.json の "serviceWorker": true とセットで配信されます。
-     */
+    // Angular の PWA SW（ngsw）は production のときだけ有効化
     provideServiceWorker('ngsw-worker.js', { enabled: environment.production }),
-    /**
-     * 新バージョン検知時のリロード案内（簡易版）
-     * - PWA キャッシュで古いUIが残る問題のユーザー体験を改善
-     */
-        {
-            provide: APP_INITIALIZER,
-            multi: true,
-            deps: [SwUpdate],
-            useFactory: (sw: SwUpdate) => () => {
-              // Service Workerが無効なら何もしない
-              if (!sw.isEnabled) return;
-              sw.versionUpdates.subscribe(() => {
-                if (confirm('新しいバージョンがあります。ページを更新しますか？')) {
-                  location.reload();
-                }
-              });
-            },
-          },
+
+    // 新バージョン検知 → リロード案内（簡易）
+    {
+      provide: APP_INITIALIZER,
+      multi: true,
+      deps: [SwUpdate],
+      useFactory: (sw: SwUpdate) => () => {
+        if (!sw.isEnabled) return;
+        sw.versionUpdates.subscribe(() => {
+          if (confirm('新しいバージョンがあります。ページを更新しますか？')) {
+            location.reload();
+          }
+        });
+      },
+    },
 
     // Firebase App
     provideFirebaseApp(() => initializeApp(environment.firebase)),
 
-    // === 3) App Check（siteKey があるときだけ有効化） ===
+    // App Check（siteKey があれば有効化）
     ...(() => {
-      const siteKey = (environment as any).appCheck?.siteKey as
-        | string
-        | undefined;
-
+      const siteKey = (environment as any).appCheck?.siteKey as string | undefined;
       if (!siteKey) {
-        // siteKey 未設定なら App Check はスキップ（バックエンド側の強制はまだ有効化しない想定）
-        console.warn('[AppCheck] siteKey が未設定のためスキップします。');
+        console.warn('[AppCheck] siteKey 未設定のためスキップします。');
         return [];
       }
-
       return [
         provideAppCheck(() => {
           const appCheck = initializeAppCheck(getApp(), {
             provider: new ReCaptchaEnterpriseProvider(siteKey),
             isTokenAutoRefreshEnabled: true,
           });
-
-          // 初回で確実にトークンを取得（メトリクスが「確認済み」に乗りやすくなる）
           getAppCheckToken(appCheck, /* forceRefresh */ true).catch(() => {});
           return appCheck;
         }),
@@ -97,3 +91,4 @@ bootstrapApplication(App, {
     provideAnimations(),
   ],
 }).catch(console.error);
+
