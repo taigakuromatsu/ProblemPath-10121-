@@ -57,7 +57,7 @@ export class IssuesService {
   listByProblem(projectId: string, problemId: string): Observable<Issue[]> {
     this.dlog('[IssuesService.listByProblem]', { pid: projectId, problemId, path: `${this.base(projectId)}/${problemId}/issues` });
     const colRef = nativeCollection(this.fs as any, `${this.base(projectId)}/${problemId}/issues`);
-    const q = nativeQuery(colRef, nativeOrderBy('order', 'asc'), nativeOrderBy('createdAt', 'asc'));
+    const q = nativeQuery(colRef, nativeWhere('visible','==', true), nativeOrderBy('order', 'asc'), nativeOrderBy('createdAt', 'asc'));
     return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Issue[]>)
       .pipe(map((xs: any[]) => xs.filter((i: any) => !i?.softDeleted)));
   }
@@ -80,6 +80,7 @@ export class IssuesService {
       tags: i.tags ?? [],
       assignees: i.assignees ?? [],
       order,
+      visible:true,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       links: normLinks,

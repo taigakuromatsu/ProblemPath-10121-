@@ -42,7 +42,8 @@ export class ProblemsService {
   list(projectId: string): Observable<Problem[]> {
     this.dlog('[ProblemsService.list]', { pid: projectId, path: this.colPath(projectId) });
     const colRef = nativeCollection(this.fs as any, this.colPath(projectId));
-    const q = nativeQuery(colRef, nativeOrderBy('order', 'asc'), nativeOrderBy('createdAt', 'asc'));
+    const q = nativeQuery(colRef, 
+      nativeWhere('visible','==', true), nativeOrderBy('order', 'asc'), nativeOrderBy('createdAt', 'asc'));
     return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Problem[]>)
       .pipe(map((xs: any[]) => xs.filter((p: any) => !p?.softDeleted)));
   }
@@ -86,6 +87,7 @@ async create(projectId: string, p: Partial<Problem>): Promise<any> {
     tags: p.tags ?? [],
     assignees: p.assignees ?? [],
     order,
+    visible:true,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     template: p.template ?? {},

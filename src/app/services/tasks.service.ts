@@ -20,7 +20,6 @@ import {
   writeBatch as nativeWriteBatch,
   arrayUnion as nativeArrayUnion,
   arrayRemove as nativeArrayRemove,
-  query,
 } from 'firebase/firestore';
 import { collectionData as rxCollectionData } from 'rxfire/firestore';
 
@@ -55,6 +54,7 @@ export class TasksService {
     const colRef = nativeCollection(this.fs as any, path);
     const q = nativeQuery(
       colRef,
+      nativeWhere('softDeleted','==', false),
       nativeOrderBy('order', 'asc'),
       nativeOrderBy('createdAt', 'asc')
     );
@@ -217,6 +217,7 @@ export class TasksService {
     const q = nativeQuery(
       base,
       nativeWhere('projectId', '==', pid),
+      nativeWhere('softDeleted','==', false),
       nativeWhere('dueDate', '>=', startYmd),
       nativeWhere('dueDate', '<=', endYmd),
       ...(openOnly ? [nativeWhere('status', 'in', OPEN_STATUSES)] : []),
@@ -259,6 +260,7 @@ export class TasksService {
     const q = nativeQuery(
       base,
       nativeWhere('projectId', '==', pid),
+      nativeWhere('softDeleted','==', false),
       nativeWhere('dueDate', '<', todayYmd),
       ...(openOnly ? [nativeWhere('status', 'in', OPEN_STATUSES)] : []),
       ...tagFilter,
@@ -296,6 +298,7 @@ export class TasksService {
     const q = nativeQuery(
       base,
       nativeWhere('projectId', '==', pid),
+      nativeWhere('softDeleted','==', false),
       nativeWhere('dueDate', '==', null),
       ...(openOnly ? [nativeWhere('status', 'in', OPEN_STATUSES)] : []),
       ...tagFilter,
@@ -334,6 +337,10 @@ export class TasksService {
     base,
     nativeWhere('projectId', '==', projectId),
     nativeWhere('assignees', 'array-contains', uid),
+
+    ...(openOnly ? [nativeWhere('status','in', OPEN_STATUSES)] : []),
+
+    nativeWhere('softDeleted','==', false),
     nativeWhere('dueDate', '>=', startYmd),
     nativeWhere('dueDate', '<=', endYmd),
     nativeOrderBy('dueDate', 'asc')
@@ -374,6 +381,10 @@ listMineNoDue(
     base,
     nativeWhere('projectId', '==', projectId),
     nativeWhere('assignees', 'array-contains', uid),
+
+    ...(openOnly ? [nativeWhere('status','in', OPEN_STATUSES)] : []),
+    
+    nativeWhere('softDeleted','==', false),
     nativeWhere('dueDate', '==', null),
     nativeOrderBy('createdAt', 'desc')
   );
