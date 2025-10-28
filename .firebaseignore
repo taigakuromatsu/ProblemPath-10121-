@@ -1,0 +1,7 @@
+# 共通
+**/node_modules/**
+**/.git/**
+**/.DS_Store
+
+# functions は lib を必ず含める
+!/functions/lib/**

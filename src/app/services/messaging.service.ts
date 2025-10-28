@@ -1,6 +1,10 @@
+
 // src/app/services/messaging.service.ts
 import { Injectable, inject } from '@angular/core';
 import { Messaging, getToken, onMessage, isSupported } from '@angular/fire/messaging';
+import { Firestore } from '@angular/fire/firestore';
+import { Auth } from '@angular/fire/auth';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { environment } from '../../environments/environment';
 import { Observable, Subject } from 'rxjs';
 
@@ -9,20 +13,21 @@ export type FcmNotice = { title?: string; body?: string };
 @Injectable({ providedIn: 'root' })
 export class MessagingService {
   private messaging = inject(Messaging, { optional: true });
+  private fs = inject(Firestore);
+  private auth = inject(Auth);
 
   private fg$ = new Subject<FcmNotice>();
   private listenerStarted = false;
 
-  /** Home等から購読するプロパティ（←関数ではなくプロパティに変更） */
+  /** Home等から購読するプロパティ */
   readonly onMessage$: Observable<FcmNotice> = this.fg$.asObservable();
 
   constructor() {
     // アプリ起動時に一度だけフォアグラウンド受信リスナーを張る
-    // （複数回呼ばれても guard で一回だけ）
     this.ensureListener();
   }
 
-  /** すでに通知許可が granted の場合だけ、トークンを返す（なければ null） */
+  /** すでに通知許可が granted の場合だけ、トークンを返す（あれば保存もする） */
   async getTokenIfGranted(): Promise<string | null> {
     if (!(await isSupported()) || !this.messaging) return null;
     if (typeof Notification === 'undefined') return null;
@@ -37,14 +42,18 @@ export class MessagingService {
         vapidKey: (environment as any).messaging?.vapidKey,
         serviceWorkerRegistration: swReg,
       });
-      return token ?? null;
+      if (token) {
+        await this.saveToken(token);
+        return token;
+      }
+      return null;
     } catch (e) {
       console.warn('[FCM] getTokenIfGranted error:', e);
       return null;
     }
   }
 
-  /** 通知権限をリクエストし、許可されたらトークンを返す */
+  /** 通知権限をリクエストし、許可されたらトークンを返す（保存もする） */
   async requestPermissionAndGetToken(): Promise<string> {
     if (!(await isSupported()) || !this.messaging) {
       throw new Error('FCM is not supported on this browser.');
@@ -68,7 +77,29 @@ export class MessagingService {
     });
 
     if (!token) throw new Error('Failed to acquire FCM token.');
+
+    await this.saveToken(token);
     return token;
+  }
+
+  /** users/{uid}/fcmTokens/{token} に保存（idempotent / merge） */
+  private async saveToken(token: string): Promise<void> {
+    const u = this.auth.currentUser;
+    if (!u) return;
+    try {
+      const ref = doc(this.fs as any, `users/${u.uid}/fcmTokens/${token}`);
+      await setDoc(
+        ref,
+        {
+          userAgent: navigator.userAgent || '',
+          createdAt: serverTimestamp(),   // 初回時
+          updatedAt: serverTimestamp(),   // 毎回更新
+        },
+        { merge: true }
+      );
+    } catch (e) {
+      console.warn('[FCM] saveToken error:', e);
+    }
   }
 
   // --- 内部: onMessage リスナーを一度だけ開始 ---

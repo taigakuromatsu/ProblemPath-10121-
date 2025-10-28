@@ -57,7 +57,6 @@ service cloud.firestore {
           && request.resource.data.role == 'admin';
 
         // ★ 招待リンク経由の参加（本人のみ / member or viewer）
-        // クライアントは create 時に { role, joinedAt, inviteId, invitedBy, displayName, email } を書く
         allow create, update: if isSignedIn()
           && request.auth.uid == uid
           && request.resource.data.keys().hasOnly(['role','joinedAt','inviteId','invitedBy','displayName','email'])
@@ -233,18 +232,28 @@ service cloud.firestore {
       }
     }
 
-    // ---- users コレクション（本人専用）----
+    // ---- users コレクション（本人専用のサブコレクション制御）----
     match /users/{uid} {
-      // 本人のみ
-      allow read, write: if isSignedIn() && request.auth.uid == uid;
+      // デフォルトは閉じる（必要なサブコレクションのみ明示許可）
+      allow read, write: if false;
 
+      // 会員プロジェクト一覧（既存仕様を維持）
       match /memberships/{projectId} {
-        // 既定は本人のみ
         allow read:   if isSignedIn() && request.auth.uid == uid;
         allow create: if isSignedIn() && request.auth.uid == uid;
         allow update: if isSignedIn() && request.auth.uid == uid;
         // 削除のみ、admin による掃除を許可（プロジェクトが存在する間）
         allow delete: if isSignedIn() && (request.auth.uid == uid || isAdmin(projectId));
+      }
+
+      // ★ FCM トークンの保存先 users/{uid}/fcmTokens/{token}
+      match /fcmTokens/{token} {
+        // 読み取りは不要なら禁止（クライアントからの get/list をブロック）
+        allow read: if false;
+
+        // 自分の配下のみ作成/削除を許可。更新は不要なので禁止。
+        allow create, delete: if isSignedIn() && request.auth.uid == uid;
+        allow update: if false;
       }
     }
 
@@ -258,5 +267,6 @@ service cloud.firestore {
     }
   }
 }
+
 
 
