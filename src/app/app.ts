@@ -13,6 +13,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { ProjectSwitcher } from './project-switcher';
 import { ThemeService } from './services/theme.service';
 import { TranslateModule } from '@ngx-translate/core';
+import { AuthService } from './services/auth.service';
 
 @Component({
   standalone: true,
@@ -72,11 +73,24 @@ import { TranslateModule } from '@ngx-translate/core';
 
           <span class="spacer"></span>
 
-          <div class="topbar-actions" aria-hidden="true">
-            <button mat-stroked-button type="button" class="filter-placeholder" disabled>
+          <div class="topbar-actions" role="group" aria-label="Toolbar actions">
+            <button mat-stroked-button type="button" class="filter-button" disabled>
               <mat-icon>tune</mat-icon>
               <span>{{ 'common.filter' | translate }}</span>
             </button>
+
+            <ng-container *ngIf="auth.loggedIn$ | async; else signIn">
+              <button mat-stroked-button type="button" class="auth-button" (click)="auth.signOut()">
+                {{ 'auth.signOut' | translate }}
+              </button>
+              <span class="user-chip">{{ (auth.displayName$ | async) || ('auth.signedIn' | translate) }}</span>
+            </ng-container>
+
+            <ng-template #signIn>
+              <button mat-flat-button color="accent" type="button" class="auth-button" (click)="auth.signInWithGoogle()">
+                {{ 'auth.signIn' | translate }}
+              </button>
+            </ng-template>
           </div>
         </mat-toolbar>
 
@@ -98,7 +112,11 @@ export class App {
 
   readonly isHandset$: Observable<boolean>;
 
-  constructor(private theme: ThemeService, private breakpoint: BreakpointObserver) {
+  constructor(
+    private theme: ThemeService,
+    private breakpoint: BreakpointObserver,
+    public auth: AuthService
+  ) {
     this.isHandset$ = this.breakpoint.observe(Breakpoints.Handset).pipe(map(result => result.matches));
   }
 

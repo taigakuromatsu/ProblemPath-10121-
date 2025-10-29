@@ -1,0 +1,179 @@
+<section class="tree-page">
+  <header class="page-header">
+    <div class="page-titles">
+      <h1>{{ 'tree.title' | translate }}</h1>
+      <p class="page-subtitle">課題の構造と進捗を一覧できます。</p>
+    </div>
+  </header>
+
+  <div class="tree-dashboard" *ngIf="dash$ | async as d">
+    <mat-card class="card metric-card">
+      <div class="metric-label">全体の進捗</div>
+      <div class="metric-value">{{ d.progressPct }}<span class="unit">%</span></div>
+      <div class="metric-sub">{{ d.doneTotal }} / {{ d.openTotal + d.doneTotal }} 完了</div>
+    </mat-card>
+    <mat-card class="card metric-card">
+      <div class="metric-label">未完了タスク数</div>
+      <div class="metric-value">{{ d.openTotal }}</div>
+      <div class="metric-sub">未完了</div>
+    </mat-card>
+    <mat-card class="card metric-card">
+      <div class="metric-label">今週期限</div>
+      <div class="metric-value">{{ d.today + d.thisWeek }}</div>
+      <div class="metric-sub">今日 {{ d.today }} / 今週 {{ d.thisWeek }}</div>
+    </mat-card>
+    <mat-card class="card metric-card">
+      <div class="metric-label">期限切れ</div>
+      <div class="metric-value warning">{{ d.overdue }}</div>
+      <div class="metric-sub">期限切れ {{ d.overdue }}</div>
+    </mat-card>
+  </div>
+
+  <div class="tree-layout">
+    <mat-card class="card tree-panel">
+      <div class="panel-header">
+        <h2>課題ツリー</h2>
+        <button mat-stroked-button color="primary" type="button" (click)="retryProblems()" *ngIf="loadError">
+          {{ 'common.retry' | translate }}
+        </button>
+      </div>
+
+      <div class="error-banner" *ngIf="loadError">{{ loadError }}</div>
+
+      <mat-tree [dataSource]="dataSource" [treeControl]="tree" class="status-tree">
+        <mat-nested-tree-node *matTreeNodeDef="let node; when: isProblem">
+          <div class="node-row node-row--problem">
+            <button mat-icon-button matTreeNodeToggle [disabled]="!(node.children?.length)">
+              <mat-icon>{{ tree.isExpanded(node) ? 'expand_more' : 'chevron_right' }}</mat-icon>
+            </button>
+            <div class="node-main">
+              <span class="node-title">{{ node.name }}</span>
+            </div>
+            <div class="node-chips">
+              <button mat-stroked-button type="button" class="chip-button" (click)="openComments(node)">
+                💬 {{ 'cf.count' | translate:{ c: (commentCounts[node.id] ?? 0), f: (attachmentCounts[node.id] ?? 0) } }}
+              </button>
+              <button mat-button type="button" (click)="renameProblemNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">{{ 'common.rename' | translate }}</button>
+              <button mat-button type="button" color="warn" (click)="removeProblemNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">{{ 'common.delete' | translate }}</button>
+            </div>
+          </div>
+          <div class="node-children" *ngIf="tree.isExpanded(node)">
+            <ng-container matTreeNodeOutlet></ng-container>
+          </div>
+        </mat-nested-tree-node>
+
+        <mat-nested-tree-node *matTreeNodeDef="let node; when: isIssue">
+          <div class="node-row node-row--issue">
+            <button mat-icon-button matTreeNodeToggle [disabled]="!(node.children?.length)">
+              <mat-icon>{{ tree.isExpanded(node) ? 'expand_more' : 'chevron_right' }}</mat-icon>
+            </button>
+            <div class="node-main">
+              <span class="node-title">{{ node.name }}</span>
+            </div>
+            <div class="node-chips">
+              <button mat-stroked-button type="button" class="chip-button" (click)="openComments(node)">
+                💬 {{ 'cf.count' | translate:{ c: (commentCounts[node.id] ?? 0), f: (attachmentCounts[node.id] ?? 0) } }}
+              </button>
+              <button mat-button type="button" (click)="renameIssueNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">{{ 'common.rename' | translate }}</button>
+              <button mat-button type="button" color="warn" (click)="removeIssueNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">{{ 'common.delete' | translate }}</button>
+            </div>
+          </div>
+          <div class="node-children" *ngIf="tree.isExpanded(node)">
+            <ng-container matTreeNodeOutlet></ng-container>
+          </div>
+        </mat-nested-tree-node>
+
+        <mat-nested-tree-node *matTreeNodeDef="let node">
+          <div class="node-row node-row--task" [ngClass]="'status-' + (node.status || 'not_started')">
+            <button mat-icon-button disabled><mat-icon>task_alt</mat-icon></button>
+            <div class="node-main">
+              <span class="status-indicator">{{ statusIcon(node.status) }}</span>
+              <span class="node-title" [matTooltip]="node.name">{{ node.name }}</span>
+            </div>
+            <div class="node-meta">
+              <span class="node-status" [style.color]="statusColor(node.status)">
+                {{ node.status === 'done' ? ('status.done' | translate) : node.status === 'in_progress' ? ('status.inProgress' | translate) : ('status.notStarted' | translate) }}
+              </span>
+            </div>
+            <div class="node-chips">
+              <button mat-stroked-button type="button" class="chip-button" (click)="openComments(node)">
+                💬 {{ 'cf.count' | translate:{ c: (commentCounts[node.id] ?? 0), f: (attachmentCounts[node.id] ?? 0) } }}
+              </button>
+              <button mat-button type="button" (click)="renameTaskNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">{{ 'common.rename' | translate }}</button>
+              <button mat-button type="button" color="warn" (click)="removeTaskNode(node)" *ngIf="isEditor$ | async" [disabled]="!(canEdit$ | async)">{{ 'common.delete' | translate }}</button>
+            </div>
+          </div>
+        </mat-nested-tree-node>
+      </mat-tree>
+    </mat-card>
+
+    <aside class="card side-panel">
+      <div *ngIf="!selectedNode" class="empty-panel">{{ 'comment.emptyHint' | translate }}</div>
+
+      <ng-container *ngIf="selectedNode">
+        <header class="side-header">
+          <h2>💬 {{ 'cf.header' | translate:{ kind: selectedNode.kind, name: selectedNode.name } }}</h2>
+        </header>
+
+        <div class="alert-inline" *ngIf="!(isOnline$ | async)">{{ 'warn.offlineComments' | translate }}</div>
+
+        <div class="comment-editor">
+          <textarea [(ngModel)]="newBody" (ngModelChange)="onCommentBodyChange($event)" [disabled]="!(canEdit$ | async)" rows="3" [placeholder]="'comment.placeholder' | translate"></textarea>
+          <div class="editor-actions">
+            <button mat-raised-button color="primary" type="button" (click)="editingId ? saveEdit() : addComment()" [disabled]="!newBody.trim() || !(canEdit$ | async)">
+              {{ editingId ? ('comment.update' | translate) : ('comment.post' | translate) }}
+            </button>
+            <button mat-stroked-button type="button" (click)="cancelEdit()" *ngIf="editingId">{{ 'common.cancel' | translate }}</button>
+          </div>
+        </div>
+
+        <section class="comment-list" *ngIf="comments$ | async as cs; else loadingComments">
+          <div class="empty-state" *ngIf="!cs.length">{{ 'comment.noneYet' | translate }}</div>
+          <article class="comment-item" *ngFor="let c of cs">
+            <header>
+              <span class="author">{{ c.authorName || c.authorId }}</span>
+              <span class="timestamp">{{ c.createdAt?.toDate?.() ? (c.createdAt.toDate() | date:'yyyy/MM/dd HH:mm') : '' }}</span>
+            </header>
+            <div class="body">{{ c.body }}</div>
+            <div class="comment-actions" *ngIf="(members.isAdmin$ | async) || ((auth.uid$ | async) === c.authorId)">
+              <button mat-button type="button" (click)="startEdit(c.id!, c.body)" [disabled]="!(canEdit$ | async)">{{ 'common.edit' | translate }}</button>
+              <button mat-button type="button" color="warn" (click)="deleteComment(c.id!)" [disabled]="!(canEdit$ | async)">{{ 'common.delete' | translate }}</button>
+            </div>
+          </article>
+        </section>
+        <ng-template #loadingComments>
+          <div class="empty-state">{{ 'common.loading' | translate }}</div>
+        </ng-template>
+
+        <section class="attachments">
+          <h3>📎 添付ファイル</h3>
+          <div class="upload-bar">
+            <input type="file" multiple accept="image/*,.pdf" (change)="onPickFiles($event)" [disabled]="uploadBusy || !(canEdit$ | async)" />
+            <span class="muted" *ngIf="uploadBusy">アップロード中…</span>
+          </div>
+
+          <div class="attachment-list" *ngIf="attachments$ | async as ats; else loadingAttachments">
+            <div class="empty-state" *ngIf="!ats.length">（まだありません）</div>
+            <div class="attachment-item" *ngFor="let a of ats">
+              <div class="thumb">
+                <img *ngIf="a.downloadURL && a.contentType?.startsWith('image/')" [src]="a.downloadURL" alt="" />
+                <span *ngIf="!a.contentType?.startsWith('image/')">📄</span>
+              </div>
+              <div class="details">
+                <div class="name">{{ a.name }}</div>
+                <div class="meta">{{ a.contentType || 'binary' }} ・ {{ a.size | number }} bytes</div>
+              </div>
+              <div class="attachment-actions">
+                <a *ngIf="a.downloadURL" mat-stroked-button [href]="a.downloadURL" target="_blank" rel="noopener">開く</a>
+                <button mat-button color="warn" type="button" (click)="removeAttachment(a)" [disabled]="!(canEdit$ | async)">削除</button>
+              </div>
+            </div>
+          </div>
+          <ng-template #loadingAttachments>
+            <div class="empty-state">読み込み中…</div>
+          </ng-template>
+        </section>
+      </ng-container>
+    </aside>
+  </div>
+</section>
