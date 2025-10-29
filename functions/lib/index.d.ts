@@ -1,1 +1,8 @@
 export declare const ping: unknown;
+export declare const commentCreatedOnProblem: any;
+export declare const commentCreatedOnIssue: any;
+export declare const commentCreatedOnTask: any;
+export declare const attachmentCreatedOnProblem: any;
+export declare const attachmentCreatedOnIssue: any;
+export declare const attachmentCreatedOnTask: any;
+export declare const taskDueReminder: unknown;
