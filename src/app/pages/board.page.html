@@ -43,12 +43,13 @@
       <div class="board-grid" *ngIf="issues.length">
         <section
           class="board-column"
+          [ngClass]="col"
           *ngFor="let col of statusCols"
           [style.--col-accent]="colAccent[col]"
         >
-          <header class="column-header">
+          <header class="column-header" [ngClass]="col">
             <div class="column-title text-1line">{{ ('board.col.' + col) | translate }}</div>
-            <span class="column-count">{{ totals[col] }}</span>
+            <span class="column-count count-badge">{{ totals[col] }}</span>
           </header>
 
           <div class="column-body">
@@ -68,7 +69,7 @@
                   >
                     <div class="issue-stack__header">
                       <div class="issue-title text-1line">{{ issue.title }}</div>
-                      <span class="issue-count">{{ ts.length }} {{ 'board.items' | translate }}</span>
+                      <span class="issue-count count-badge">{{ ts.length }} {{ 'board.items' | translate }}</span>
                     </div>
 
                     <mat-card
