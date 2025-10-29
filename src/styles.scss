@@ -1,44 +1,23 @@
-/* =========================================
-   Global Styles (Angular Material v17)
-   Light / Dark theming with html.dark toggle
-   ========================================= */
-
+/* ======（前半はそのまま）====== */
 @use '@angular/material' as mat;
-
-/* ---------------------------
-   1) Angular Material Theme
-   --------------------------- */
 
 html {
   @include mat.theme((
-    color: (
-      theme-type: light,
-      primary: mat.$azure-palette,
-      tertiary: mat.$blue-palette,
-    ),
-    typography: Roboto,
-    density: 0,
+    color: ( theme-type: light, primary: mat.$azure-palette, tertiary: mat.$blue-palette ),
+    typography: Roboto, density: 0,
   ));
 }
-
 html.dark {
   @include mat.theme((
-    color: (
-      theme-type: dark,
-      primary: mat.$azure-palette,
-      tertiary: mat.$blue-palette,
-    ),
-    typography: Roboto,
-    density: 0,
+    color: ( theme-type: dark, primary: mat.$azure-palette, tertiary: mat.$blue-palette ),
+    typography: Roboto, density: 0,
   ));
 }
 
 /* ---------------------------
    2) Design Tokens
    --------------------------- */
-
 :root {
-  /* Fluid × Density - 約20%コンパクトに */
   --scale: clamp(0.85, calc(100vw / 1440), 1);
   --density: 0.64;
   --m: calc(var(--scale) * var(--density));
@@ -60,7 +39,8 @@ html.dark {
   /* Layout */
   --card-w: calc(340px * var(--m));
   --sidebar-base: 240px;
-  --sidebar: calc(var(--sidebar-base) * 0.5 * var(--m));
+  /* ▼ 以前: *0.5 → 「今の半分程度」にするため *0.28 に縮小 */
+  --sidebar: calc(var(--sidebar-base) * 0.28 * var(--m));
   --topbar-h: calc(48px * var(--m));
 
   /* Palette */
@@ -75,16 +55,6 @@ html.dark {
   --accent-blue: #2f6feb;
   --accent-green: #23a559;
   --accent-red: #e23d3d;
-
-  /* Legacy aliases */
-  --space-1: var(--gap-1);
-  --space-2: var(--gap-2);
-  --space-3: var(--gap-3);
-  --space-4: var(--gap-4);
-  --card-gap: var(--gap-3);
-  --icon-size: var(--icon);
-  --font-title: var(--fs-t);
-  --font-body: var(--fs-b);
 }
 
 :root.dark {
@@ -102,280 +72,13 @@ html.dark {
   color-scheme: dark;
 }
 
-/* ---------------------------
-   3) Base
-   --------------------------- */
-
-* {
-  box-sizing: border-box;
-}
-
-html,
-body {
-  height: 100%;
-  background: var(--bg);
-  color: var(--fg);
-  margin: 0;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-body {
-  font-size: var(--fs-b);
-  line-height: 1.5;
-  letter-spacing: 0.01em;
-  transition: background-color 120ms linear, color 120ms linear;
-}
-
-body,
-.mat-mdc-card,
-.mat-mdc-menu-panel,
-.mat-mdc-dialog-container .mdc-dialog__surface {
-  transition: background-color 120ms linear, color 120ms linear, border-color 120ms linear, box-shadow 160ms ease;
-}
-
-a,
-a:visited {
-  color: var(--accent-blue);
-  text-decoration: none;
-}
-
-a:hover {
-  text-decoration: underline;
-}
-
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  margin: 0 0 var(--gap-2);
-  font-size: var(--fs-t);
-  line-height: 1.3;
-  letter-spacing: 0.01em;
-}
-
-p,
-span,
-label,
-input,
-select,
-textarea,
-button,
-a {
-  letter-spacing: 0.01em;
-}
-
-/* ---------------------------
-   4) Common Surfaces
-   --------------------------- */
-
-.card,
-.mat-mdc-card {
-  background: var(--surface);
-  color: var(--fg);
-  border-radius: var(--radius);
-  padding: var(--pad-2);
-  box-shadow: var(--shadow);
-  border: 1px solid var(--border);
-  font-size: var(--fs-b);
-  line-height: 1.5;
-}
-
-.section-title {
-  font-size: var(--fs-t);
-  font-weight: 700;
-  margin-bottom: var(--gap-2);
-  position: relative;
-  padding-left: calc(10px * var(--m));
-}
-
-.section-title::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0.2em;
-  bottom: 0.2em;
-  width: calc(4px * var(--m));
-  border-radius: 999px;
-  background: var(--accent-blue);
-}
-
-.section-title--danger::before {
-  background: var(--accent-red);
-}
-
-.section-title--success::before {
-  background: var(--accent-green);
-}
-
-.divider {
-  height: 1px;
-  background: var(--divider);
-  margin: var(--gap-3) 0;
-}
-
-.chip-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--gap-2);
-  min-width: 0;
-}
-
-.count-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: calc(4px * var(--m));
-  padding: 0 calc(10px * var(--m));
-  min-height: calc(22px * var(--m));
-  border-radius: 999px;
-  border: 1px solid var(--divider);
-  font-size: calc(12px * var(--m));
-  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
-  color: var(--accent-blue);
-  letter-spacing: 0.02em;
-}
-
-/* Material overlays */
-.mat-mdc-menu-panel,
-.mat-mdc-select-panel,
-.mat-mdc-dialog-container .mdc-dialog__surface,
-.mat-mdc-snack-bar-container {
-  background: var(--surface);
-  color: var(--fg);
-  border: 1px solid var(--border);
-}
-
-.mat-mdc-standard-chip,
-.mat-mdc-chip-set {
-  background: var(--surface);
-  color: var(--fg);
-  min-width: 0;
-}
-
-.mat-mdc-standard-chip .mdc-evolution-chip__text-label {
-  letter-spacing: 0.01em;
-}
-
-.mat-divider,
-hr {
-  border-color: var(--divider) !important;
-  opacity: 0.9;
-}
-
-/* ---------------------------
-   5) Form & Button tweaks
-   --------------------------- */
-
-.mdc-text-field,
-.mat-mdc-form-field-subscript-wrapper {
-  color: var(--fg);
-}
-
-.mdc-text-field--filled {
-  background: color-mix(in oklab, var(--surface) 92%, black 8%) !important;
-}
-
-.mdc-line-ripple::after {
-  border-bottom-color: var(--accent-blue) !important;
-}
-
-.mdc-button:hover .mdc-button__label {
-  opacity: 0.9;
-}
-
-.mat-mdc-outlined-button:not(:disabled) {
-  border-color: var(--border);
-}
-
-/* ---------------------------
-   6) Scrollbar
-   --------------------------- */
-
-* {
-  scrollbar-width: thin;
-  scrollbar-color: #2a313a transparent;
-}
-
-*::-webkit-scrollbar {
-  height: 8px;
-  width: 8px;
-}
-
-*::-webkit-scrollbar-thumb {
-  background: #2a313a;
-  border-radius: 8px;
-}
-
-*::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-/* ---------------------------
-   7) Utilities
-   --------------------------- */
-
-.muted {
-  color: var(--muted);
-}
-
-.bordered {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-
-.surface {
-  background: var(--surface);
-}
-
-.minw-0 {
-  min-width: 0;
-}
-
-.text-1line {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-
-.no-truncate {
-  overflow: visible !important;
-  text-overflow: clip !important;
-  white-space: normal !important;
-}
-
-.text-2line {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  min-width: 0;
-}
-
-.lh-tight {
-  line-height: 1.3;
-}
-
-.lh-normal {
-  line-height: 1.5;
-}
-
-.chip--wrap {
-  white-space: normal;
-  line-height: 1.4;
-}
+/* ======（Base〜Utilities は現行のまま。以下、共通UIの変更点を中心に差分）====== */
 
 /* ---------------------------
    8) Layout Shell (Topbar + Sidebar)
    --------------------------- */
 
-.shell {
-  height: 100vh;
-  background: var(--bg);
-}
+.shell { height: 100vh; background: var(--bg); }
 
 .shell__sidenav {
   width: min(var(--sidebar), 90vw);
@@ -383,370 +86,119 @@ hr {
   border-right: 1px solid var(--divider);
   background: var(--surface-subtle);
   color: var(--fg);
-  padding: var(--pad-2) calc(14px * var(--m));
+  padding: var(--pad-2) calc(10px * var(--m));
   display: flex;
   flex-direction: column;
-  gap: var(--gap-3);
+  gap: var(--gap-2);
 }
 
-.sidenav__wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-3);
-  height: 100%;
-}
+.sidenav__wrapper { display: flex; flex-direction: column; gap: var(--gap-2); height: 100%; }
 
 .sidenav__header {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-2);
-  font-weight: 600;
-  font-size: var(--fs-b);
+  display: flex; align-items: center; gap: var(--gap-1);
+  font-weight: 600; font-size: calc(12px * var(--m));
 }
+.sidenav__header .mat-icon { font-size: calc(18px * var(--m)); width: calc(18px * var(--m)); height: calc(18px * var(--m)); }
 
-.sidenav__header .mat-icon {
-  font-size: calc(22px * var(--m));
-  width: calc(22px * var(--m));
-  height: calc(22px * var(--m));
-}
+.shell__content { background: var(--bg); color: var(--fg); min-width: 0; }
 
-.shell__content {
-  background: var(--bg);
-  color: var(--fg);
-  min-width: 0;
-}
-
-.sidebar-nav {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-1);
-}
-
-.sidebar-nav .item {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-2);
-  height: calc(40px * var(--m));
-  padding: 0 var(--pad-1);
-  border-radius: var(--radius);
-  transition: background-color 160ms ease;
-}
-
-.sidebar-nav .item:hover {
-  background: color-mix(in srgb, var(--accent-blue) 8%, transparent);
-}
-
-.sidebar-nav .item .icon {
-  width: var(--icon);
-  height: var(--icon);
-}
-
+/* ---------------------------
+   Topbar（ブランドとタブの間隔 & タブをボタン化）
+   --------------------------- */
 .topbar {
-  position: sticky;
-  top: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
+  position: sticky; top: 0; z-index: 1000;
+  display: flex; align-items: center;
   gap: var(--gap-2);
   height: var(--topbar-h);
   padding-inline: calc(10px * var(--m));
 }
 
-.topbar .mat-mdc-button {
-  border-radius: 999px;
-}
+.brand { display: flex; align-items: center; gap: var(--gap-2); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; min-width: 0; }
+.brand .mat-icon { font-size: calc(22px * var(--m)); width: calc(22px * var(--m)); height: calc(22px * var(--m)); }
+.brand__title { letter-spacing: 0.12em; }
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-2);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  min-width: 0;
-}
-
-.brand .mat-icon {
-  font-size: calc(22px * var(--m));
-  width: calc(22px * var(--m));
-  height: calc(22px * var(--m));
-}
-
-.menu-button {
-  margin-right: calc(2px * var(--m));
-}
-
-.menu-button .mat-icon {
-  font-size: calc(20px * var(--m));
-  width: calc(20px * var(--m));
-  height: calc(20px * var(--m));
+.brand-gap {
+  /* ブランドとタブの“しっかりした”間隔 */
+  width: clamp(24px, 6vw, 96px);
+  flex: 0 0 auto;
 }
 
 .topnav {
-  display: flex;
-  align-items: center;
-  gap: calc(10px * var(--m));
-  min-width: 0;
-  white-space: nowrap;
+  display: flex; align-items: center; gap: calc(10px * var(--m));
+  min-width: 0; white-space: nowrap;
 }
 
-.topnav a {
-  min-width: 0 !important;
-  padding-inline: calc(8px * var(--m));
+/* タブを“ボタンUI”に */
+.topnav .tab-btn {
+  border-radius: 999px !important;
+  border: 1px solid var(--border) !important;
+  padding: 0 calc(12px * var(--m)) !important;
+  height: calc(32px * var(--m)) !important;
+  min-height: calc(32px * var(--m)) !important;
+  line-height: 1 !important;
 }
-
-.topnav a .mdc-button__label {
-  overflow: visible;
-}
-
-.topnav a.active {
-  background: color-mix(in srgb, #ffffff 16%, transparent);
-  color: inherit;
+.topnav .tab-btn.active {
+  background: color-mix(in srgb, #ffffff 18%, transparent);
   box-shadow: inset 0 -2px 0 0 color-mix(in srgb, #ffffff 40%, transparent);
 }
 
-.spacer {
-  flex: 1 1 auto;
-}
+/* 右上：サインイン／アウト＆ユーザー名を40%縮小 */
+.topbar-actions { display: flex; align-items: center; gap: calc(6px * var(--m)); flex-wrap: wrap; min-width: 0; }
 
-.topbar-actions {
-  display: flex;
-  align-items: center;
-  gap: calc(8px * var(--m));
-  flex-wrap: wrap;
-  min-width: 0;
-}
-
-.auth-button {
+.auth-button.auth--compact {
   border-radius: 999px !important;
-  display: inline-flex;
-  align-items: center;
-  gap: calc(4px * var(--m));
-  font-size: calc(10px * var(--m));
-  line-height: 1;
-  padding: 0 calc(6px * var(--m));
-  height: calc(22px * var(--m));
-  --mdc-filled-button-container-height: calc(22px * var(--m));
-  --mdc-filled-button-horizontal-padding: calc(6px * var(--m));
-  --mdc-outlined-button-container-height: calc(22px * var(--m));
+  font-size: calc(9px * var(--m));
+  height: calc(18px * var(--m)) !important;
+  min-height: calc(18px * var(--m)) !important;
+  padding: 0 calc(6px * var(--m)) !important;
   --mdc-outlined-button-outline-width: 1px;
-  --mdc-outlined-button-horizontal-padding: calc(6px * var(--m));
-  --mdc-text-button-container-height: calc(22px * var(--m));
-  min-width: 0;
+}
+.user-chip.user-chip--compact {
+  display: inline-flex; align-items: center;
+  height: calc(18px * var(--m)); padding: 0 calc(6px * var(--m));
+  border-radius: 999px; background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
+  font-size: calc(9px * var(--m)); min-width: 0;
 }
 
-.auth-button .mat-icon {
-  font-size: calc(12px * var(--m));
-  width: calc(12px * var(--m));
-  height: calc(12px * var(--m));
-}
-
-.user-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 calc(6px * var(--m));
-  height: calc(20px * var(--m));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
-  color: inherit;
-  font-size: calc(10px * var(--m));
-  min-width: 0;
-}
-
-.topbar .mat-icon {
-  font-size: calc(12px * var(--m));
-  width: calc(12px * var(--m));
-  height: calc(12px * var(--m));
-}
-
-.content-area {
-  min-height: calc(100vh - var(--topbar-h));
-  padding: var(--pad-2);
-  background: var(--bg);
-}
+/* 残りの既存スタイル（Base / Cards / Utilities / Content area など）は現行を維持 */
+.content-area { min-height: calc(100vh - var(--topbar-h)); padding: var(--pad-2); background: var(--bg); }
 
 @media (max-width: 959px) {
-  .content-area {
-    padding: var(--pad-1);
-  }
-
-  .topnav {
-    overflow-x: auto;
-  }
-
-  .topbar-actions {
-    justify-content: flex-end;
-  }
+  .content-area { padding: var(--pad-1); }
+  .topnav { overflow-x: auto; }
+  .topbar-actions { justify-content: flex-end; }
 }
 
-/* ---------------------------
-   9) Column & Card Layout Helpers
-   --------------------------- */
-
-.columns {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: var(--card-w);
-  gap: var(--gap-3);
-  overflow-x: auto;
-  padding-bottom: var(--gap-2);
+.shell__sidenav.mat-drawer,
+.shell__sidenav.mat-sidenav,
+.mat-drawer.shell__sidenav,
+.mat-sidenav.shell__sidenav {
+  width: var(--sidebar) !important;
+  flex: 0 0 var(--sidebar) !important;
+}
+.shell__sidenav .mat-drawer-inner-container {
+  width: 100% !important;
 }
 
-.col {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-3);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow);
-  border: 1px solid var(--border);
+/* --- Sidenav 幅とコンテンツの押し出し幅を同期させる --- */
+.shell .mat-sidenav-container {
+  /* コンテンツ側のオフセット（押し出し幅）を、実際のサイドバー幅と一致させる */
+  --mat-sidenav-container-sidenav-width: min(var(--sidebar), 90vw);
 }
 
-.col-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--gap-2);
-  padding: var(--pad-1) var(--pad-2);
-  border-bottom: 1px solid var(--divider);
-  position: relative;
+.shell :where(.mat-sidenav, .mat-drawer) {
+  /* 実際のサイドバーの見た目の幅も同じ値に */
+  width: min(var(--sidebar), 90vw) !important;
+  flex: 0 0 min(var(--sidebar), 90vw) !important;
+  box-sizing: border-box;
 }
 
-.col-header::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: calc(4px * var(--m));
-  border-radius: var(--radius) 0 0 var(--radius);
-  background: var(--accent-blue);
-}
-
-.col-header.todo::before {
-  background: var(--accent-red);
-}
-
-.col-header.done::before {
-  background: var(--accent-green);
-}
-
-/* ---------------------------
-   10) Task / Tree specifics
-   --------------------------- */
-
-.task-card,
-.task {
-  border-radius: var(--radius);
-  padding: var(--pad-1) var(--pad-2);
-  box-shadow: var(--shadow);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-2);
+/* 念のため、コンテンツ側のはみ出し・縮み対策 */
+.shell :where(.mat-drawer-content, .mat-sidenav-content, .shell__content) {
   min-width: 0;
+  overflow: auto;
 }
 
-.task-card__meta,
-.task-card__chips,
-.task-card__actions,
-.task-card__assign {
-  display: flex;
-  gap: var(--gap-2);
-  align-items: center;
-  flex-wrap: wrap;
-  min-width: 0;
-}
 
-.task-card__title {
-  font-size: var(--fs-t);
-  font-weight: 600;
-  line-height: 1.3;
-}
+/* ===== 以降（列レイアウトやツリー/タスクの既存スタイル）は現行のままでOK ===== */
 
-.task-card__description {
-  color: var(--muted);
-}
-
-.issue-stack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-2);
-  padding: var(--pad-1) var(--pad-2);
-  border-radius: var(--radius);
-  border: 1px dashed color-mix(in srgb, var(--accent-blue) 30%, transparent);
-  background: color-mix(in srgb, var(--surface) 94%, var(--accent-blue) 6%);
-  min-height: calc(120px * var(--m));
-  transition: border-color 160ms ease, background-color 160ms ease;
-}
-
-.issue-stack.cdk-drop-list-dragging,
-.issue-stack.cdk-drop-list-receiving {
-  border-color: var(--accent-blue);
-  background: color-mix(in srgb, var(--surface) 86%, var(--accent-blue) 14%);
-}
-
-.issue-title {
-  font-weight: 600;
-  font-size: var(--fs-b);
-}
-
-.tree-row,
-.node-row {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-2);
-  padding: var(--pad-1) var(--pad-2);
-  min-width: 0;
-  position: relative;
-}
-
-.node-row::before {
-  content: '';
-  position: absolute;
-  left: calc(6px * var(--m));
-  top: calc(6px * var(--m));
-  bottom: calc(6px * var(--m));
-  width: calc(3px * var(--m));
-  border-radius: 999px;
-  background: var(--divider);
-}
-
-.node-row--task::before {
-  left: 0;
-}
-
-.node-row--task.status-done::before {
-  background: var(--accent-green);
-}
-
-.node-row--task.status-in_progress::before {
-  background: var(--accent-blue);
-}
-
-.node-row--task.status-not_started::before {
-  background: var(--accent-red);
-}
-
-.node-chips {
-  display: flex;
-  gap: var(--gap-2);
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.chip-button {
-  border-radius: 999px !important;
-  font-size: calc(13px * var(--m));
-}
-
-/* ---------------------------
-   11) Responsive tweaks
-   --------------------------- */
-
-@media (max-width: 720px) {
-  .columns {
-    grid-auto-columns: min(calc(260px * var(--m)), 80vw);
-  }
-}

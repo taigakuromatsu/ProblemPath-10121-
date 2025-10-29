@@ -14,7 +14,7 @@ import { ProjectSwitcher } from './project-switcher';
 import { ThemeService } from './services/theme.service';
 import { TranslateModule } from '@ngx-translate/core';
 import { AuthService } from './services/auth.service';
-import {MessagingService} from './services/messaging.service';
+import { MessagingService } from './services/messaging.service';
 
 @Component({
   standalone: true,
@@ -27,6 +27,7 @@ import {MessagingService} from './services/messaging.service';
   ],
   template: `
     <mat-sidenav-container class="shell">
+      <!-- 左サイド（幅は styles.scss の --sidebar で調整） -->
       <mat-sidenav
         #drawer
         class="shell__sidenav"
@@ -43,8 +44,10 @@ import {MessagingService} from './services/messaging.service';
         </div>
       </mat-sidenav>
 
+      <!-- 右側コンテンツ -->
       <mat-sidenav-content class="shell__content">
         <mat-toolbar color="primary" class="topbar">
+          <!-- モバイル用メニュー -->
           <button
             mat-icon-button
             class="menu-button"
@@ -55,14 +58,20 @@ import {MessagingService} from './services/messaging.service';
             <mat-icon>menu</mat-icon>
           </button>
 
+          <!-- ブランド -->
           <div class="brand">
             <mat-icon>view_kanban</mat-icon>
-            <span>ProblemPath</span>
+            <span class="brand__title">ProblemPath</span>
           </div>
 
-          <nav class="topnav minw-0">
+          <!-- ブランドとタブの間隔を大きめに確保 -->
+          <div class="brand-gap"></div>
+
+          <!-- タブ（押しやすい“ボタン”表示） -->
+          <nav class="topnav minw-0" aria-label="Primary">
             <a
-              mat-button
+              mat-stroked-button
+              class="tab-btn"
               *ngFor="let link of navLinks"
               [routerLink]="link.path"
               routerLinkActive="active"
@@ -74,16 +83,19 @@ import {MessagingService} from './services/messaging.service';
 
           <span class="spacer"></span>
 
+          <!-- 右側：サインイン/アウト＆ユーザー名（40%縮小） -->
           <div class="topbar-actions topbar-right minw-0" role="group" aria-label="Toolbar actions">
             <ng-container *ngIf="auth.loggedIn$ | async; else signIn">
-              <button mat-stroked-button type="button" class="auth-button" (click)="auth.signOut()">
+              <button mat-stroked-button type="button" class="auth-button auth--compact" (click)="auth.signOut()">
                 {{ 'auth.signOut' | translate }}
               </button>
-              <span class="user-chip">{{ (auth.displayName$ | async) || ('auth.signedIn' | translate) }}</span>
+              <span class="user-chip user-chip--compact">
+                {{ (auth.displayName$ | async) || ('auth.signedIn' | translate) }}
+              </span>
             </ng-container>
 
             <ng-template #signIn>
-              <button mat-flat-button color="accent" type="button" class="auth-button" (click)="auth.signInWithGoogle()">
+              <button mat-flat-button color="accent" type="button" class="auth-button auth--compact" (click)="auth.signInWithGoogle()">
                 {{ 'auth.signIn' | translate }}
               </button>
             </ng-template>

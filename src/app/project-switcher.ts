@@ -13,10 +13,7 @@ import { firstValueFrom, Observable } from 'rxjs';
 
 // Firestore
 import { Firestore } from '@angular/fire/firestore';
-import {
-  collection, doc, getDoc, getDocs, addDoc, setDoc, deleteDoc, updateDoc,
-  serverTimestamp, query, where, writeBatch, onSnapshot
-} from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, addDoc, setDoc, deleteDoc, updateDoc, serverTimestamp, query, where, writeBatch, onSnapshot } from 'firebase/firestore';
 import { arrayRemove } from 'firebase/firestore';
 
 @Component({
@@ -26,30 +23,45 @@ import { arrayRemove } from 'firebase/firestore';
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: [`
     :host { display: block; height: 100%; }
-    .switcher { display: flex; flex-direction: column; gap: var(--gap-3); height: 100%; }
-    .switcher__header { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-2); }
-    .switcher__header h2 { margin: 0; }
-    .status-hint { font-size: calc(12px * var(--m)); color: var(--muted); }
-    .offline { display: inline-flex; align-items: center; gap: var(--gap-1); font-size: calc(12px * var(--m)); color: var(--accent-red); background: color-mix(in srgb, var(--accent-red) 16%, transparent); border: 1px solid color-mix(in srgb, var(--accent-red) 45%, transparent); padding: calc(6px * var(--m)) calc(10px * var(--m)); border-radius: var(--radius); }
-    .switcher__list { display: flex; flex-direction: column; gap: var(--gap-2); overflow-y: auto; padding-right: calc(4px * var(--m)); }
-    .switcher__item { display: flex; align-items: center; gap: var(--gap-2); width: 100%; border-radius: var(--radius); padding: var(--pad-1); justify-content: space-between; background: color-mix(in srgb, var(--surface) 96%, var(--accent-blue) 4%); color: inherit; text-align: left; transition: background-color .2s ease, box-shadow .2s ease; border: 1px solid var(--border); cursor: pointer; }
-    .switcher__item:hover { background: color-mix(in srgb, var(--accent-blue) 12%, var(--surface) 88%); }
-    .switcher__item.is-active { background: color-mix(in srgb, var(--accent-blue) 18%, var(--surface) 82%); box-shadow: inset 0 0 0 1px var(--accent-blue); }
-    .switcher__item.is-active .switcher__dot { background: var(--accent-blue); }
+    .switcher { display: flex; flex-direction: column; gap: var(--gap-2); height: 100%; }
+    .switcher__header { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-1); }
+    .switcher__header h2 { margin: 0; font-size: calc(13px * var(--m)); }
+    .status-hint { font-size: calc(11px * var(--m)); color: var(--muted); }
+
+    .offline { display: inline-flex; align-items: center; gap: var(--gap-1); font-size: calc(11px * var(--m)); color: var(--accent-red);
+      background: color-mix(in srgb, var(--accent-red) 16%, transparent); border: 1px solid color-mix(in srgb, var(--accent-red) 45%, transparent);
+      padding: calc(4px * var(--m)) calc(8px * var(--m)); border-radius: var(--radius); }
+
+    .switcher__list { display: flex; flex-direction: column; gap: var(--gap-1); overflow-y: auto; padding-right: calc(2px * var(--m)); }
+
+    /* プロジェクト = 押しやすい“ボタンUI” */
+    .switcher__item {
+      display: inline-flex; align-items: center; gap: var(--gap-1);
+      width: 100%; border-radius: 999px; padding: calc(6px * var(--m)) calc(10px * var(--m));
+      justify-content: space-between; background: var(--surface); color: inherit; text-align: left;
+      transition: background-color .15s ease, box-shadow .15s ease, border-color .15s ease;
+      border: 1px solid var(--border); cursor: pointer;
+    }
+    .switcher__item:hover { background: color-mix(in srgb, var(--accent-blue) 8%, var(--surface) 92%); }
+    .switcher__item.is-active { background: color-mix(in srgb, var(--accent-blue) 14%, var(--surface) 86%); box-shadow: inset 0 0 0 1px var(--accent-blue); border-color: color-mix(in srgb, var(--accent-blue) 40%, transparent); }
     .switcher__item:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
     .switcher__item[disabled] { opacity: .5; cursor: default; }
-    .label { display: flex; align-items: center; gap: var(--gap-2); min-width: 0; flex: 1 1 auto; }
-    .switcher__dot { width: calc(10px * var(--m)); height: calc(10px * var(--m)); border-radius: 50%; background: color-mix(in srgb, var(--accent-blue) 60%, transparent); flex-shrink: 0; }
-    .switcher__name { flex: 1 1 auto; font-weight: 600; line-height: 1.3; min-width: 0; }
-    .switcher__role { font-size: calc(12px * var(--m)); color: var(--muted); flex-shrink: 0; }
-    .switcher__placeholder { font-size: calc(13px * var(--m)); color: var(--muted); padding: var(--pad-1); border: 1px dashed var(--border); border-radius: var(--radius); text-align: center; background: color-mix(in srgb, var(--surface) 92%, var(--accent-blue) 8%); }
-    .switcher__actions { display: flex; flex-direction: column; gap: var(--gap-2); margin-top: auto; }
-    .switcher__actions button { justify-content: flex-start; gap: var(--gap-1); }
+
+    .label { display: inline-flex; align-items: center; gap: var(--gap-1); min-width: 0; flex: 1 1 auto; }
+    .switcher__dot { width: calc(8px * var(--m)); height: calc(8px * var(--m)); border-radius: 50%; background: color-mix(in srgb, var(--accent-blue) 60%, transparent); flex-shrink: 0; }
+    .switcher__name { flex: 1 1 auto; font-weight: 600; line-height: 1.2; min-width: 0; font-size: calc(13px * var(--m)); }
+    .switcher__role { font-size: calc(11px * var(--m)); color: var(--muted); flex-shrink: 0; }
+
+    .switcher__placeholder { font-size: calc(12px * var(--m)); color: var(--muted); padding: var(--pad-1); border: 1px dashed var(--border); border-radius: var(--radius); text-align: center; background: color-mix(in srgb, var(--surface) 92%, var(--accent-blue) 8%); }
+
+    .switcher__actions { display: flex; flex-direction: column; gap: var(--gap-1); margin-top: auto; }
+    .switcher__actions button { justify-content: flex-start; gap: var(--gap-1); border-radius: 999px; }
+    .switcher__actions .mat-mdc-button { font-size: calc(12px * var(--m)); height: calc(28px * var(--m)); min-height: calc(28px * var(--m)); }
   `],
   template: `
     <div class="switcher">
       <div class="switcher__header">
-        <h2 class="section-title section-title--info no-truncate">{{ 'projectSwitcher.project' | translate }}</h2>
+        <h2 class="no-truncate">{{ 'projectSwitcher.project' | translate }}</h2>
         <span class="status-hint" *ngIf="loading">{{ 'projectSwitcher.loading' | translate }}</span>
       </div>
 
@@ -99,6 +111,7 @@ import { arrayRemove } from 'firebase/firestore';
   `
 })
 export class ProjectSwitcher implements OnDestroy {
+  // （ロジックはそのまま）
   projects: MyProject[] = [];
   selected: string | null = null;
   private prevSelected: string | null = null;
@@ -259,9 +272,7 @@ export class ProjectSwitcher implements OnDestroy {
     }
   }
 
-  private async safeDelete(path: string) {
-    await deleteDoc(doc(this.fs as any, path)).catch((e) => { throw e; });
-  }
+  private async safeDelete(path: string) { await deleteDoc(doc(this.fs as any, path)).catch((e) => { throw e; }); }
 
   private async deleteProjectCascade(pid: string, adminUid: string): Promise<void> {
     const membersSnap = await getDocs(collection(this.fs as any, `projects/${pid}/members`));
@@ -391,6 +402,7 @@ export class ProjectSwitcher implements OnDestroy {
     return items.filter(p => p.name !== '(deleted)');
   }
 }
+
 
 
 
