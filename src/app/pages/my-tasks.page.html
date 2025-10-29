@@ -2,7 +2,7 @@
   <section class="page-header card">
     <div class="headline">
       <div>
-        <h1 class="title text-1line">{{ 'nav.my' | translate }}</h1>
+        <h1 class="section-title section-title--success no-truncate">{{ 'nav.my' | translate }}</h1>
         <p class="muted text-2line">{{ 'myTasks.subtitle' | translate }}</p>
       </div>
       <mat-button-toggle-group class="view-toggle" [(ngModel)]="viewMode" (change)="onViewModeChange($event.value)">
@@ -98,7 +98,15 @@
           <mat-icon fontSet="material-icons-outlined">{{ section.icon }}</mat-icon>
         </div>
         <div>
-          <h2 class="title text-1line">{{ section.label | translate }}</h2>
+          <h2
+            class="section-title no-truncate"
+            [ngClass]="{
+              'section-title--danger': section.key === 'overdue',
+              'section-title--success': section.key === 'today' || section.key === 'tomorrow'
+            }"
+          >
+            {{ section.label | translate }}
+          </h2>
           <span class="count-badge">{{ vm[section.key]?.length || 0 }}</span>
         </div>
       </header>

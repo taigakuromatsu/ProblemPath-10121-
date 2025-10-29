@@ -1,7 +1,7 @@
 <section class="home-page">
   <header class="page-header">
     <div class="page-titles">
-      <h1 class="title text-1line">{{ 'home.title' | translate }}</h1>
+      <h1 class="section-title section-title--info no-truncate">{{ 'home.title' | translate }}</h1>
       <p class="page-subtitle text-2line">{{ 'home.lead' | translate }}</p>
     </div>
   </header>
@@ -23,7 +23,7 @@
       <mat-card class="card section-card notifications-card">
         <div class="section-header">
           <div>
-            <h2 class="title text-1line">最新通知</h2>
+            <h2 class="section-title section-title--info no-truncate">最新通知</h2>
             <p class="section-subtitle text-2line">フォアグラウンドの通知履歴をチェックできます。</p>
           </div>
           <button mat-raised-button color="primary" type="button" (click)="askNotificationPermission()">
@@ -50,7 +50,7 @@
       <mat-card class="card section-card problem-card">
         <div class="section-header">
           <div>
-            <h2 class="title text-1line">問題の選択</h2>
+            <h2 class="section-title section-title--info no-truncate">問題の選択</h2>
             <p class="section-subtitle text-2line">対象の課題を選択して詳細を管理します。</p>
           </div>
           <div class="section-actions" *ngIf="members.isEditor$ | async">
@@ -78,7 +78,7 @@
       <mat-card class="card section-card" *ngIf="selectedProblemId as pid">
         <div class="section-header">
           <div>
-            <h2 class="title text-1line">{{ 'problemDef.title' | translate }}</h2>
+            <h2 class="section-title section-title--info no-truncate">{{ 'problemDef.title' | translate }}</h2>
             <p class="section-subtitle text-2line">選択中の課題の定義を確認します。</p>
           </div>
 
@@ -120,7 +120,7 @@
       <mat-card class="card section-card" *ngIf="selectedProblemId as pid">
         <div class="section-header">
           <div>
-            <h2 class="title text-1line">{{ 'issue.listTitle' | translate }}</h2>
+            <h2 class="section-title section-title--info no-truncate">{{ 'issue.listTitle' | translate }}</h2>
             <p class="section-subtitle text-2line">課題とリンク、タスクをまとめて管理します。</p>
           </div>
         </div>
@@ -135,7 +135,7 @@
             <div class="issue-list" *ngIf="issues.length > 0; else emptyIssues">
               <article class="issue-item" *ngFor="let i of issues">
                 <header class="issue-header">
-                  <h3 class="title text-1line">{{ i.title }}</h3>
+                  <h3 class="section-title section-title--info no-truncate">{{ i.title }}</h3>
                   <div class="issue-actions" *ngIf="members.isEditor$ | async">
                     <button mat-stroked-button type="button" (click)="renameIssue(pid, i)" [disabled]="!(canEdit$ | async)">{{ 'common.rename' | translate }}</button>
                     <button mat-stroked-button color="warn" type="button" (click)="removeIssue(pid, i)" [disabled]="!(canEdit$ | async)">{{ 'common.delete' | translate }}</button>
@@ -143,7 +143,7 @@
                 </header>
 
                 <section class="issue-links">
-                    <h4 class="title text-1line">{{ 'link.title' | translate }}</h4>
+                    <h4 class="section-title section-title--info no-truncate">{{ 'link.title' | translate }}</h4>
                   <div class="link-chips" *ngIf="visibleLinks(i.links, issues).length > 0; else noLinks">
                     <mat-chip-set>
                       <mat-chip *ngFor="let lk of visibleLinks(i.links, issues)" appearance="outlined">
@@ -173,7 +173,7 @@
 
                 <section class="issue-tasks">
                   <header class="tasks-header">
-                    <h4 class="title text-1line">タスク</h4>
+                    <h4 class="section-title section-title--info no-truncate">タスク</h4>
                   </header>
                   <form class="inline-form inline-form--compact" *ngIf="members.isEditor$ | async" (ngSubmit)="createTask(pid, i.id!)">
                     <input [(ngModel)]="taskTitle[i.id!]" name="taskTitle-{{ i.id }}" [placeholder]="'task.placeholderNewTitle' | translate" required (ngModelChange)="onTaskTitleChange(i.id!, taskTitle[i.id!])" />
@@ -182,7 +182,7 @@
                   <ul class="task-list" *ngIf="tasksMap[i.id!] | async as tasks">
                     <li *ngFor="let t of tasks" class="task-item">
                       <div class="task-main">
-                        <span class="task-title text-1line">{{ t.title }}</span>
+                        <span class="task-title text-1line no-truncate">{{ t.title }}</span>
                         <span class="task-meta" *ngIf="t.dueDate">{{ 'task.dueShort' | translate:{ date: t.dueDate } }}</span>
                         <span class="task-tags">
                           <ng-container *ngIf="(t.tags?.length ?? 0) > 0; else noTags">
