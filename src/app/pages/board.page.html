@@ -26,15 +26,6 @@
         <span>{{ 'common.filter' | translate }}</span>
       </button>
 
-      <div class="account" *ngIf="auth.loggedIn$ | async; else signin">
-        <span class="name">{{ (auth.displayName$ | async) || ('auth.signedIn' | translate) }}</span>
-        <button mat-stroked-button type="button" (click)="auth.signOut()">{{ 'auth.signOut' | translate }}</button>
-      </div>
-      <ng-template #signin>
-        <button mat-raised-button color="primary" type="button" (click)="auth.signInWithGoogle()">
-          {{ 'auth.signIn' | translate }}
-        </button>
-      </ng-template>
     </div>
   </header>
 
