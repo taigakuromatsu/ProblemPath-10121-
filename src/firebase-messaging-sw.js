@@ -14,13 +14,27 @@ firebase.initializeApp({
   appId: "1:210275340301:web:6f6d12b2c000bd883a8544",
 });
 
-// バックグラウンドメッセージを受信したときの表示（最低限）
+// バックグラウンドメッセージを受信したときの表示
 const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   const title = (payload.notification && payload.notification.title) || 'ProblemPath';
+  const body = payload.notification && payload.notification.body;
+  
+  // ブラウザ通知を表示
   const options = {
-    body: payload.notification && payload.notification.body,
+    body: body,
     icon: '/assets/icon-192.png' // 任意（無ければ削除可）
   };
   self.registration.showNotification(title, options);
+  
+  // アクティブなクライアント（ページ）にリレー
+  self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+    clients.forEach((client) => {
+      client.postMessage({
+        type: 'FCM_BG',
+        title: title,
+        body: body
+      });
+    });
+  });
 });

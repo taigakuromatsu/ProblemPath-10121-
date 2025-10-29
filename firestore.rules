@@ -251,9 +251,8 @@ service cloud.firestore {
         // 読み取りは不要なら禁止（クライアントからの get/list をブロック）
         allow read: if false;
 
-        // 自分の配下のみ作成/削除を許可。更新は不要なので禁止。
-        allow create, delete: if isSignedIn() && request.auth.uid == uid;
-        allow update: if false;
+        // 自分の配下のみ作成/更新/削除を許可
+        allow create, update, delete: if isSignedIn() && request.auth.uid == uid;
       }
     }
 
