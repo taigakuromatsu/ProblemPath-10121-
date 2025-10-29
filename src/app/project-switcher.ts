@@ -1,9 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, ChangeDetectorRef, OnDestroy } from '@angular/core';
-import { FormsModule } from '@angular/forms';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
 import { TranslateModule } from '@ngx-translate/core';
 
 import { ProjectDirectoryService, MyProject } from './services/project-directory.service';
@@ -24,48 +22,80 @@ import { arrayRemove } from 'firebase/firestore';
 @Component({
   standalone: true,
   selector: 'pp-project-switcher',
-  imports: [CommonModule, FormsModule, MatSelectModule, MatFormFieldModule, MatButtonModule, TranslateModule],
+  imports: [CommonModule, MatButtonModule, MatIconModule, TranslateModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  styles: [`
+    :host { display: block; height: 100%; }
+    .switcher { display: flex; flex-direction: column; gap: 16px; height: 100%; }
+    .switcher__header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    .switcher__header h2 { font-size: 1rem; font-weight: 600; margin: 0; }
+    .status-hint { font-size: 0.75rem; color: var(--muted); }
+    .offline { display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; color: #92400e; background: rgba(245, 158, 11, 0.12); border: 1px solid #f59e0b; padding: 6px 8px; border-radius: var(--radius); }
+    .switcher__list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; padding-right: 4px; }
+    .switcher__item { display: flex; align-items: center; gap: 10px; width: 100%; border-radius: var(--radius); padding: 10px 12px; justify-content: space-between; background: transparent; color: inherit; text-align: left; transition: background-color .2s ease, box-shadow .2s ease; border: none; cursor: pointer; }
+    .switcher__item:hover { background: color-mix(in oklab, var(--accent) 8%, transparent); }
+    .switcher__item.is-active { background: color-mix(in oklab, var(--accent) 15%, transparent); box-shadow: inset 0 0 0 1px var(--accent); }
+    .switcher__item.is-active .switcher__dot { background: var(--accent); }
+    .switcher__item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .switcher__item[disabled] { opacity: .5; cursor: default; }
+    .label { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 auto; }
+    .switcher__dot { width: 10px; height: 10px; border-radius: 50%; background: color-mix(in oklab, var(--accent) 60%, transparent); flex-shrink: 0; }
+    .switcher__name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .switcher__role { font-size: 0.75rem; color: var(--muted); flex-shrink: 0; }
+    .switcher__placeholder { font-size: 0.875rem; color: var(--muted); padding: 12px; border: 1px dashed var(--border); border-radius: var(--radius); text-align: center; }
+    .switcher__actions { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
+    .switcher__actions button { justify-content: flex-start; gap: 8px; }
+  `],
   template: `
-    <div style="display:flex; align-items:center; gap:8px;">
-      <mat-form-field appearance="outline" style="min-width:240px; margin:0;">
-        <mat-label>{{ 'projectSwitcher.project' | translate }}</mat-label>
-        <mat-select
-          [(ngModel)]="selected"
-          (ngModelChange)="onChange($event)"
-          [disabled]="loading || !projects.length || !(isOnline$ | async)"
+    <div class="switcher">
+      <div class="switcher__header">
+        <h2>{{ 'projectSwitcher.project' | translate }}</h2>
+        <span class="status-hint" *ngIf="loading">{{ 'projectSwitcher.loading' | translate }}</span>
+      </div>
+
+      <div class="offline" *ngIf="!(isOnline$ | async)">
+        <mat-icon>signal_wifi_off</mat-icon>
+        <span>{{ 'projectSwitcher.offline' | translate }}</span>
+      </div>
+
+      <div class="switcher__list" *ngIf="projects.length; else emptyState">
+        <button
+          type="button"
+          class="switcher__item"
+          *ngFor="let p of projects"
+          [class.is-active]="p.pid === selected"
+          (click)="p.pid !== selected ? onChange(p.pid) : null"
+          [attr.aria-pressed]="p.pid === selected"
         >
-          <mat-option *ngIf="loading" [disabled]="true">{{ 'projectSwitcher.loading' | translate }}</mat-option>
-          <ng-container *ngIf="!loading && projects.length; else noItems">
-            <mat-option *ngFor="let p of projects" [value]="p.pid">
-              {{ p.name }} — {{ ('role.' + p.role + 'Label') | translate }}
-            </mat-option>
-          </ng-container>
-        </mat-select>
-      </mat-form-field>
+          <span class="label">
+            <span class="switcher__dot"></span>
+            <span class="switcher__name" [title]="p.name">{{ p.name }}</span>
+          </span>
+          <span class="switcher__role">{{ ('role.' + p.role + 'Label') | translate }}</span>
+        </button>
+      </div>
 
-      <!-- 右側アクション（オフライン時は抑止） -->
-      <button mat-stroked-button (click)="createProject()"
-              [disabled]="creating || loading || !(isOnline$ | async)">
-        ＋ {{ 'projectSwitcher.new' | translate }}
-      </button>
+      <ng-template #emptyState>
+        <div class="switcher__placeholder">
+          {{ loading ? ('projectSwitcher.loading' | translate) : ('projectSwitcher.noProjects' | translate) }}
+        </div>
+      </ng-template>
 
-      <button mat-stroked-button color="warn"
-              (click)="deleteProject()"
-              [disabled]="deleting || loading || !canDelete || !(isOnline$ | async)">
-        🗑️ {{ 'projectSwitcher.delete' | translate }}
-      </button>
-
-      <button mat-stroked-button
-              (click)="leaveProject()"
-              [disabled]="leaving || loading || !canLeave || !(isOnline$ | async)">
-        🚪 {{ 'projectSwitcher.leave' | translate }}
-      </button>
+      <div class="switcher__actions">
+        <button mat-stroked-button type="button" (click)="createProject()" [disabled]="creating || loading || !(isOnline$ | async)">
+          <mat-icon>add</mat-icon>
+          <span>{{ 'projectSwitcher.new' | translate }}</span>
+        </button>
+        <button mat-stroked-button color="warn" type="button" (click)="deleteProject()" [disabled]="deleting || loading || !canDelete || !(isOnline$ | async)">
+          <mat-icon>delete</mat-icon>
+          <span>{{ 'projectSwitcher.delete' | translate }}</span>
+        </button>
+        <button mat-stroked-button type="button" (click)="leaveProject()" [disabled]="leaving || loading || !canLeave || !(isOnline$ | async)">
+          <mat-icon>logout</mat-icon>
+          <span>{{ 'projectSwitcher.leave' | translate }}</span>
+        </button>
+      </div>
     </div>
-
-    <ng-template #noItems>
-      <mat-option [disabled]="true">{{ 'projectSwitcher.noProjects' | translate }}</mat-option>
-    </ng-template>
   `
 })
 export class ProjectSwitcher implements OnDestroy {

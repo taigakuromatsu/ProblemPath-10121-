@@ -63,7 +63,6 @@ export class MyItem {
   ],
   template: `
   <div style="display:flex; align-items:center; gap:12px; margin:8px 0 16px;">
-    <a mat-stroked-button routerLink="/tree">← {{ 'nav.tree' | translate }}</a>
     <h3 style="margin:0;">{{ 'myTasks.title' | translate }}</h3>
     <span style="flex:1 1 auto;"></span>
 
