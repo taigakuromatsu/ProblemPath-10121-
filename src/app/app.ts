@@ -59,7 +59,7 @@ import { AuthService } from './services/auth.service';
             <span>ProblemPath</span>
           </div>
 
-          <nav class="topnav">
+          <nav class="topnav minw-0">
             <a
               mat-button
               *ngFor="let link of navLinks"
@@ -73,7 +73,7 @@ import { AuthService } from './services/auth.service';
 
           <span class="spacer"></span>
 
-          <div class="topbar-actions" role="group" aria-label="Toolbar actions">
+          <div class="topbar-actions topbar-right minw-0" role="group" aria-label="Toolbar actions">
             <button mat-stroked-button type="button" class="filter-button" disabled>
               <mat-icon>tune</mat-icon>
               <span>{{ 'common.filter' | translate }}</span>
