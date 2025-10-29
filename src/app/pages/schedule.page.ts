@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { AsyncPipe, NgFor, NgIf, NgSwitch, NgSwitchCase, NgSwitchDefault } from '@angular/common';
+import { AsyncPipe, NgFor, NgIf, NgSwitch, NgSwitchCase, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -62,7 +62,7 @@ interface MemberOption {
     NgIf,
     NgSwitch,
     NgSwitchCase,
-    NgSwitchDefault,
+    NgTemplateOutlet, // ★ 追加（*ngTemplateOutlet 用）
     FormsModule,
     MatButtonModule,
     MatButtonToggleModule,
@@ -106,33 +106,9 @@ export class SchedulePage implements OnInit, OnDestroy {
 
   private dueDateTimers = new Map<string, any>();
 
-  members$: Observable<MemberOption[]> = this.currentProject.projectId$.pipe(
-    switchMap(pid => {
-      if (!pid || pid === 'default') return of<MemberOption[]>([]);
-      const col = collection(this.fs as any, `projects/${pid}/members`);
-      return from(getDocs(col)).pipe(
-        map(snapshot => snapshot.docs.map(docSnap => {
-          const data: any = docSnap.data();
-          return {
-            uid: docSnap.id,
-            label: data?.displayName || data?.email || docSnap.id,
-          } as MemberOption;
-        })),
-        catchError(() => of<MemberOption[]>([])),
-      );
-    }),
-    shareReplay({ bufferSize: 1, refCount: true })
-  );
-
-  memberDirectory$ = this.members$.pipe(
-    map(list => {
-      const dir: Record<string, string> = {};
-      for (const item of list) dir[item.uid] = item.label;
-      return dir;
-    }),
-    startWith({} as Record<string, string>),
-    shareReplay({ bufferSize: 1, refCount: true })
-  );
+  // ★ TS2729回避：ここでは初期化しない
+  members$!: Observable<MemberOption[]>;
+  memberDirectory$!: Observable<Record<string, string>>;
 
   constructor(
     private tasks: TasksService,
@@ -141,6 +117,37 @@ export class SchedulePage implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    // members$ を起動時に組み立て（this.currentProject を安全に参照）
+    this.members$ = this.currentProject.projectId$.pipe(
+      switchMap(pid => {
+        if (!pid || pid === 'default') return of<MemberOption[]>([]);
+        const col = collection(this.fs as any, `projects/${pid}/members`);
+        return from(getDocs(col)).pipe(
+          map(snapshot =>
+            snapshot.docs.map(docSnap => {
+              const data: any = docSnap.data();
+              return {
+                uid: docSnap.id,
+                label: data?.displayName || data?.email || docSnap.id,
+              } as MemberOption;
+            })
+          ),
+          catchError(() => of<MemberOption[]>([])),
+        );
+      }),
+      shareReplay({ bufferSize: 1, refCount: true })
+    );
+
+    this.memberDirectory$ = this.members$.pipe(
+      map(list => {
+        const dir: Record<string, string> = {};
+        for (const item of list) dir[item.uid] = item.label;
+        return dir;
+      }),
+      startWith({} as Record<string, string>),
+      shareReplay({ bufferSize: 1, refCount: true })
+    );
+
     this.reload();
   }
 
@@ -458,3 +465,4 @@ export class SchedulePage implements OnInit, OnDestroy {
     return byUid;
   }
 }
+

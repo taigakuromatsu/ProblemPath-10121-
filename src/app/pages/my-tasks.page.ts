@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { AsyncPipe, NgFor, NgIf, NgSwitch, NgSwitchCase, NgSwitchDefault } from '@angular/common';
+import { AsyncPipe, NgFor, NgIf, NgSwitch, NgSwitchCase, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -62,7 +62,7 @@ interface MemberOption {
     NgIf,
     NgSwitch,
     NgSwitchCase,
-    NgSwitchDefault,
+    NgTemplateOutlet, // ★ 追加（*ngTemplateOutlet 用）
     FormsModule,
     MatButtonModule,
     MatButtonToggleModule,
@@ -108,33 +108,9 @@ export class MyTasksPage implements OnInit, OnDestroy {
 
   private dueDateTimers = new Map<string, any>();
 
-  members$: Observable<MemberOption[]> = this.current.projectId$.pipe(
-    switchMap(pid => {
-      if (!pid || pid === 'default') return of<MemberOption[]>([]);
-      const col = collection(this.fs as any, `projects/${pid}/members`);
-      return from(getDocs(col)).pipe(
-        map(snapshot => snapshot.docs.map(docSnap => {
-          const data: any = docSnap.data();
-          return {
-            uid: docSnap.id,
-            label: data?.displayName || data?.email || docSnap.id,
-          } as MemberOption;
-        })),
-        catchError(() => of<MemberOption[]>([])),
-      );
-    }),
-    shareReplay({ bufferSize: 1, refCount: true })
-  );
-
-  memberDirectory$ = this.members$.pipe(
-    map(list => {
-      const dir: Record<string, string> = {};
-      for (const item of list) dir[item.uid] = item.label;
-      return dir;
-    }),
-    startWith({} as Record<string, string>),
-    shareReplay({ bufferSize: 1, refCount: true })
-  );
+  // ★ フィールド初期化で this.current を触らないように、ngOnInit で代入
+  members$!: Observable<MemberOption[]>;
+  memberDirectory$!: Observable<Record<string, string>>;
 
   constructor(
     private tasks: TasksService,
@@ -144,6 +120,38 @@ export class MyTasksPage implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    // members$ をここで構築（TS2729回避）
+    this.members$ = this.current.projectId$.pipe(
+      switchMap(pid => {
+        if (!pid || pid === 'default') return of<MemberOption[]>([]);
+        const col = collection(this.fs as any, `projects/${pid}/members`);
+        return from(getDocs(col)).pipe(
+          map(snapshot =>
+            snapshot.docs.map(docSnap => {
+              const data: any = docSnap.data();
+              return {
+                uid: docSnap.id,
+                label: data?.displayName || data?.email || docSnap.id,
+              } as MemberOption;
+            })
+          ),
+          catchError(() => of<MemberOption[]>([])),
+        );
+      }),
+      shareReplay({ bufferSize: 1, refCount: true })
+    );
+
+    // memberDirectory$ も ngOnInit で作成（members$ 依存のため）
+    this.memberDirectory$ = this.members$.pipe(
+      map(list => {
+        const dir: Record<string, string> = {};
+        for (const item of list) dir[item.uid] = item.label;
+        return dir;
+      }),
+      startWith({} as Record<string, string>),
+      shareReplay({ bufferSize: 1, refCount: true })
+    );
+
     this.reload();
   }
 
@@ -459,3 +467,4 @@ export class MyTasksPage implements OnInit, OnDestroy {
     return byUid;
   }
 }
+
