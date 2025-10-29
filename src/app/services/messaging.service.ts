@@ -99,7 +99,7 @@ export class MessagingService {
         lastSeenAt: serverTimestamp(),
       };
       if (!existing.exists()) {
-        data.createdAt = serverTimestamp();
+        data['createdAt'] = serverTimestamp();
       }
       await setDoc(ref, data, { merge: true });
     } catch (e) {

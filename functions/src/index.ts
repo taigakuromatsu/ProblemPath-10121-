@@ -1,10 +1,13 @@
 import * as admin from "firebase-admin";
 import { onRequest } from "firebase-functions/v2/https";
+import { setGlobalOptions } from "firebase-functions/v2";
 // import { onSchedule } from "firebase-functions/v2/scheduler";
 
 if (!admin.apps.length) {
   admin.initializeApp();
 }
+
+setGlobalOptions({ region: 'asia-northeast1' });
 
 export const ping = onRequest(async (req, res) => {
   res.status(200).send("ok");
