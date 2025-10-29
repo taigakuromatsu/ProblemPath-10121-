@@ -1,7 +1,7 @@
 <section class="tree-page">
   <header class="page-header">
     <div class="page-titles">
-      <h1 class="title text-1line">{{ 'tree.title' | translate }}</h1>
+      <h1 class="section-title section-title--info no-truncate">{{ 'tree.title' | translate }}</h1>
       <p class="page-subtitle text-2line">課題の構造と進捗を一覧できます。</p>
     </div>
   </header>
@@ -32,7 +32,7 @@
   <div class="tree-layout">
     <mat-card class="card tree-panel">
       <div class="panel-header">
-        <h2 class="title text-1line">課題ツリー</h2>
+        <h2 class="section-title section-title--info no-truncate">課題ツリー</h2>
         <button mat-stroked-button color="primary" type="button" (click)="retryProblems()" *ngIf="loadError">
           {{ 'common.retry' | translate }}
         </button>
@@ -47,7 +47,7 @@
               <mat-icon>{{ tree.isExpanded(node) ? 'expand_more' : 'chevron_right' }}</mat-icon>
             </button>
             <div class="node-main">
-              <span class="node-title text-1line">{{ node.name }}</span>
+              <span class="node-title text-1line no-truncate">{{ node.name }}</span>
             </div>
             <div class="node-chips">
               <button mat-stroked-button type="button" class="chip-button" (click)="openComments(node)">
@@ -68,7 +68,7 @@
               <mat-icon>{{ tree.isExpanded(node) ? 'expand_more' : 'chevron_right' }}</mat-icon>
             </button>
             <div class="node-main">
-              <span class="node-title text-1line">{{ node.name }}</span>
+              <span class="node-title text-1line no-truncate">{{ node.name }}</span>
             </div>
             <div class="node-chips">
               <button mat-stroked-button type="button" class="chip-button" (click)="openComments(node)">
@@ -88,7 +88,7 @@
             <!-- 先頭の task_alt アイコンは削除 -->
             <div class="node-main">
               <!-- ✅/🔼/✕ を表示していた statusIcon の行を削除 -->
-              <span class="node-title text-1line" [matTooltip]="node.name">{{ node.name }}</span>
+              <span class="node-title text-1line no-truncate" [matTooltip]="node.name">{{ node.name }}</span>
             </div>
             <div class="node-meta">
               <span class="node-status" [style.color]="statusColor(node.status)">
@@ -112,7 +112,7 @@
 
       <ng-container *ngIf="selectedNode">
         <header class="side-header">
-          <h2 class="title text-1line">💬 {{ 'cf.header' | translate:{ kind: selectedNode.kind, name: selectedNode.name } }}</h2>
+        <h2 class="section-title section-title--info no-truncate">💬 {{ 'cf.header' | translate:{ kind: selectedNode.kind, name: selectedNode.name } }}</h2>
         </header>
 
         <div class="alert-inline" *ngIf="!(isOnline$ | async)">{{ 'warn.offlineComments' | translate }}</div>
@@ -160,7 +160,7 @@
                 <span *ngIf="!a.contentType?.startsWith('image/')">📄</span>
               </div>
               <div class="details">
-                <div class="name text-1line">{{ a.name }}</div>
+                <div class="name text-1line no-truncate">{{ a.name }}</div>
                 <div class="meta">{{ a.contentType || 'binary' }} ・ {{ a.size | number }} bytes</div>
               </div>
               <div class="attachment-actions">
