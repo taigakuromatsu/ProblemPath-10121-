@@ -14,6 +14,7 @@ import { ProjectSwitcher } from './project-switcher';
 import { ThemeService } from './services/theme.service';
 import { TranslateModule } from '@ngx-translate/core';
 import { AuthService } from './services/auth.service';
+import {MessagingService} from './services/messaging.service';
 
 @Component({
   standalone: true,
@@ -110,7 +111,8 @@ export class App {
   constructor(
     private theme: ThemeService,
     private breakpoint: BreakpointObserver,
-    public auth: AuthService
+    public auth: AuthService,
+    private _msg: MessagingService
   ) {
     this.isHandset$ = this.breakpoint.observe(Breakpoints.Handset).pipe(map(result => result.matches));
   }
