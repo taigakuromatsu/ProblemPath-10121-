@@ -1,0 +1,157 @@
+.calendar-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.month-label {
+  min-width: 160px;
+  text-align: center;
+}
+
+.calendar-weekdays,
+.calendar-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.weekday {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.calendar-day {
+  min-height: 120px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: color-mix(in oklab, var(--surface) 96%, black 4%);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+
+  &.out-month {
+    opacity: 0.45;
+  }
+
+  &.today {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 60%, transparent 40%);
+  }
+
+  &.overdue {
+    border-color: rgba(220, 38, 38, 0.6);
+  }
+
+  &.due-soon:not(.overdue) {
+    border-color: rgba(249, 115, 22, 0.6);
+  }
+}
+
+.day-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+}
+
+.day-label .badge {
+  background: rgba(37, 99, 235, 0.12);
+  color: #2563eb;
+  border-radius: 999px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.task-chip {
+  display: grid;
+  grid-template-columns: 10px 1fr;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.05);
+  font-size: 12px;
+  align-items: center;
+}
+
+.task-chip .status {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.task-chip .title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.no-due {
+  margin-top: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.no-due-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.no-due-header .badge {
+  background: rgba(107, 114, 128, 0.18);
+  border-radius: 999px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.no-due-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.no-due-list .empty {
+  color: var(--muted);
+}
+
+.calendar-tooltip {
+  white-space: pre-line;
+  max-width: 240px;
+}
+
+@media (max-width: 960px) {
+  .calendar-day {
+    min-height: 100px;
+  }
+}

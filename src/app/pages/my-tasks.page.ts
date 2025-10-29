@@ -1,219 +1,351 @@
-// src/app/pages/my-tasks.page.ts
-import { Component, Input } from '@angular/core';
-import { AsyncPipe, NgFor, NgIf } from '@angular/common';
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { AsyncPipe, NgFor, NgIf, NgSwitch, NgSwitchCase, NgSwitchDefault } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import { MatSelectModule } from '@angular/material/select';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
-import { RouterLink } from '@angular/router';
-import { Observable, combineLatest, of } from 'rxjs';
-import { map, switchMap, startWith } from 'rxjs/operators';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { TranslateModule } from '@ngx-translate/core';
+import { Firestore } from '@angular/fire/firestore';
+import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
+import { Observable, combineLatest, interval, of, from } from 'rxjs';
+import { map, switchMap, startWith, filter, distinctUntilChanged, catchError, shareReplay, take } from 'rxjs/operators';
 
 import { TasksService } from '../services/tasks.service';
 import { CurrentProjectService } from '../services/current-project.service';
 import { AuthService } from '../services/auth.service';
 import { Task } from '../models/types';
-import { take } from 'rxjs/operators';
-import { Firestore } from '@angular/fire/firestore';
-import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
-import { TranslateModule } from '@ngx-translate/core';
-import { interval } from 'rxjs';
-import { filter, distinctUntilChanged } from 'rxjs/operators';
+import { TaskRowComponent } from '../components/task-row/task-row.component';
+import { TaskCalendarComponent } from '../components/task-calendar/task-calendar.component';
 
-type Vm = {
-  overdue: Task[]; today: Task[]; tomorrow: Task[];
-  thisWeekRest: Task[]; nextWeek: Task[]; later: Task[]; nodue: Task[];
+interface Vm {
+  overdue: Task[];
+  today: Task[];
+  tomorrow: Task[];
+  thisWeekRest: Task[];
+  nextWeek: Task[];
+  later: Task[];
+  nodue: Task[];
+}
+
+const EMPTY_VM: Vm = {
+  overdue: [],
+  today: [],
+  tomorrow: [],
+  thisWeekRest: [],
+  nextWeek: [],
+  later: [],
+  nodue: [],
 };
-const EMPTY: Vm = { overdue:[], today:[], tomorrow:[], thisWeekRest:[], nextWeek:[], later:[], nodue:[] };
 
-/** 行アイテム（簡易） */
-@Component({
-  standalone: true,
-  selector: 'pp-item',
-  imports: [NgIf, RouterLink,MatButtonModule, MatIconModule, TranslateModule],
-  template: `
-    <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid #e5e7eb; border-radius:8px; margin-bottom:6px;">
-      <span [style.opacity]="t.status==='done' ? .6 : 1" style="flex:1 1 auto;">
-        <strong>{{ t.title }}</strong>
-        <span *ngIf="t.priority" style="font-size:12px; margin-left:6px; opacity:.8;">[{{ t.priority }}]</span>
-        <span *ngIf="t.dueDate" style="font-size:12px; margin-left:8px; opacity:.8;">
-          {{ 'task.dueShort' | translate:{ date: t.dueDate } }}
-        </span>
-      </span>
-      <a *ngIf="t.problemId && t.issueId"
-         mat-stroked-button
-         [routerLink]="['/board']"
-         [queryParams]="{ pid: t.problemId }">
-        {{ 'nav.board' | translate }}
-      </a>
-    </div>
-  `
-})
-export class MyItem {
-  @Input() t!: Task;
+interface SectionDef {
+  key: keyof Vm;
+  icon: string;
+  label: string;
+}
+
+interface MemberOption {
+  uid: string;
+  label: string;
 }
 
 @Component({
   standalone: true,
   selector: 'pp-my-tasks',
+  templateUrl: './my-tasks.page.html',
+  styleUrls: ['./my-tasks.page.scss'],
   imports: [
-    AsyncPipe, NgFor, NgIf, FormsModule,
-    MatButtonModule, MatSelectModule, MatIconModule,
-    MyItem, TranslateModule
+    AsyncPipe,
+    NgFor,
+    NgIf,
+    NgSwitch,
+    NgSwitchCase,
+    NgSwitchDefault,
+    FormsModule,
+    MatButtonModule,
+    MatButtonToggleModule,
+    MatCardModule,
+    MatIconModule,
+    MatTooltipModule,
+    MatProgressBarModule,
+    TranslateModule,
+    TaskRowComponent,
+    TaskCalendarComponent,
   ],
-  template: `
-  <div style="display:flex; align-items:center; gap:12px; margin:8px 0 16px;">
-    <h3 style="margin:0;">{{ 'myTasks.title' | translate }}</h3>
-    <span style="flex:1 1 auto;"></span>
-
-    <button mat-stroked-button (click)="exportCurrent('csv')">{{ 'export.csv' | translate }}</button>
-    <button mat-stroked-button style="margin-left:6px;" (click)="exportCurrent('json')">{{ 'export.json' | translate }}</button>
-
-    <label>{{ 'filter.show' | translate }}:
-      <select [(ngModel)]="openOnly" (ngModelChange)="reload()">
-        <option [ngValue]="true">{{ 'filter.openOnly' | translate }}</option>
-        <option [ngValue]="false">{{ 'filter.all' | translate }}</option>
-      </select>
-    </label>
-    <label style="margin-left:8px;">{{ 'filter.tags' | translate }}:
-      <input [(ngModel)]="tagQuery"
-             (ngModelChange)="reload()"
-             [placeholder]="'filter.tagsPlaceholder' | translate"
-             style="padding:4px 8px; border:1px solid #e5e7eb; border-radius:6px;"/>
-    </label>
-  </div>
-
-  <ng-container *ngIf="vm$ | async as vm">
-    <section>
-      <h4>⚠️ {{ 'myTasks.overdue' | translate }}（{{ vm.overdue.length }}）</h4>
-      <div *ngIf="!vm.overdue.length" style="opacity:.6">{{ 'common.none' | translate }}</div>
-      <ul><li *ngFor="let t of vm.overdue; trackBy: track"><pp-item [t]="t"></pp-item></li></ul>
-    </section>
-
-    <section>
-      <h4>📅 {{ 'myTasks.today' | translate }}（{{ vm.today.length }}）</h4>
-      <div *ngIf="!vm.today.length" style="opacity:.6">{{ 'common.none' | translate }}</div>
-      <ul><li *ngFor="let t of vm.today; trackBy: track"><pp-item [t]="t"></pp-item></li></ul>
-    </section>
-
-    <section>
-      <h4>🗓 {{ 'myTasks.tomorrow' | translate }}（{{ vm.tomorrow.length }}）</h4>
-      <div *ngIf="!vm.tomorrow.length" style="opacity:.6">{{ 'common.none' | translate }}</div>
-      <ul><li *ngFor="let t of vm.tomorrow; trackBy: track"><pp-item [t]="t"></pp-item></li></ul>
-    </section>
-
-    <section>
-      <h4>🗓 {{ 'myTasks.thisWeekRest' | translate }}（{{ vm.thisWeekRest.length }}）</h4>
-      <div *ngIf="!vm.thisWeekRest.length" style="opacity:.6">{{ 'common.none' | translate }}</div>
-      <ul><li *ngFor="let t of vm.thisWeekRest; trackBy: track"><pp-item [t]="t"></pp-item></li></ul>
-    </section>
-
-    <section>
-      <h4>🗓 {{ 'myTasks.nextWeek' | translate }}（{{ vm.nextWeek.length }}）</h4>
-      <div *ngIf="!vm.nextWeek.length" style="opacity:.6">{{ 'common.none' | translate }}</div>
-      <ul><li *ngFor="let t of vm.nextWeek; trackBy: track"><pp-item [t]="t"></pp-item></li></ul>
-    </section>
-
-    <section>
-      <h4>📆 {{ 'myTasks.later' | translate }}（{{ vm.later.length }}）</h4>
-      <div *ngIf="!vm.later.length" style="opacity:.6">{{ 'common.none' | translate }}</div>
-      <ul><li *ngFor="let t of vm.later; trackBy: track"><pp-item [t]="t"></pp-item></li></ul>
-    </section>
-
-    <section>
-      <h4>— {{ 'myTasks.nodue' | translate }}（{{ vm.nodue.length }}）</h4>
-      <div *ngIf="!vm.nodue.length" style="opacity:.6">{{ 'common.none' | translate }}</div>
-      <ul><li *ngFor="let t of vm.nodue; trackBy: track"><pp-item [t]="t"></pp-item></li></ul>
-    </section>
-  </ng-container>
-  `
 })
-export class MyTasksPage {
-  vm$: Observable<Vm> = of(EMPTY);
+export class MyTasksPage implements OnInit, OnDestroy {
+  vm$: Observable<Vm> = of(EMPTY_VM);
+  summary$: Observable<{ overdue: number; today: number; week: number; progress: number }> = of({ overdue: 0, today: 0, week: 0, progress: 0 });
   openOnly = true;
   tagQuery = '';
+  startRange = '';
+  endRange = '';
+  viewMode: 'list' | 'calendar' = 'list';
+  calendarMonth = new Date();
+
+  readonly sections: SectionDef[] = [
+    { key: 'overdue', icon: 'warning', label: 'myTasks.overdue' },
+    { key: 'today', icon: 'event', label: 'myTasks.today' },
+    { key: 'tomorrow', icon: 'event_available', label: 'myTasks.tomorrow' },
+    { key: 'thisWeekRest', icon: 'calendar_view_week', label: 'myTasks.thisWeekRest' },
+    { key: 'nextWeek', icon: 'calendar_month', label: 'myTasks.nextWeek' },
+    { key: 'later', icon: 'schedule', label: 'myTasks.later' },
+    { key: 'nodue', icon: 'more_horiz', label: 'myTasks.nodue' },
+  ];
+
+  private readonly midnightTick$ = interval(60_000).pipe(
+    startWith(0),
+    map(() => {
+      const d = new Date();
+      d.setSeconds(0, 0);
+      return d.getHours() === 0 && d.getMinutes() === 0;
+    }),
+    distinctUntilChanged(),
+    filter(Boolean),
+  );
+
+  private dueDateTimers = new Map<string, any>();
+
+  members$: Observable<MemberOption[]> = this.current.projectId$.pipe(
+    switchMap(pid => {
+      if (!pid || pid === 'default') return of<MemberOption[]>([]);
+      const col = collection(this.fs as any, `projects/${pid}/members`);
+      return from(getDocs(col)).pipe(
+        map(snapshot => snapshot.docs.map(docSnap => {
+          const data: any = docSnap.data();
+          return {
+            uid: docSnap.id,
+            label: data?.displayName || data?.email || docSnap.id,
+          } as MemberOption;
+        })),
+        catchError(() => of<MemberOption[]>([])),
+      );
+    }),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
+
+  memberDirectory$ = this.members$.pipe(
+    map(list => {
+      const dir: Record<string, string> = {};
+      for (const item of list) dir[item.uid] = item.label;
+      return dir;
+    }),
+    startWith({} as Record<string, string>),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
 
   constructor(
     private tasks: TasksService,
     private current: CurrentProjectService,
     private auth: AuthService,
-    private fs: Firestore
+    private fs: Firestore,
   ) {}
 
-  ngOnInit(){ this.reload(); }
-  track = (_: number, t: Task) => t.id;
+  ngOnInit(): void {
+    this.reload();
+  }
 
-  private ymd(d: Date){ const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const da=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${da}`; }
-  private addDays(base: Date, n: number){ const d = new Date(base); d.setDate(d.getDate()+n); return d; }
-  private parseTags(q: string){ return (q||'').split(/\s+/).map(s=>s.replace(/^#/,'').trim()).filter(Boolean).slice(0,10); }
+  ngOnDestroy(): void {
+    this.dueDateTimers.forEach(timer => clearTimeout(timer));
+    this.dueDateTimers.clear();
+  }
 
-  private readonly midnightTick$ = interval(60_000).pipe( // 1分ごと
-    startWith(0),
-    map(() => {
-      const d = new Date(); d.setSeconds(0,0);
-      return d.getHours() === 0 && d.getMinutes() === 0;
-    }),
-    distinctUntilChanged(),
-    filter(Boolean) // 00:00 の瞬間だけ流す
-  );
+  onViewModeChange(mode: 'list' | 'calendar') {
+    this.viewMode = mode;
+  }
 
-  reload(){
+  onOpenOnlyChange(value: boolean) {
+    this.openOnly = value;
+    this.reload();
+  }
+
+  onTagQueryChange() {
+    this.reload();
+  }
+
+  onDateRangeChange() {
+    this.reload();
+  }
+
+  onMonthChange(date: Date) {
+    this.calendarMonth = date;
+  }
+
+  trackTask = (_: number, task: Task) => task.id;
+
+  calendarTasks(vm: Vm): Task[] {
+    return [
+      ...vm.overdue,
+      ...vm.today,
+      ...vm.tomorrow,
+      ...vm.thisWeekRest,
+      ...vm.nextWeek,
+      ...vm.later,
+    ].filter(t => !!t.dueDate);
+  }
+
+  calendarUndated(vm: Vm): Task[] {
+    return [...vm.nodue];
+  }
+
+  private parseTags(q: string): string[] {
+    return (q || '')
+      .split(/\s+/)
+      .map(s => s.replace(/^#/, '').trim())
+      .filter(Boolean)
+      .slice(0, 10);
+  }
+
+  private addDays(base: Date, n: number): Date {
+    const d = new Date(base);
+    d.setDate(d.getDate() + n);
+    return d;
+  }
+
+  private ymd(date: Date): string {
+    const y = date.getFullYear();
+    const m = `${date.getMonth() + 1}`.padStart(2, '0');
+    const d = `${date.getDate()}`.padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  reload() {
     const far = '9999-12-31';
     const tags = this.parseTags(this.tagQuery);
-  
-    const params$ = this.midnightTick$.pipe(startWith(null)); // ★ 初回+深夜にトリガー
-  
+    const params$ = this.midnightTick$.pipe(startWith(null));
+
     this.vm$ = combineLatest([this.current.projectId$, this.auth.uid$, params$]).pipe(
       switchMap(([pid, uid]) => {
-        if (!pid || pid === 'default' || !uid) return of(EMPTY); // ★ default guard 追加
-  
-        // ←← ここで “その時点の今日” を毎回計算（深夜後も正しくなる）
-        const today = new Date(); today.setHours(0,0,0,0);
+        if (!pid || pid === 'default' || !uid) return of(EMPTY_VM);
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
         const tomorrow = this.addDays(today, 1);
-  
+
         const day = today.getDay();
-        const diffToMon = (day===0? -6 : 1-day);
+        const diffToMon = (day === 0 ? -6 : 1 - day);
         const startOfWeek = this.addDays(today, diffToMon);
         const endOfWeek = this.addDays(startOfWeek, 6);
         const startOfNextWeek = this.addDays(endOfWeek, 1);
         const endOfNextWeek = this.addDays(startOfNextWeek, 6);
-  
-        // 今日までまとめて取り、overdue/today をクライアントで分岐（重複クエリ回避）
-        const allToToday$ = this.tasks.listMine(
-          pid, uid, this.openOnly, '0000-01-01', this.ymd(today), tags
-        );
-        const overdue$      = allToToday$.pipe(map(xs => xs.filter(x => (x.dueDate ?? '') <  this.ymd(today))));
-        const today$        = allToToday$.pipe(map(xs => xs.filter(x => x.dueDate === this.ymd(today))));
-        const tomorrow$     = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(tomorrow), this.ymd(tomorrow), tags);
-        const thisWeekRest$ = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(this.addDays(tomorrow,1)), this.ymd(endOfWeek), tags);
-        const nextWeek$     = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(startOfNextWeek), this.ymd(endOfNextWeek), tags);
-        const later$        = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(this.addDays(endOfNextWeek,1)), far, tags);
-        const nodue$        = this.tasks.listMineNoDue(pid, uid, this.openOnly, tags);
-  
+
+        const start = this.startRange || '0000-01-01';
+        const end = this.endRange || far;
+
+        const allToToday$ = this.tasks.listMine(pid, uid, this.openOnly, start, this.ymd(today), tags);
+        const overdue$ = allToToday$.pipe(map(xs => xs.filter(x => (x.dueDate ?? '') < this.ymd(today))));
+        const today$ = allToToday$.pipe(map(xs => xs.filter(x => x.dueDate === this.ymd(today))));
+        const tomorrow$ = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(tomorrow), this.ymd(tomorrow), tags);
+        const thisWeekRest$ = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(this.addDays(tomorrow, 1)), this.ymd(endOfWeek), tags);
+        const nextWeek$ = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(startOfNextWeek), this.ymd(endOfNextWeek), tags);
+        const later$ = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(this.addDays(endOfNextWeek, 1)), end, tags);
+        const nodue$ = this.tasks.listMineNoDue(pid, uid, this.openOnly, tags);
+
         return combineLatest([overdue$, today$, tomorrow$, thisWeekRest$, nextWeek$, later$, nodue$]).pipe(
-          map(([overdue, today, tomorrow, thisWeekRest, nextWeek, later, nodue]) => ({
-            overdue, today, tomorrow, thisWeekRest, nextWeek, later, nodue
-          }))
+          map(([overdue, todayArr, tomorrowArr, thisWeekRest, nextWeek, later, nodue]) => ({
+            overdue,
+            today: todayArr,
+            tomorrow: tomorrowArr,
+            thisWeekRest,
+            nextWeek,
+            later,
+            nodue,
+          })),
         );
+      }),
+      shareReplay({ bufferSize: 1, refCount: true })
+    );
+
+    this.summary$ = this.vm$.pipe(
+      map(vm => {
+        const all = this.flattenVm(vm);
+        const overdue = vm.overdue.length;
+        const todayCount = vm.today.length;
+        const week = vm.thisWeekRest.length + vm.today.length + vm.tomorrow.length;
+        const done = all.filter(t => t.status === 'done').length;
+        const progress = all.length ? Math.round((done / all.length) * 100) : 0;
+        return { overdue, today: todayCount, week, progress };
       })
     );
   }
 
-  private flattenVm(vm: Vm){
-    // 表示順のまま結合。必要なら dedupe 可
+  onDueDateChange(event: { task: Task; dueDate: string | null }) {
+    this.scheduleDueUpdate(event.task, event.dueDate);
+  }
+
+  private scheduleDueUpdate(task: Task, dueDate: string | null) {
+    if (!task?.id || !task.projectId || !task.problemId || !task.issueId) return;
+    const key = task.id;
+    const prev = this.dueDateTimers.get(key);
+    if (prev) clearTimeout(prev);
+    const timer = setTimeout(() => {
+      this.tasks.update(task.projectId!, task.problemId!, task.issueId!, task.id!, { dueDate }).catch(err => console.error(err));
+      this.dueDateTimers.delete(key);
+    }, 400);
+    this.dueDateTimers.set(key, timer);
+  }
+
+  async markDone(task: Task) {
+    if (!task?.id || !task.projectId || !task.problemId || !task.issueId) return;
+    try {
+      await this.tasks.update(task.projectId, task.problemId, task.issueId, task.id, { status: 'done' as any });
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  shiftTask(event: { task: Task; days: number }) {
+    const { task, days } = event;
+    if (!task.dueDate) return;
+    const current = new Date(task.dueDate);
+    if (isNaN(current.getTime())) return;
+    current.setDate(current.getDate() + days);
+    const next = this.ymd(current);
+    this.scheduleDueUpdate(task, next);
+  }
+
+  setTaskToday(task: Task) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const next = this.ymd(today);
+    this.scheduleDueUpdate(task, next);
+  }
+
+  private flattenVm(vm: Vm) {
     return [
-      ...vm.overdue, ...vm.today, ...vm.tomorrow,
-      ...vm.thisWeekRest, ...vm.nextWeek, ...vm.later, ...vm.nodue
+      ...vm.overdue,
+      ...vm.today,
+      ...vm.tomorrow,
+      ...vm.thisWeekRest,
+      ...vm.nextWeek,
+      ...vm.later,
+      ...vm.nodue,
     ];
   }
 
-  // 置き換え版：toCsv（第3引数 dir を追加）
-  private toCsv(tasks: Task[], nameMap: Map<string,string>, dir: Map<string,string>): string {
-    const headers = ['ID','タイトル','状態','優先度','期日','担当者','プロジェクト','Problem','Issue','タグ','進捗(%)','作成日時','更新日時'];
-    const esc = (v: any) => `"${(v ?? '').toString().replace(/"/g,'""')}"`;
+  exportCurrent(kind: 'csv' | 'json') {
+    this.vm$.pipe(take(1)).subscribe(async vm => {
+      const data = this.flattenVm(vm);
+      const nameMap = await this.resolveNames(data);
+      const assigneeDir = await this.resolveAssigneeDirectory(data);
+      if (kind === 'csv') {
+        const csv = this.toCsv(data, nameMap, assigneeDir);
+        this.download('my-tasks.csv', csv, 'text/csv');
+      } else {
+        const json = this.toJson(data, nameMap, assigneeDir);
+        this.download('my-tasks.json', json, 'application/json');
+      }
+    });
+  }
+
+  private toCsv(tasks: Task[], nameMap: Map<string, string>, dir: Map<string, string>): string {
+    const headers = ['ID', 'タイトル', '状態', '優先度', '期日', '担当者', 'プロジェクト', 'Problem', 'Issue', 'タグ', '進捗(%)', '作成日時', '更新日時'];
+    const esc = (v: any) => `"${(v ?? '').toString().replace(/"/g, '""')}"`;
     const fmtTs = (x: any) => {
       const d = x?.toDate?.() ?? (typeof x === 'string' ? new Date(x) : null);
-      return d && !isNaN(d as any) ? new Date(d).toISOString().replace('T',' ').replace('Z','') : '';
+      return d && !isNaN(d as any) ? new Date(d).toISOString().replace('T', ' ').replace('Z', '') : '';
     };
     const joinAssignees = (xs: any) =>
       Array.isArray(xs) ? xs.map((u: string) => dir.get(u) ?? u).join(', ') : (xs ?? '');
@@ -229,7 +361,9 @@ export class MyTasksPage {
         t.priority ?? '',
         t.dueDate ?? '',
         joinAssignees(t.assignees),
-        pj, pr, is,
+        pj,
+        pr,
+        is,
         Array.isArray(t.tags) ? t.tags.join(', ') : (t.tags ?? ''),
         (t as any).progress ?? '',
         fmtTs((t as any).createdAt),
@@ -240,8 +374,7 @@ export class MyTasksPage {
     return [headers.join(','), ...rows].join('\n');
   }
 
-  // 置き換え版：toJson（第3引数 dir を追加）
-  private toJson(tasks: Task[], nameMap: Map<string,string>, dir: Map<string,string>): string {
+  private toJson(tasks: Task[], nameMap: Map<string, string>, dir: Map<string, string>): string {
     const mapped = tasks.map(t => ({
       id: t.id,
       title: t.title,
@@ -256,7 +389,6 @@ export class MyTasksPage {
       progress: (t as any).progress ?? null,
       createdAt: (t as any).createdAt?.toDate?.() ?? null,
       updatedAt: (t as any).updatedAt?.toDate?.() ?? null,
-      // IDs (optional; useful for joins)
       projectId: t.projectId ?? null,
       problemId: t.problemId ?? null,
       issueId: t.issueId ?? null,
@@ -265,7 +397,7 @@ export class MyTasksPage {
   }
 
   private download(filename: string, content: string, mime = 'text/plain') {
-    const bom = mime === 'text/csv' ? '\uFEFF' : ''; // Excel対策（CSVのみBOM付与）
+    const bom = mime === 'text/csv' ? '\uFEFF' : '';
     const blob = new Blob([bom + content], { type: mime + ';charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -274,26 +406,11 @@ export class MyTasksPage {
     URL.revokeObjectURL(a.href);
   }
 
-  exportCurrent(kind: 'csv'|'json') {
-    this.vm$.pipe(take(1)).subscribe(async vm => {
-      const data = this.flattenVm(vm);
-      const nameMap = await this.resolveNames(data);
-      const assigneeDir = await this.resolveAssigneeDirectory(data);
-      if (kind === 'csv') {
-        const csv = this.toCsv(data, nameMap, assigneeDir);
-        this.download('my-tasks.csv', csv, 'text/csv');
-      } else {
-        const json = this.toJson(data, nameMap, assigneeDir);
-        this.download('my-tasks.json', json, 'application/json');
-      }
-    });
-  }
-
   private async resolveNames(tasks: Task[]): Promise<Map<string, string>> {
-    const nameMap = new Map<string,string>();
+    const nameMap = new Map<string, string>();
     const needProject = new Set<string>();
-    const needProblem: Array<{pid:string; problemId:string}> = [];
-    const needIssue: Array<{pid:string; problemId:string; issueId:string}> = [];
+    const needProblem: Array<{ pid: string; problemId: string }> = [];
+    const needIssue: Array<{ pid: string; problemId: string; issueId: string }> = [];
 
     for (const t of tasks) {
       if (t.projectId) needProject.add(t.projectId);
@@ -301,14 +418,12 @@ export class MyTasksPage {
       if (t.projectId && t.problemId && t.issueId) needIssue.push({ pid: t.projectId, problemId: t.problemId, issueId: t.issueId });
     }
 
-    // projects
     await Promise.all(Array.from(needProject).map(async pid => {
       const snap = await getDoc(doc(this.fs as any, `projects/${pid}`));
       const name = snap.exists() ? (snap.data() as any)?.meta?.name ?? pid : pid;
       nameMap.set(`project:${pid}`, name);
     }));
 
-    // problems
     await Promise.all(needProblem.map(async x => {
       const key = `problem:${x.pid}:${x.problemId}`;
       if (nameMap.has(key)) return;
@@ -317,7 +432,6 @@ export class MyTasksPage {
       nameMap.set(key, title);
     }));
 
-    // issues
     await Promise.all(needIssue.map(async x => {
       const key = `issue:${x.pid}:${x.problemId}:${x.issueId}`;
       if (nameMap.has(key)) return;
@@ -329,9 +443,8 @@ export class MyTasksPage {
     return nameMap;
   }
 
-  /** 各プロジェクトの members を読み、uid -> 表示名(なければemail) の辞書を作る */
-  private async resolveAssigneeDirectory(tasks: Task[]): Promise<Map<string,string>> {
-    const byUid = new Map<string,string>();
+  private async resolveAssigneeDirectory(tasks: Task[]): Promise<Map<string, string>> {
+    const byUid = new Map<string, string>();
     const pids = Array.from(new Set(tasks.map(t => t.projectId).filter(Boolean))) as string[];
 
     for (const pid of pids) {
@@ -339,12 +452,10 @@ export class MyTasksPage {
       const snap = await getDocs(col);
       snap.forEach(docSnap => {
         const d: any = docSnap.data();
-        const label = d?.displayName || d?.email || docSnap.id; // 表示名 > email > UID
+        const label = d?.displayName || d?.email || docSnap.id;
         byUid.set(docSnap.id, label);
       });
     }
     return byUid;
   }
 }
-
-

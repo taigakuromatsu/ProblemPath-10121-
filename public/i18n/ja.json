@@ -185,6 +185,7 @@
     }
   },
   "schedule": {
+    "subtitle": "期限をまとめて確認し、ドラッグ＆ドロップで調整できます。",
     "export": {
       "csv": "CSV",
       "json": "JSON"
@@ -197,6 +198,19 @@
     "tags": {
       "label": "タグ",
       "placeholder": "#bug #UI（スペース区切り）"
+    },
+    "viewModes": {
+      "list": "リスト",
+      "calendar": "カレンダー"
+    },
+    "assignees": {
+      "label": "担当者",
+      "placeholder": "担当者で絞り込み"
+    },
+    "actions": {
+      "complete": "完了にする",
+      "plusOne": "期日を+1日",
+      "today": "今日にする"
     },
     "openInBoard": "Boardで見る",
     "section": {
@@ -212,13 +226,24 @@
   },
   "myTasks": {
     "title": "自分のタスク",
+    "subtitle": "自分に割り当てられたタスクの進捗を俯瞰できます。",
     "overdue": "期限切れ",
     "today": "今日",
     "tomorrow": "明日",
     "thisWeekRest": "今週の残り",
     "nextWeek": "来週",
     "later": "以降",
-    "nodue": "期限未設定"
+    "nodue": "期限未設定",
+    "range": {
+      "start": "開始日",
+      "end": "終了日"
+    },
+    "summary": {
+      "overdue": "期限切れ",
+      "today": "今日",
+      "week": "今週",
+      "progress": "完了率"
+    }
   },
   "filter": {
     "show": "表示",
