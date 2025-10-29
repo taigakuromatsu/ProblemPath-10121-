@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { AsyncPipe, NgFor, NgIf, NgSwitch, NgSwitchCase, NgTemplateOutlet } from '@angular/common';
+import { AsyncPipe, NgFor, NgIf, NgClass, NgSwitch, NgSwitchCase, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -60,6 +60,7 @@ interface MemberOption {
     AsyncPipe,
     NgFor,
     NgIf,
+    NgClass,
     NgSwitch,
     NgSwitchCase,
     NgTemplateOutlet, // ★ 追加（*ngTemplateOutlet 用）
