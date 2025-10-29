@@ -1,10 +1,9 @@
-
 // src/app/services/messaging.service.ts
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, Injector, runInInjectionContext } from '@angular/core';
 import { Messaging, getToken, onMessage, isSupported } from '@angular/fire/messaging';
 import { Firestore } from '@angular/fire/firestore';
 import { Auth } from '@angular/fire/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { environment } from '../../environments/environment';
 import { Observable, Subject } from 'rxjs';
 
@@ -12,6 +11,7 @@ export type FcmNotice = { title?: string; body?: string };
 
 @Injectable({ providedIn: 'root' })
 export class MessagingService {
+  private injector = inject(Injector);
   private messaging = inject(Messaging, { optional: true });
   private fs = inject(Firestore);
   private auth = inject(Auth);
@@ -38,10 +38,12 @@ export class MessagingService {
       (await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' }));
 
     try {
-      const token = await getToken(this.messaging, {
-        vapidKey: (environment as any).messaging?.vapidKey,
-        serviceWorkerRegistration: swReg,
-      });
+      const token = await runInInjectionContext(this.injector, () =>
+        getToken(this.messaging!, {
+          vapidKey: (environment as any).messaging?.vapidKey,
+          serviceWorkerRegistration: swReg,
+        })
+      );
       if (token) {
         await this.saveToken(token);
         return token;
@@ -71,10 +73,12 @@ export class MessagingService {
       (await navigator.serviceWorker.getRegistration()) ??
       (await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' }));
 
-    const token = await getToken(this.messaging, {
-      vapidKey: (environment as any).messaging?.vapidKey,
-      serviceWorkerRegistration: swReg,
-    });
+    const token = await runInInjectionContext(this.injector, () =>
+      getToken(this.messaging!, {
+        vapidKey: (environment as any).messaging?.vapidKey,
+        serviceWorkerRegistration: swReg,
+      })
+    );
 
     if (!token) throw new Error('Failed to acquire FCM token.');
 
@@ -82,25 +86,24 @@ export class MessagingService {
     return token;
   }
 
-  /** users/{uid}/fcmTokens/{token} に保存（idempotent / merge） */
+  /** users/{uid}/fcmTokens/{token} に保存（read禁止ルールに合わせて getDoc は使わない） */
   private async saveToken(token: string): Promise<void> {
     const u = this.auth.currentUser;
     if (!u) return;
+
     try {
       const ref = doc(this.fs as any, `users/${u.uid}/fcmTokens/${token}`);
-      const existing = await getDoc(ref);
-      const platform =
-        (navigator as any)?.userAgentData?.platform ?? navigator.platform ?? '';
+
+      // インデックスシグネチャの警告(TS4111)回避のためブラケット記法で代入
       const data: Record<string, unknown> = {
         token,
         userAgent: navigator.userAgent || '',
-        platform,
+        platform: (navigator as any)?.userAgentData?.platform ?? navigator.platform ?? '',
         language: navigator.language || '',
         lastSeenAt: serverTimestamp(),
       };
-      if (!existing.exists()) {
-        data['createdAt'] = serverTimestamp();
-      }
+      data['createdAt'] = serverTimestamp();
+
       await setDoc(ref, data, { merge: true });
     } catch (e) {
       console.warn('[FCM] saveToken error:', e);
@@ -132,3 +135,4 @@ export class MessagingService {
     }
   }
 }
+
