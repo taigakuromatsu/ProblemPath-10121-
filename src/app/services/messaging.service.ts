@@ -4,7 +4,7 @@ import { Injectable, inject } from '@angular/core';
 import { Messaging, getToken, onMessage, isSupported } from '@angular/fire/messaging';
 import { Firestore } from '@angular/fire/firestore';
 import { Auth } from '@angular/fire/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { environment } from '../../environments/environment';
 import { Observable, Subject } from 'rxjs';
 
@@ -88,15 +88,20 @@ export class MessagingService {
     if (!u) return;
     try {
       const ref = doc(this.fs as any, `users/${u.uid}/fcmTokens/${token}`);
-      await setDoc(
-        ref,
-        {
-          userAgent: navigator.userAgent || '',
-          createdAt: serverTimestamp(),   // 初回時
-          updatedAt: serverTimestamp(),   // 毎回更新
-        },
-        { merge: true }
-      );
+      const existing = await getDoc(ref);
+      const platform =
+        (navigator as any)?.userAgentData?.platform ?? navigator.platform ?? '';
+      const data: Record<string, unknown> = {
+        token,
+        userAgent: navigator.userAgent || '',
+        platform,
+        language: navigator.language || '',
+        lastSeenAt: serverTimestamp(),
+      };
+      if (!existing.exists()) {
+        data.createdAt = serverTimestamp();
+      }
+      await setDoc(ref, data, { merge: true });
     } catch (e) {
       console.warn('[FCM] saveToken error:', e);
     }

@@ -105,9 +105,19 @@ export const auditTasksOnWrite = onDocumentWritten(
  * ========================================= */
 
 /** プロジェクトの全メンバーUID（viewer含む）を取得 */
-async function listProjectMemberUids(projectId: string): Promise<string[]> {
+async function listProjectMemberUids(
+  projectId: string,
+  excludeUid?: string | null
+): Promise<string[]> {
   const snap = await db.collection(`projects/${projectId}/members`).get();
-  return snap.docs.map((d) => d.id);
+  const unique = new Set<string>();
+  snap.docs.forEach((d) => {
+    const uid = d.id;
+    if (!uid) return;
+    if (excludeUid && uid === excludeUid) return;
+    unique.add(uid);
+  });
+  return Array.from(unique);
 }
 
 /** ユーザーのFCMトークン一覧（users/{uid}/fcmTokens/* の doc.id） */
@@ -121,52 +131,153 @@ async function notifyUsers(
   uids: string[],
   payload: { title: string; body?: string; data?: Record<string, string> }
 ): Promise<void> {
-  // uid -> tokens
-  const mapTokens = new Map<string, string[]>();
+  const uniqueUids = Array.from(new Set(uids)).filter(Boolean);
+  if (uniqueUids.length === 0) return;
+
+  const tokenOwners = new Map<string, string>();
   await Promise.all(
-    uids.map(async (uid) => {
-      const tks = await listUserTokens(uid);
-      if (tks.length > 0) mapTokens.set(uid, tks);
+    uniqueUids.map(async (uid) => {
+      const tokens = await listUserTokens(uid);
+      tokens
+        .filter((t) => !!t)
+        .forEach((token) => {
+          if (!tokenOwners.has(token)) {
+            tokenOwners.set(token, uid);
+          }
+        });
     })
   );
 
-  const allTokens: string[] = Array.from(mapTokens.values()).flat();
-  if (allTokens.length === 0) return;
-
-  const res = await messaging.sendEachForMulticast({
-    tokens: allTokens,
-    notification: { title: payload.title, body: payload.body ?? '' },
-    data: payload.data ?? {},
-  });
-
-  // 無効トークンの掃除（uid単位で確実に削除）
-  const invalid: string[] = [];
-  res.responses.forEach((r, i) => {
-    if (!r.success) {
-      const code = r.error?.code ?? '';
-      if (
-        code.includes('registration-token-not-registered') ||
-        code.includes('invalid-argument') ||
-        code.includes('messaging/invalid-argument') ||
-        code.includes('messaging/registration-token-not-registered')
-      ) {
-        const tok = allTokens[i]!; // responses.length === tokens.length 前提で non-null
-        invalid.push(tok);
-      }
-    }
-  });
-
-  if (invalid.length > 0) {
-    const batch = db.batch();
-    for (const [uid, tokens] of mapTokens) {
-      for (const t of tokens) {
-        if (invalid.includes(t)) {
-          batch.delete(db.doc(`users/${uid}/fcmTokens/${t}`));
-        }
-      }
-    }
-    await batch.commit().catch(() => {});
+  const allTokens = Array.from(tokenOwners.keys());
+  if (allTokens.length === 0) {
+    console.log(
+      `[notifyUsers] no tokens for payload title="${payload.title}" recipients=${uniqueUids.length}`
+    );
+    return;
   }
+
+  const data: Record<string, string> = {};
+  if (payload.data) {
+    for (const [key, value] of Object.entries(payload.data)) {
+      if (value === undefined || value === null) continue;
+      data[key] = String(value);
+    }
+  }
+
+  const CHUNK_SIZE = 500;
+  let successTotal = 0;
+  let failureTotal = 0;
+  const invalidTokens = new Set<string>();
+
+  for (let i = 0; i < allTokens.length; i += CHUNK_SIZE) {
+    const chunk = allTokens.slice(i, i + CHUNK_SIZE);
+    try {
+      const res = await messaging.sendEachForMulticast({
+        tokens: chunk,
+        notification: { title: payload.title, body: payload.body ?? '' },
+        data,
+      });
+
+      successTotal += res.successCount;
+      failureTotal += res.failureCount;
+
+      res.responses.forEach((r, idx) => {
+        if (r.success) return;
+        const code = r.error?.code ?? '';
+        const token = chunk[idx];
+        if (!token) return;
+        if (
+          code.includes('registration-token-not-registered') ||
+          code.includes('messaging/registration-token-not-registered') ||
+          code.includes('messaging/invalid-argument') ||
+          code.includes('invalid-argument')
+        ) {
+          invalidTokens.add(token);
+        } else {
+          console.warn('[notifyUsers] send error', { token, code });
+        }
+      });
+    } catch (err) {
+      console.warn('[notifyUsers] sendEachForMulticast failed', err);
+    }
+  }
+
+  console.log(
+    `[notifyUsers] title="${payload.title}" tokens=${allTokens.length} success=${successTotal} failure=${failureTotal}`
+  );
+
+  if (invalidTokens.size > 0) {
+    const batch = db.batch();
+    invalidTokens.forEach((token) => {
+      const uid = tokenOwners.get(token);
+      if (!uid) return;
+      batch.delete(db.doc(`users/${uid}/fcmTokens/${token}`));
+    });
+    try {
+      await batch.commit();
+      console.log(`[notifyUsers] removed ${invalidTokens.size} invalid tokens`);
+    } catch (err) {
+      console.warn('[notifyUsers] failed to remove invalid tokens', err);
+    }
+  }
+}
+
+function clipText(value: unknown, maxLength = 80): string {
+  if (value === undefined || value === null) return '';
+  const str = typeof value === 'string' ? value : String(value);
+  const normalized = str.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength)}…`;
+}
+
+function buildTaskDeepLink(
+  projectId: string,
+  issueId: string,
+  taskId: string
+): string {
+  const enc = encodeURIComponent;
+  return `/board?pid=${enc(projectId)}&iid=${enc(issueId)}&tid=${enc(taskId)}`;
+}
+
+async function sendTaskFileNotification(
+  event: any,
+  idKey: 'fileId' | 'attId',
+  source: 'files' | 'attachments'
+): Promise<void> {
+  if (!event?.data?.data) return;
+  const params = event.params as Record<string, string>;
+  const projectId = params.projectId;
+  const problemId = params.problemId;
+  const issueId = params.issueId;
+  const taskId = params.taskId;
+  const fileId = params[idKey];
+  if (!projectId || !problemId || !issueId || !taskId) return;
+
+  const data = event.data.data() as any;
+  const createdBy = typeof data?.createdBy === 'string' ? data.createdBy : null;
+  const recipients = await listProjectMemberUids(projectId, createdBy);
+  if (recipients.length === 0) return;
+
+  const fileName =
+    (typeof data?.name === 'string' && data.name.trim()) ||
+    (typeof data?.fileName === 'string' && data.fileName.trim()) ||
+    '';
+  const body = fileName || 'ファイルが追加されました';
+
+  await notifyUsers(recipients, {
+    title: 'ファイルが追加されました',
+    body,
+    data: {
+      type: 'task-file',
+      projectId,
+      problemId,
+      issueId,
+      taskId,
+      source,
+      fileId: fileId ?? '',
+      deepLink: buildTaskDeepLink(projectId, issueId, taskId),
+    },
+  });
 }
 
 /* =========================================
@@ -214,16 +325,43 @@ export const notifyOnIssueComment = onDocumentCreated(
 export const notifyOnTaskComment = onDocumentCreated(
   'projects/{projectId}/problems/{problemId}/issues/{issueId}/tasks/{taskId}/comments/{commentId}',
   async (event) => {
-    const { projectId } = event.params as { projectId: string };
-    const data = event.data?.data() as any;
-    const uids = await listProjectMemberUids(projectId);
+    if (!event?.data?.data) return;
+    const params = event.params as {
+      projectId: string;
+      problemId: string;
+      issueId: string;
+      taskId: string;
+      commentId?: string;
+    };
+    const { projectId, problemId, issueId, taskId, commentId } = params;
+    if (!projectId || !problemId || !issueId || !taskId) return;
 
-    const title = '新しいコメント（Task）';
-    const body = (data?.text ?? '').toString().slice(0, 80);
-    await notifyUsers(uids, {
-      title,
+    const data = event.data.data() as any;
+    const authorId = typeof data?.authorId === 'string' ? data.authorId : null;
+    const recipients = await listProjectMemberUids(projectId, authorId);
+    if (recipients.length === 0) return;
+
+    const authorName =
+      typeof data?.authorName === 'string' ? data.authorName.trim() : '';
+    const bodySnippet = clipText(data?.body ?? data?.text ?? '', 80);
+    const body = authorName
+      ? bodySnippet
+        ? `${authorName}: ${bodySnippet}`
+        : `${authorName} がコメントしました`
+      : bodySnippet || 'コメントが追加されました';
+
+    await notifyUsers(recipients, {
+      title: 'コメントが追加されました',
       body,
-      data: { kind: 'comment', projectId, scope: 'task' },
+      data: {
+        type: 'task-comment',
+        projectId,
+        problemId,
+        issueId,
+        taskId,
+        commentId: commentId ?? '',
+        deepLink: buildTaskDeepLink(projectId, issueId, taskId),
+      },
     });
   }
 );
@@ -265,21 +403,14 @@ export const notifyOnIssueAttachment = onDocumentCreated(
 );
 
 // Task 添付
+export const notifyOnTaskFile = onDocumentCreated(
+  'projects/{projectId}/problems/{problemId}/issues/{issueId}/tasks/{taskId}/files/{fileId}',
+  async (event) => sendTaskFileNotification(event, 'fileId', 'files')
+);
+
 export const notifyOnTaskAttachment = onDocumentCreated(
   'projects/{projectId}/problems/{problemId}/issues/{issueId}/tasks/{taskId}/attachments/{attId}',
-  async (event) => {
-    const { projectId } = event.params as { projectId: string };
-    const data = event.data?.data() as any;
-    const uids = await listProjectMemberUids(projectId);
-
-    const title = 'ファイルが追加されました（Task）';
-    const body = (data?.name ?? '').toString().slice(0, 80);
-    await notifyUsers(uids, {
-      title,
-      body,
-      data: { kind: 'attachment', projectId, scope: 'task' },
-    });
-  }
+  async (event) => sendTaskFileNotification(event, 'attId', 'attachments')
 );
 
 /* =========================================

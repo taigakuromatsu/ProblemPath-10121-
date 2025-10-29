@@ -27,9 +27,6 @@ import { NetworkService } from '../services/network.service';
 import { TranslateModule } from '@ngx-translate/core';
 import { MessagingService } from '../services/messaging.service';
 
-// ★ 追加：AngularFire Firestore（トークン保存に使用）
-import { Firestore, doc, setDoc } from '@angular/fire/firestore';
-
 // ---- このページ専用の拡張型 ----
 type ProblemWithDef = Problem & {
   problemDef?: {
@@ -532,8 +529,6 @@ export class HomePage implements OnInit, OnDestroy {
     private drafts: DraftsService,
     private network: NetworkService,
     private msg: MessagingService,
-    // ★ 追加：Firestore（トークン保存用）
-    private afs: Firestore,
   ) {
     this.isOnline$ = this.network.isOnline$;
     this.canEdit$ = combineLatest([this.members.isEditor$, this.network.isOnline$]).pipe(
@@ -624,25 +619,10 @@ export class HomePage implements OnInit, OnDestroy {
     // --- FCM: 既に権限があればトークン取得、保存、フォアグラウンド受信購読 ---
     try {
       this.fcmToken = await this.msg.getTokenIfGranted();
-      const uid = await firstValueFrom(this.auth.uid$);
-      if (uid && this.fcmToken) {
-        await this.saveFcmToken(uid, this.fcmToken, /*seenOnly*/ true);
-      }
     } catch {}
     this.fgSub = this.msg.onMessage$.subscribe(n => {
       this.fgMessages = [{ title: n?.title, body: n?.body }, ...this.fgMessages].slice(0, 20);
     });
-  }
-
-  // ★ 追加：FCM トークンの保存ユーティリティ
-  private async saveFcmToken(uid: string, token: string, seenOnly = false) {
-    const ref = doc(this.afs, `users/${uid}/fcmTokens/${token}`);
-    const base = { ua: navigator.userAgent };
-    if (seenOnly) {
-      await setDoc(ref, { ...base, lastSeenAt: serverTimestamp() }, { merge: true });
-    } else {
-      await setDoc(ref, { ...base, createdAt: serverTimestamp(), lastSeenAt: serverTimestamp() }, { merge: true });
-    }
   }
 
   // 通知の権限リクエスト → トークン取得 → Firestore 保存
@@ -650,10 +630,6 @@ export class HomePage implements OnInit, OnDestroy {
     try {
       const t = await this.msg.requestPermissionAndGetToken();
       this.fcmToken = t;
-      const uid = await firstValueFrom(this.auth.uid$);
-      if (uid && t) {
-        await this.saveFcmToken(uid, t /* seenOnly=false で新規作成 */);
-      }
       this.snack.open('通知を有効化しました', undefined, { duration: 2000 });
     } catch (e: any) {
       console.error('[FCM] permission/token error', e);
