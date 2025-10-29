@@ -75,7 +75,7 @@ export class ScheduleRow {
   imports: [
     AsyncPipe, NgFor, NgIf, FormsModule,
     MatButtonModule, MatIconModule, MatSelectModule, MatTooltipModule,
-    RouterLink, ScheduleRow, TranslateModule
+    ScheduleRow, TranslateModule
   ],
   template: `
   <div style="display:flex; align-items:center; gap:12px; margin:8px 0 16px;">

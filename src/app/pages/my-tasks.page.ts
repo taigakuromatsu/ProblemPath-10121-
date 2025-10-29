@@ -30,7 +30,7 @@ const EMPTY: Vm = { overdue:[], today:[], tomorrow:[], thisWeekRest:[], nextWeek
 @Component({
   standalone: true,
   selector: 'pp-item',
-  imports: [NgIf, RouterLink, MatButtonModule, MatIconModule, TranslateModule],
+  imports: [NgIf, RouterLink,MatButtonModule, MatIconModule, TranslateModule],
   template: `
     <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid #e5e7eb; border-radius:8px; margin-bottom:6px;">
       <span [style.opacity]="t.status==='done' ? .6 : 1" style="flex:1 1 auto;">
@@ -58,7 +58,7 @@ export class MyItem {
   selector: 'pp-my-tasks',
   imports: [
     AsyncPipe, NgFor, NgIf, FormsModule,
-    MatButtonModule, MatSelectModule, MatIconModule, RouterLink,
+    MatButtonModule, MatSelectModule, MatIconModule,
     MyItem, TranslateModule
   ],
   template: `

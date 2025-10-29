@@ -33,7 +33,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core'; // ★ 
     AsyncPipe, NgFor, NgIf, DatePipe,
     FormsModule,
     MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule, MatCardModule, MatChipsModule,
-    RouterLink, DragDropModule, MatSnackBarModule, TranslateModule
+    DragDropModule, MatSnackBarModule, TranslateModule
   ],
   templateUrl: './board.page.html',
   styleUrls: ['./board.page.scss']

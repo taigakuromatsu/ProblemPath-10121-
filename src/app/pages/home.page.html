@@ -81,10 +81,17 @@
             <h2>{{ 'problemDef.title' | translate }}</h2>
             <p class="section-subtitle">選択中の課題の定義を確認します。</p>
           </div>
-          <button mat-stroked-button type="button" *ngIf="members.isEditor$ | async && (selectedProblemDoc$ | async) as p" (click)="openEditProblemDef(p)">
-            {{ 'common.edit' | translate }}
-          </button>
+
+          <!-- ★ 修正ポイント：二段の ng-container で安全に p を取り出す -->
+          <ng-container *ngIf="members.isEditor$ | async">
+            <ng-container *ngIf="selectedProblemDoc$ | async as p">
+              <button mat-stroked-button type="button" (click)="openEditProblemDef(p)">
+                {{ 'common.edit' | translate }}
+              </button>
+            </ng-container>
+          </ng-container>
         </div>
+
         <div class="section-body" *ngIf="selectedProblemDoc$ | async as p">
           <dl class="problem-def">
             <div>
@@ -306,7 +313,6 @@
           <label>
             <span>{{ 'problem.phenomenonRequired' | translate }}</span>
             <textarea rows="3" [(ngModel)]="newProblem.phenomenon" (ngModelChange)="onNewProblemChange('phenomenon', newProblem.phenomenon)"></textarea>
-            <small>{{ 'hint.phenomenon' | translate }}</small>
           </label>
           <label>
             <span>{{ 'problem.causeOptional' | translate }}</span>

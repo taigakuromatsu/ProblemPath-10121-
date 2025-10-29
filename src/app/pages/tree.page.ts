@@ -26,6 +26,7 @@ import { DraftsService } from '../services/drafts.service';
 import { NetworkService } from '../services/network.service';
 import { TranslateModule, TranslateService } from '@ngx-translate/core'; 
 import { AttachmentsService, AttachmentDoc, AttachmentTarget } from '../services/attachments.service';
+import { NgClass } from '@angular/common';
 
 type Status = 'not_started' | 'in_progress' | 'done';
 
@@ -51,7 +52,7 @@ function dlog(...args: any[]) {
   imports: [
     NgIf, NgFor, AsyncPipe, DatePipe, DecimalPipe, FormsModule,
     MatButtonModule, MatTreeModule, MatIconModule, MatTooltipModule, MatCardModule,
-    NgChartsModule, MatSnackBarModule, TranslateModule
+    NgChartsModule, MatSnackBarModule, TranslateModule, NgClass
   ],
   templateUrl: './tree.page.html',
   styleUrls: ['./tree.page.scss']

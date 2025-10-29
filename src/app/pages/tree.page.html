@@ -85,9 +85,9 @@
 
         <mat-nested-tree-node *matTreeNodeDef="let node">
           <div class="node-row node-row--task" [ngClass]="'status-' + (node.status || 'not_started')">
-            <button mat-icon-button disabled><mat-icon>task_alt</mat-icon></button>
+            <!-- 先頭の task_alt アイコンは削除 -->
             <div class="node-main">
-              <span class="status-indicator">{{ statusIcon(node.status) }}</span>
+              <!-- ✅/🔼/✕ を表示していた statusIcon の行を削除 -->
               <span class="node-title" [matTooltip]="node.name">{{ node.name }}</span>
             </div>
             <div class="node-meta">
@@ -177,3 +177,4 @@
     </aside>
   </div>
 </section>
+
