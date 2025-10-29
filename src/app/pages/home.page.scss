@@ -2,6 +2,8 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
+  font-size: var(--font-body);
+  line-height: 1.5;
 }
 
 .page-header {
@@ -12,16 +14,27 @@
   gap: 16px;
 }
 
+.page-header > * {
+  min-width: 0;
+}
+
 .page-titles {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0;
+}
+
+.page-titles h1 {
+  font-size: var(--font-title);
+  line-height: 1.3;
 }
 
 .page-subtitle {
   margin: 0;
   color: var(--muted);
-  font-size: 0.95rem;
+  font-size: var(--font-body);
+  line-height: 1.5;
 }
 
 .page-alerts {
@@ -35,7 +48,9 @@
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  font-size: 0.9rem;
+  font-size: var(--font-body);
+  border-radius: var(--radius);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
 }
 
 .alert-card--offline {
@@ -59,6 +74,8 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
+  border-radius: var(--radius);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
 }
 
 .section-header {
@@ -69,10 +86,15 @@
   gap: 16px;
 }
 
+.section-header > * {
+  min-width: 0;
+}
+
 .section-subtitle {
   margin: 4px 0 0;
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: var(--font-body);
+  line-height: 1.5;
 }
 
 .section-actions {
@@ -85,12 +107,13 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
 }
 
 .problem-select {
   display: grid;
   gap: 6px;
-  font-size: 0.95rem;
+  font-size: var(--font-body);
 }
 
 .problem-select select {
@@ -106,7 +129,8 @@
   align-items: center;
   gap: 8px;
   font-size: 0.85rem;
-  word-break: break-all;
+  word-break: break-word;
+  min-width: 0;
 }
 
 .notification-token code {
@@ -125,18 +149,18 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 0.95rem;
+  font-size: var(--font-body);
 }
 
 .empty-state {
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: var(--font-body);
 }
 
 .problem-def {
   display: grid;
   gap: 12px;
-  font-size: 0.95rem;
+  font-size: var(--font-body);
 }
 
 .problem-def dt {
@@ -154,6 +178,10 @@
   align-items: center;
 }
 
+.inline-form > * {
+  min-width: 0;
+}
+
 .inline-form input,
 .inline-form select,
 .inline-form textarea {
@@ -163,6 +191,7 @@
   background: var(--surface);
   color: inherit;
   font: inherit;
+  min-width: 0;
 }
 
 .inline-form--compact {
@@ -193,9 +222,14 @@
   align-items: center;
 }
 
+.issue-header > * {
+  min-width: 0;
+}
+
 .issue-header h3 {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: var(--font-title);
+  line-height: 1.3;
 }
 
 .issue-actions {
@@ -241,6 +275,11 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+}
+
+.tasks-header > * {
+  min-width: 0;
 }
 
 .task-list {
@@ -269,15 +308,20 @@
   align-items: baseline;
 }
 
+.task-main > * {
+  min-width: 0;
+}
+
 .task-title {
   font-weight: 600;
+  font-size: var(--font-title);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.task-meta {
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
+.task-meta,
 .task-tags {
   font-size: 0.85rem;
   color: var(--muted);
@@ -304,6 +348,7 @@
 
 .invite-result input {
   flex: 1 1 200px;
+  min-width: 0;
 }
 
 .prefs-card pre {
@@ -348,6 +393,7 @@
   flex-direction: column;
   gap: 16px;
   padding: 20px 24px;
+  min-width: 0;
 }
 
 .dialog-header {
@@ -355,6 +401,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.dialog-header > * {
+  min-width: 0;
 }
 
 .dialog-header h3 {
@@ -369,7 +419,7 @@
 .dialog-body label {
   display: grid;
   gap: 6px;
-  font-size: 0.95rem;
+  font-size: var(--font-body);
 }
 
 .dialog-body label.inline {
@@ -385,6 +435,7 @@
   background: var(--surface);
   color: inherit;
   font: inherit;
+  min-width: 0;
 }
 
 .dialog-body small {
@@ -396,29 +447,5 @@
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-}
-
-.guest-card {
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.guest-card h2 {
-  margin: 0;
-}
-
-@media (max-width: 720px) {
-  .section-card {
-    padding: 16px;
-  }
-
-  .issue-item {
-    padding: 12px;
-  }
-
-  .task-item {
-    padding: 10px;
-  }
+  flex-wrap: wrap;
 }

@@ -2,8 +2,8 @@
   <header class="board-header">
     <div class="header-left">
       <div class="title-block">
-        <h1>{{ 'nav.board' | translate }}</h1>
-        <p class="subtitle" *ngIf="!selectedProblemId">{{ 'board.selectProblemHint' | translate }}</p>
+        <h1 class="title text-1line">{{ 'nav.board' | translate }}</h1>
+        <p class="subtitle text-2line" *ngIf="!selectedProblemId">{{ 'board.selectProblemHint' | translate }}</p>
       </div>
       <div class="problem-select">
         <mat-form-field appearance="outline" floatLabel="always">
@@ -47,7 +47,7 @@
           [style.--col-accent]="colAccent[col]"
         >
           <header class="column-header">
-            <div class="column-title">{{ ('board.col.' + col) | translate }}</div>
+            <div class="column-title text-1line">{{ ('board.col.' + col) | translate }}</div>
             <span class="column-count">{{ totals[col] }}</span>
           </header>
 
@@ -67,7 +67,7 @@
                     cdkDropListOrientation="vertical"
                   >
                     <div class="issue-stack__header">
-                      <div class="issue-title">{{ issue.title }}</div>
+                      <div class="issue-title text-1line">{{ issue.title }}</div>
                       <span class="issue-count">{{ ts.length }} {{ 'board.items' | translate }}</span>
                     </div>
 
@@ -81,7 +81,7 @@
                     >
                       <ng-template cdkDragPreview>
                         <mat-card class="task-card task-card--preview">
-                          <div class="task-card__title">{{ t.title }}</div>
+                          <div class="task-card__title text-1line">{{ t.title }}</div>
                         </mat-card>
                       </ng-template>
                       <ng-template cdkDragPlaceholder>
@@ -96,8 +96,8 @@
                         </span>
                       </div>
 
-                      <div class="task-card__title">{{ t.title }}</div>
-                      <p class="task-card__description" *ngIf="t.description">{{ t.description }}</p>
+                      <div class="task-card__title text-1line">{{ t.title }}</div>
+                      <p class="task-card__description text-2line" *ngIf="t.description">{{ t.description }}</p>
 
                       <div class="task-card__chips">
                         <mat-chip-set>
