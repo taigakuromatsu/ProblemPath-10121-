@@ -1,0 +1,95 @@
+<div class="schedule-page">
+  <section class="page-header card">
+    <div class="headline">
+      <div>
+        <h1>{{ 'nav.schedule' | translate }}</h1>
+        <p class="muted">{{ 'schedule.subtitle' | translate }}</p>
+      </div>
+      <mat-button-toggle-group class="view-toggle" [(ngModel)]="viewMode" (change)="onViewModeChange($event.value)">
+        <mat-button-toggle value="list">
+          <mat-icon fontSet="material-icons-outlined">view_list</mat-icon>
+          {{ 'schedule.viewModes.list' | translate }}
+        </mat-button-toggle>
+        <mat-button-toggle value="calendar">
+          <mat-icon fontSet="material-icons-outlined">calendar_month</mat-icon>
+          {{ 'schedule.viewModes.calendar' | translate }}
+        </mat-button-toggle>
+      </mat-button-toggle-group>
+    </div>
+    <div class="toolbar">
+      <div class="export">
+        <button mat-stroked-button (click)="exportCurrent('csv')">{{ 'schedule.export.csv' | translate }}</button>
+        <button mat-stroked-button (click)="exportCurrent('json')">{{ 'schedule.export.json' | translate }}</button>
+      </div>
+      <div class="filters">
+        <div class="filter-group">
+          <label>{{ 'schedule.view.label' | translate }}</label>
+          <mat-button-toggle-group [(ngModel)]="openOnly" (change)="onOpenOnlyChange($event.value)">
+            <mat-button-toggle [value]="true">{{ 'schedule.view.onlyOpen' | translate }}</mat-button-toggle>
+            <mat-button-toggle [value]="false">{{ 'schedule.view.all' | translate }}</mat-button-toggle>
+          </mat-button-toggle-group>
+        </div>
+        <div class="filter-group">
+          <label>{{ 'schedule.tags.label' | translate }}</label>
+          <input type="text" [(ngModel)]="tagQuery" (ngModelChange)="onTagQueryChange()" [placeholder]="'schedule.tags.placeholder' | translate" />
+        </div>
+        <div class="filter-group">
+          <label>{{ 'schedule.assignees.label' | translate }}</label>
+          <mat-select multiple [(ngModel)]="selectedAssignees" (ngModelChange)="onAssigneeChange()" placeholder="{{ 'schedule.assignees.placeholder' | translate }}">
+            <mat-option *ngFor="let member of members$ | async" [value]="member.uid">{{ member.label }}</mat-option>
+          </mat-select>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="view-container" [ngSwitch]="viewMode">
+    <ng-container *ngSwitchCase="'list'">
+      <ng-container *ngIf="vm$ | async as vm">
+        <ng-container *ngTemplateOutlet="listView; context: { vm: vm, directory: memberDirectory$ | async }"></ng-container>
+      </ng-container>
+    </ng-container>
+    <ng-container *ngSwitchCase="'calendar'">
+      <ng-container *ngIf="vm$ | async as vm">
+        <pp-task-calendar
+          [tasks]="calendarTasks(vm)"
+          [undatedTasks]="calendarUndated(vm)"
+          [activeMonth]="calendarMonth"
+          [memberDirectory]="memberDirectory$ | async"
+          (monthChange)="onMonthChange($event)"
+          (dueDateChange)="onDueDateChange($event)"
+        ></pp-task-calendar>
+      </ng-container>
+    </ng-container>
+  </section>
+</div>
+
+<ng-template #listView let-vm="vm" let-directory="directory">
+  <div class="list-grid">
+    <mat-card *ngFor="let section of sections" [class.empty]="!(vm[section.key]?.length)">
+      <header>
+        <div class="icon" [class.danger]="section.accent === 'danger'" [class.info]="section.accent === 'info'">
+          <mat-icon fontSet="material-icons-outlined">{{ section.icon }}</mat-icon>
+        </div>
+        <div>
+          <h2>{{ section.label | translate }}</h2>
+          <span class="count-badge">{{ vm[section.key]?.length || 0 }}</span>
+        </div>
+      </header>
+      <div class="section-body" *ngIf="vm[section.key]?.length; else emptySection">
+        <pp-task-row
+          *ngFor="let task of vm[section.key]; trackBy: trackTask"
+          [task]="task"
+          [memberDirectory]="directory || {}"
+          (complete)="markDone($event)"
+          (shiftDays)="shiftTask($event.task, $event.days)"
+          (setToday)="setTaskToday($event)"
+        ></pp-task-row>
+      </div>
+    </mat-card>
+  </div>
+</ng-template>
+
+<ng-template #emptySection>
+  <div class="empty">{{ 'schedule.none' | translate }}</div>
+</ng-template>

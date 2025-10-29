@@ -185,6 +185,7 @@
     }
   },
   "schedule": {
+    "subtitle": "Review deadlines and adjust them with drag & drop.",
     "export": {
       "csv": "CSV",
       "json": "JSON"
@@ -197,6 +198,19 @@
     "tags": {
       "label": "Tags",
       "placeholder": "#bug #UI (space separated)"
+    },
+    "viewModes": {
+      "list": "List",
+      "calendar": "Calendar"
+    },
+    "assignees": {
+      "label": "Assignee",
+      "placeholder": "Filter by assignee"
+    },
+    "actions": {
+      "complete": "Mark as done",
+      "plusOne": "Postpone by 1 day",
+      "today": "Move to today"
     },
     "openInBoard": "Open in Board",
     "section": {
@@ -212,13 +226,24 @@
   },
   "myTasks": {
     "title": "My Tasks",
+    "subtitle": "Track everything assigned to you in one place.",
     "overdue": "Overdue",
     "today": "Today",
     "tomorrow": "Tomorrow",
     "thisWeekRest": "Rest of this week",
     "nextWeek": "Next week",
     "later": "Later",
-    "nodue": "No due date"
+    "nodue": "No due date",
+    "range": {
+      "start": "Start date",
+      "end": "End date"
+    },
+    "summary": {
+      "overdue": "Overdue",
+      "today": "Today",
+      "week": "This week",
+      "progress": "Progress"
+    }
   },
   "filter": {
     "show": "Show",

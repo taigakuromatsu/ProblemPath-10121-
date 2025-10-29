@@ -1,0 +1,121 @@
+<div class="my-page">
+  <section class="page-header card">
+    <div class="headline">
+      <div>
+        <h1>{{ 'nav.my' | translate }}</h1>
+        <p class="muted">{{ 'myTasks.subtitle' | translate }}</p>
+      </div>
+      <mat-button-toggle-group class="view-toggle" [(ngModel)]="viewMode" (change)="onViewModeChange($event.value)">
+        <mat-button-toggle value="list">
+          <mat-icon fontSet="material-icons-outlined">view_list</mat-icon>
+          {{ 'schedule.viewModes.list' | translate }}
+        </mat-button-toggle>
+        <mat-button-toggle value="calendar">
+          <mat-icon fontSet="material-icons-outlined">calendar_month</mat-icon>
+          {{ 'schedule.viewModes.calendar' | translate }}
+        </mat-button-toggle>
+      </mat-button-toggle-group>
+    </div>
+    <div class="toolbar">
+      <div class="export">
+        <button mat-stroked-button (click)="exportCurrent('csv')">{{ 'export.csv' | translate }}</button>
+        <button mat-stroked-button (click)="exportCurrent('json')">{{ 'export.json' | translate }}</button>
+      </div>
+      <div class="filters">
+        <div class="filter-group">
+          <label>{{ 'filter.show' | translate }}</label>
+          <mat-button-toggle-group [(ngModel)]="openOnly" (change)="onOpenOnlyChange($event.value)">
+            <mat-button-toggle [value]="true">{{ 'filter.openOnly' | translate }}</mat-button-toggle>
+            <mat-button-toggle [value]="false">{{ 'filter.all' | translate }}</mat-button-toggle>
+          </mat-button-toggle-group>
+        </div>
+        <div class="filter-group">
+          <label>{{ 'filter.tags' | translate }}</label>
+          <input type="text" [(ngModel)]="tagQuery" (ngModelChange)="onTagQueryChange()" [placeholder]="'filter.tagsPlaceholder' | translate" />
+        </div>
+        <div class="filter-group range">
+          <label>{{ 'myTasks.range.start' | translate }}</label>
+          <input type="date" [(ngModel)]="startRange" (change)="onDateRangeChange()" />
+        </div>
+        <div class="filter-group range">
+          <label>{{ 'myTasks.range.end' | translate }}</label>
+          <input type="date" [(ngModel)]="endRange" (change)="onDateRangeChange()" />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="summary" *ngIf="summary$ | async as summary">
+    <mat-card>
+      <div class="summary-grid">
+        <div class="metric">
+          <span class="label">{{ 'myTasks.summary.overdue' | translate }}</span>
+          <span class="value overdue">{{ summary.overdue }}</span>
+        </div>
+        <div class="metric">
+          <span class="label">{{ 'myTasks.summary.today' | translate }}</span>
+          <span class="value today">{{ summary.today }}</span>
+        </div>
+        <div class="metric">
+          <span class="label">{{ 'myTasks.summary.week' | translate }}</span>
+          <span class="value week">{{ summary.week }}</span>
+        </div>
+        <div class="metric progress">
+          <span class="label">{{ 'myTasks.summary.progress' | translate }}</span>
+          <span class="value">{{ summary.progress }}%</span>
+          <mat-progress-bar mode="determinate" [value]="summary.progress"></mat-progress-bar>
+        </div>
+      </div>
+    </mat-card>
+  </section>
+
+  <section class="view-container" [ngSwitch]="viewMode">
+    <ng-container *ngSwitchCase="'list'">
+      <ng-container *ngIf="vm$ | async as vm">
+        <ng-container *ngTemplateOutlet="listView; context: { vm: vm, directory: memberDirectory$ | async }"></ng-container>
+      </ng-container>
+    </ng-container>
+    <ng-container *ngSwitchCase="'calendar'">
+      <ng-container *ngIf="vm$ | async as vm">
+        <pp-task-calendar
+          [tasks]="calendarTasks(vm)"
+          [undatedTasks]="calendarUndated(vm)"
+          [activeMonth]="calendarMonth"
+          [memberDirectory]="memberDirectory$ | async"
+          (monthChange)="onMonthChange($event)"
+          (dueDateChange)="onDueDateChange($event)"
+        ></pp-task-calendar>
+      </ng-container>
+    </ng-container>
+  </section>
+</div>
+
+<ng-template #listView let-vm="vm" let-directory="directory">
+  <div class="list-grid">
+    <mat-card *ngFor="let section of sections" [class.empty]="!(vm[section.key]?.length)">
+      <header>
+        <div class="icon">
+          <mat-icon fontSet="material-icons-outlined">{{ section.icon }}</mat-icon>
+        </div>
+        <div>
+          <h2>{{ section.label | translate }}</h2>
+          <span class="count-badge">{{ vm[section.key]?.length || 0 }}</span>
+        </div>
+      </header>
+      <div class="section-body" *ngIf="vm[section.key]?.length; else emptySection">
+        <pp-task-row
+          *ngFor="let task of vm[section.key]; trackBy: trackTask"
+          [task]="task"
+          [memberDirectory]="directory || {}"
+          (complete)="markDone($event)"
+          (shiftDays)="shiftTask($event)"
+          (setToday)="setTaskToday($event)"
+        ></pp-task-row>
+      </div>
+    </mat-card>
+  </div>
+</ng-template>
+
+<ng-template #emptySection>
+  <div class="empty">{{ 'common.none' | translate }}</div>
+</ng-template>
