@@ -6,6 +6,7 @@
     </div>
   </header>
 
+  <!-- Alerts -->
   <div class="page-alerts" *ngIf="auth.loggedIn$ | async">
     <mat-card class="card alert-card alert-card--offline" *ngIf="!(isOnline$ | async)">
       <mat-icon>signal_wifi_off</mat-icon>
@@ -20,25 +21,69 @@
 
   <ng-container *ngIf="auth.loggedIn$ | async; else guestState">
     <div class="home-sections">
+
+      <!-- Problem 選択 -->
+      <mat-card class="card section-card">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title section-title--info no-truncate">
+              <mat-icon aria-hidden="true">topic</mat-icon> 課題（Problem）を選択
+            </h2>
+            <p class="section-subtitle text-2line">ここで選んだ Problem の配下を管理します。</p>
+          </div>
+          <div class="section-actions">
+            <button mat-stroked-button type="button" (click)="openNewProblemDialog()" [disabled]="!(canEdit$ | async)">＋ 新規作成</button>
+          </div>
+        </div>
+
+        <mat-divider></mat-divider>
+
+        <div class="section-body">
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Problem を選択</mat-label>
+            <mat-select [ngModel]="selectedProblemId" (ngModelChange)="onSelectProblem($event)">
+              <mat-option [value]="NEW_OPTION_VALUE">＋ 新規作成…</mat-option>
+              <mat-option *ngFor="let p of (problems$ | async)" [value]="p.id">{{ p.title }}</mat-option>
+            </mat-select>
+            <mat-icon matSuffix>expand_more</mat-icon>
+          </mat-form-field>
+          <p class="empty-state" *ngIf="!(problems$ | async)?.length">まだ Problem がありません。「新規作成」から追加してください。</p>
+        </div>
+      </mat-card>
+
+      <!-- 通知 -->
       <mat-card class="card section-card notifications-card">
         <div class="section-header">
           <div>
-            <h2 class="section-title section-title--info no-truncate">最新通知</h2>
-            <p class="section-subtitle text-2line">フォアグラウンドの通知履歴をチェックできます。</p>
+            <h2 class="section-title section-title--info no-truncate">
+              <mat-icon aria-hidden="true">notifications</mat-icon> {{ t('home.notifications.title','最新通知') }}
+            </h2>
+            <p class="section-subtitle text-2line">{{ t('home.notifications.lead','フォアグラウンドの通知履歴をチェックできます。') }}</p>
           </div>
-          <button mat-raised-button color="primary" type="button" (click)="askNotificationPermission()">
-            通知を有効化
-          </button>
+
+          <div class="section-actions">
+            <ng-container *ngIf="fcmStatus$ | async as s">
+              <span class="chip" [class.chip--ok]="s?.enabled === true" [class.chip--ng]="s?.enabled === false">
+                {{ s?.enabled ? t('home.notifications.enabled','有効') : t('home.notifications.disabled','未設定') }}
+              </span>
+              <span class="chip chip--warn" *ngIf="s?.lastError">
+                {{ t('home.notifications.error','エラー') }}: {{ s.lastError }}
+              </span>
+            </ng-container>
+
+            <button mat-raised-button color="primary" type="button" (click)="askNotificationPermission()">
+              {{ t('home.notifications.enableBtn','通知を有効化') }}
+            </button>
+          </div>
         </div>
+
+        <mat-divider></mat-divider>
+
         <div class="section-body">
-          <div class="notification-token" *ngIf="fcmToken">
-            <span class="token-label">Token</span>
-            <code>{{ fcmToken }}</code>
-          </div>
           <div class="notification-list" *ngIf="fgMessages.length > 0; else noMessages">
             <div class="notification-item" *ngFor="let m of fgMessages">
-              <strong>{{ m.title || '通知' }}</strong>
-              <span>{{ m.body || '' }}</span>
+              <strong class="no-truncate">{{ m.title || t('home.notifications.itemTitle','通知') }}</strong>
+              <span class="muted">{{ m.body || '' }}</span>
             </div>
           </div>
           <ng-template #noMessages>
@@ -47,42 +92,16 @@
         </div>
       </mat-card>
 
-      <mat-card class="card section-card problem-card">
-        <div class="section-header">
-          <div>
-            <h2 class="section-title section-title--info no-truncate">問題の選択</h2>
-            <p class="section-subtitle text-2line">対象の課題を選択して詳細を管理します。</p>
-          </div>
-          <div class="section-actions" *ngIf="members.isEditor$ | async">
-            <button mat-stroked-button type="button" (click)="renameSelected()" *ngIf="selectedProblemId" [disabled]="!(canEdit$ | async)">
-              {{ 'common.rename' | translate }}
-            </button>
-            <button mat-stroked-button color="warn" type="button" (click)="removeSelected()" *ngIf="selectedProblemId" [disabled]="!(canEdit$ | async)">
-              {{ 'common.delete' | translate }}
-            </button>
-          </div>
-        </div>
-
-        <div class="section-body">
-          <label class="problem-select">
-            <span>{{ 'label.problem' | translate }}</span>
-            <select [(ngModel)]="selectedProblemId" (ngModelChange)="onSelectProblem($event)">
-              <option [ngValue]="null">{{ 'common.selectPrompt' | translate }}</option>
-              <option *ngFor="let p of (problems$ | async)" [ngValue]="p.id">{{ p.title }}</option>
-              <option *ngIf="members.isEditor$ | async" [ngValue]="NEW_OPTION_VALUE">＋ {{ 'common.createNewEllipsis' | translate }}</option>
-            </select>
-          </label>
-        </div>
-      </mat-card>
-
+      <!-- Problem 定義 -->
       <mat-card class="card section-card" *ngIf="selectedProblemId as pid">
         <div class="section-header">
           <div>
-            <h2 class="section-title section-title--info no-truncate">{{ 'problemDef.title' | translate }}</h2>
+            <h2 class="section-title section-title--info no-truncate">
+              <mat-icon aria-hidden="true">assignment</mat-icon> {{ 'problemDef.title' | translate }}
+            </h2>
             <p class="section-subtitle text-2line">選択中の課題の定義を確認します。</p>
           </div>
 
-          <!-- ★ 修正ポイント：二段の ng-container で安全に p を取り出す -->
           <ng-container *ngIf="members.isEditor$ | async">
             <ng-container *ngIf="selectedProblemDoc$ | async as p">
               <button mat-stroked-button type="button" (click)="openEditProblemDef(p)">
@@ -91,6 +110,8 @@
             </ng-container>
           </ng-container>
         </div>
+
+        <mat-divider></mat-divider>
 
         <div class="section-body" *ngIf="selectedProblemDoc$ | async as p">
           <dl class="problem-def">
@@ -117,25 +138,34 @@
         </div>
       </mat-card>
 
+      <!-- Issues & Tasks -->
       <mat-card class="card section-card" *ngIf="selectedProblemId as pid">
         <div class="section-header">
           <div>
-            <h2 class="section-title section-title--info no-truncate">{{ 'issue.listTitle' | translate }}</h2>
+            <h2 class="section-title section-title--info no-truncate">
+              <mat-icon aria-hidden="true">playlist_add_check</mat-icon> {{ 'issue.listTitle' | translate }}
+            </h2>
             <p class="section-subtitle text-2line">課題とリンク、タスクをまとめて管理します。</p>
           </div>
         </div>
 
+        <mat-divider></mat-divider>
+
         <div class="section-body">
+          <!-- Issue 追加 -->
           <form class="inline-form" *ngIf="members.isEditor$ | async" (ngSubmit)="createIssue(pid)">
             <input [(ngModel)]="issueTitle" name="issueTitle" [placeholder]="'issue.placeholderNewTitle' | translate" required (ngModelChange)="onIssueTitleChange($event)" />
             <button mat-raised-button color="primary" type="submit" [disabled]="!(canEdit$ | async)">＋ {{ 'issue.add' | translate }}</button>
           </form>
 
+          <!-- Issue 一覧 -->
           <ng-container *ngIf="issues$ | async as issues; else loadingIssues">
             <div class="issue-list" *ngIf="issues.length > 0; else emptyIssues">
               <article class="issue-item" *ngFor="let i of issues">
                 <header class="issue-header">
-                  <h3 class="section-title section-title--info no-truncate">{{ i.title }}</h3>
+                  <h3 class="section-title section-title--info no-truncate">
+                    <mat-icon aria-hidden="true">label_important</mat-icon> {{ i.title }}
+                  </h3>
                   <div class="issue-actions" *ngIf="members.isEditor$ | async">
                     <button mat-stroked-button type="button" (click)="renameIssue(pid, i)" [disabled]="!(canEdit$ | async)">{{ 'common.rename' | translate }}</button>
                     <button mat-stroked-button color="warn" type="button" (click)="removeIssue(pid, i)" [disabled]="!(canEdit$ | async)">{{ 'common.delete' | translate }}</button>
@@ -143,7 +173,10 @@
                 </header>
 
                 <section class="issue-links">
-                    <h4 class="section-title section-title--info no-truncate">{{ 'link.title' | translate }}</h4>
+                  <h4 class="section-title section-title--info no-truncate">
+                    <mat-icon aria-hidden="true">share</mat-icon> {{ 'link.title' | translate }}
+                  </h4>
+
                   <div class="link-chips" *ngIf="visibleLinks(i.links, issues).length > 0; else noLinks">
                     <mat-chip-set>
                       <mat-chip *ngFor="let lk of visibleLinks(i.links, issues)" appearance="outlined">
@@ -173,12 +206,16 @@
 
                 <section class="issue-tasks">
                   <header class="tasks-header">
-                    <h4 class="section-title section-title--info no-truncate">タスク</h4>
+                    <h4 class="section-title section-title--info no-truncate">
+                      <mat-icon aria-hidden="true">checklist</mat-icon> タスク
+                    </h4>
                   </header>
+
                   <form class="inline-form inline-form--compact" *ngIf="members.isEditor$ | async" (ngSubmit)="createTask(pid, i.id!)">
                     <input [(ngModel)]="taskTitle[i.id!]" name="taskTitle-{{ i.id }}" [placeholder]="'task.placeholderNewTitle' | translate" required (ngModelChange)="onTaskTitleChange(i.id!, taskTitle[i.id!])" />
                     <button mat-stroked-button type="submit" [disabled]="!(canEdit$ | async)">＋ {{ 'task.add' | translate }}</button>
                   </form>
+
                   <ul class="task-list" *ngIf="tasksMap[i.id!] | async as tasks">
                     <li *ngFor="let t of tasks" class="task-item">
                       <div class="task-main">
@@ -203,23 +240,31 @@
                 </section>
               </article>
             </div>
+
             <ng-template #emptyIssues>
               <div class="empty-state">{{ 'issue.noneYet' | translate }}</div>
             </ng-template>
           </ng-container>
+
           <ng-template #loadingIssues>
             <div class="empty-state">{{ 'issue.loading' | translate }}</div>
           </ng-template>
         </div>
       </mat-card>
 
+      <!-- 招待 -->
       <mat-card class="card section-card invite-card" *ngIf="(members.isAdmin$ | async)">
         <div class="section-header">
           <div>
-            <h2>{{ 'invite.byEmailTitle' | translate }}</h2>
+            <h2 class="section-title section-title--info no-truncate">
+              <mat-icon aria-hidden="true">person_add</mat-icon> {{ 'invite.byEmailTitle' | translate }}
+            </h2>
             <p class="section-subtitle">メールでチームメンバーを招待します。</p>
           </div>
         </div>
+
+        <mat-divider></mat-divider>
+
         <div class="section-body">
           <form class="inline-form invite-form" (ngSubmit)="$event.preventDefault()">
             <input [(ngModel)]="inviteEmail" name="inviteEmail" placeholder="email@example.com" />
@@ -232,33 +277,47 @@
               {{ isCreatingInvite ? ('common.creating' | translate) : ('invite.createLink' | translate) }}
             </button>
           </form>
+
           <div class="invite-result" *ngIf="inviteUrl">
             <input [value]="inviteUrl" readonly />
             <button mat-stroked-button type="button" (click)="copyInviteUrl()">{{ 'common.copy' | translate }}</button>
           </div>
+
           <p class="muted">{{ 'invite.helpText' | translate }}</p>
         </div>
       </mat-card>
 
+      <!-- 設定プレビュー -->
       <mat-card class="card section-card prefs-card">
         <div class="section-header">
           <div>
-            <h2>{{ 'settings.titlePreview' | translate }}</h2>
+            <h2 class="section-title section-title--info no-truncate">
+              <mat-icon aria-hidden="true">tune</mat-icon> {{ 'settings.titlePreview' | translate }}
+            </h2>
             <p class="section-subtitle">{{ 'settings.lead' | translate }}</p>
           </div>
         </div>
+
+        <mat-divider></mat-divider>
+
         <div class="section-body">
           <pre>{{ (prefs.prefs$ | async) | json }}</pre>
         </div>
       </mat-card>
 
+      <!-- 言語/テーマ -->
       <div class="settings-grid">
         <mat-card class="card section-card">
           <div class="section-header">
             <div>
-              <h2>{{ 'settings.languageTitle' | translate }}</h2>
+              <h2 class="section-title section-title--info no-truncate">
+                <mat-icon aria-hidden="true">language</mat-icon> {{ 'settings.languageTitle' | translate }}
+              </h2>
             </div>
           </div>
+
+          <mat-divider></mat-divider>
+
           <div class="section-body">
             <mat-form-field appearance="outline" class="full-width">
               <mat-label>{{ 'settings.languageSelect' | translate }}</mat-label>
@@ -274,9 +333,14 @@
         <mat-card class="card section-card">
           <div class="section-header">
             <div>
-              <h2>{{ 'settings.themeTitle' | translate }}</h2>
+              <h2 class="section-title section-title--info no-truncate">
+                <mat-icon aria-hidden="true">dark_mode</mat-icon> {{ 'settings.themeTitle' | translate }}
+              </h2>
             </div>
           </div>
+
+          <mat-divider></mat-divider>
+
           <div class="section-body">
             <mat-form-field appearance="outline" class="full-width">
               <mat-label>{{ 'settings.themeSelect' | translate }}</mat-label>
@@ -292,6 +356,7 @@
       </div>
     </div>
 
+    <!-- New Problem Dialog -->
     <div class="overlay" *ngIf="newProblemOpen">
       <div class="dialog">
         <header class="dialog-header">
@@ -335,6 +400,7 @@
       </div>
     </div>
 
+    <!-- Edit Problem Dialog -->
     <div class="overlay" *ngIf="editProblemOpen">
       <div class="dialog">
         <header class="dialog-header">
@@ -373,7 +439,7 @@
 
   <ng-template #guestState>
     <mat-card class="card guest-card">
-      <h2>{{ 'home.needSignIn' | translate }}</h2>
+      <h2 class="no-truncate">{{ 'home.needSignIn' | translate }}</h2>
       <p>{{ 'home.viewOnlyHint' | translate }}</p>
       <p class="muted">
         (<a routerLink="/tree">{{ 'nav.tree' | translate }}</a> /
@@ -383,3 +449,4 @@
     </mat-card>
   </ng-template>
 </section>
+

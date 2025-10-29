@@ -3,7 +3,7 @@ import { Injectable, inject, Injector, NgZone, runInInjectionContext } from '@an
 import { Messaging, getToken, onMessage, isSupported } from '@angular/fire/messaging';
 import { Firestore } from '@angular/fire/firestore';
 import { Auth } from '@angular/fire/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc as fsDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { environment } from '../../environments/environment';
 import { Observable, Subject } from 'rxjs';
 
@@ -29,6 +29,12 @@ export class MessagingService {
     this.ensureListener();
     // Service Worker からのメッセージリレーをリッスン
     this.setupServiceWorkerMessageListener();
+    // 権限がすでに拒否ならUI状態を反映
+    try {
+      if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
+        this.updateFcmStatus({ enabled: false, lastError: 'permission:denied' });
+      }
+    } catch {}
   }
 
   /** すでに通知許可が granted の場合だけ、トークンを返す（あれば保存もする） */
@@ -36,7 +42,7 @@ export class MessagingService {
     if (!this.messaging) return null;
     if (typeof Notification === 'undefined') return null;
     if (Notification.permission !== 'granted') return null;
-    
+
     const isSupportedResult = await runInInjectionContext(this.injector, () => isSupported());
     if (!isSupportedResult) return null;
 
@@ -58,6 +64,7 @@ export class MessagingService {
       return null;
     } catch (e) {
       console.warn('[FCM] getTokenIfGranted error:', e);
+      await this.updateFcmStatus({ enabled: false, lastError: String(e) });
       return null;
     }
   }
@@ -67,7 +74,6 @@ export class MessagingService {
     if (!this.messaging) {
       throw new Error('FCM is not supported on this browser.');
     }
-    
     const isSupportedResult = await runInInjectionContext(this.injector, () => isSupported());
     if (!isSupportedResult) {
       throw new Error('FCM is not supported on this browser.');
@@ -78,6 +84,7 @@ export class MessagingService {
 
     const perm = await Notification.requestPermission();
     if (perm !== 'granted') {
+      await this.updateFcmStatus({ enabled: false, lastError: `permission:${perm}` });
       throw new Error(`Permission was not granted: ${perm}`);
     }
 
@@ -92,7 +99,10 @@ export class MessagingService {
       })
     );
 
-    if (!token) throw new Error('Failed to acquire FCM token.');
+    if (!token) {
+      await this.updateFcmStatus({ enabled: false, lastError: 'token:null' });
+      throw new Error('Failed to acquire FCM token.');
+    }
 
     await this.saveToken(token);
     return token;
@@ -100,21 +110,16 @@ export class MessagingService {
 
   /** users/{uid}/fcmTokens/{token} に保存（read禁止ルールに合わせて getDoc は使わない） */
   private async saveToken(token: string): Promise<void> {
-    // 多重保存防止
-    if (this.savingToken.has(token)) {
-      return;
-    }
-    
+    if (this.savingToken.has(token)) return; // 多重保存防止
+
     const u = this.auth.currentUser;
     if (!u) return;
 
     this.savingToken.add(token);
-    
     try {
-      // Injection Context内でFirestore操作を実行
-      const ref = runInInjectionContext(this.injector, () => {
-        return doc(this.fs as any, `users/${u.uid}/fcmTokens/${token}`);
-      });
+      const ref = runInInjectionContext(this.injector, () =>
+        fsDoc(this.fs as any, `users/${u.uid}/fcmTokens/${token}`)
+      );
 
       const data: Record<string, unknown> = {
         token,
@@ -122,17 +127,28 @@ export class MessagingService {
         platform: (navigator as any)?.userAgentData?.platform ?? navigator.platform ?? '',
         language: navigator.language || '',
         lastSeenAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
       };
-      data['createdAt'] = serverTimestamp();
 
-      await runInInjectionContext(this.injector, () => {
-        return setDoc(ref, data, { merge: true });
-      });
+      await runInInjectionContext(this.injector, () => setDoc(ref, data, { merge: true }));
+      await this.updateFcmStatus({ enabled: true, lastError: null });
     } catch (e) {
       console.warn('[FCM] saveToken error:', e);
+      await this.updateFcmStatus({ enabled: false, lastError: String(e) });
     } finally {
       this.savingToken.delete(token);
     }
+  }
+
+  /** UI用のFCM状態を users/{uid}/fcmStatus/app に保存 */
+  private async updateFcmStatus(params: { enabled?: boolean; lastError?: string | null }) {
+    const u = this.auth.currentUser;
+    if (!u) return;
+    const ref = fsDoc(this.fs as any, `users/${u.uid}/fcmStatus/app`);
+    const data: any = { lastTokenSavedAt: serverTimestamp() };
+    if (typeof params.enabled === 'boolean') data.enabled = params.enabled;
+    if (params.lastError !== undefined) data.lastError = params.lastError;
+    await runInInjectionContext(this.injector, () => setDoc(ref, data, { merge: true }));
   }
 
   // --- 内部: onMessage リスナーを一度だけ開始 ---
@@ -142,7 +158,7 @@ export class MessagingService {
 
     try {
       if (!this.messaging) return;
-      
+
       const isSupportedResult = await runInInjectionContext(this.injector, () => isSupported());
       if (!isSupportedResult) return;
 
@@ -150,13 +166,12 @@ export class MessagingService {
         onMessage(this.messaging!, (payload: any) => {
           const title: string | undefined = payload?.notification?.title ?? 'ProblemPath';
           const body: string | undefined = payload?.notification?.body ?? '';
-          
-          // NgZone内でObservableに通知
+
           this.zone.run(() => {
-            this.fg$.next({ title, body });
+            this.fg$.next({ title, body }); // アプリ内（FG）通知
           });
 
-          // OS通知も出す（見落とし防止）
+          // OS通知（見落とし防止）
           try {
             if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
               new Notification(title ?? 'ProblemPath', { body });
@@ -169,24 +184,21 @@ export class MessagingService {
     }
   }
 
-  // Service Worker からのメッセージリレーをリッスン
+  // Service Worker からのメッセージリレーをリッスン（BG→FG橋渡し）
   private setupServiceWorkerMessageListener() {
-    if (typeof navigator === 'undefined' || !navigator.serviceWorker) {
-      return;
-    }
+    if (typeof navigator === 'undefined' || !navigator.serviceWorker) return;
 
     navigator.serviceWorker.addEventListener('message', (event: MessageEvent) => {
       if (event.data?.type === 'FCM_BG') {
         const { title, body } = event.data;
-        // NgZone内でObservableに通知
+
         this.zone.run(() => {
-          this.fg$.next({ title, body });
+          this.fg$.next({ title, body }); // アプリ内（FG）通知
         });
 
-        // OS通知も出す（見落とし防止）
         try {
           if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-            new Notification(title || 'ProblemPath', { body });
+            new Notification(title || 'ProblemPath', { body }); // OS通知も併用
           }
         } catch {}
       }

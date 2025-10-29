@@ -1,5 +1,4 @@
-// src/app/pages/home.page.ts
-import { Component, DestroyRef, OnInit, OnDestroy } from '@angular/core';
+import { Component, DestroyRef, OnInit, OnDestroy, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AsyncPipe, NgFor, NgIf, JsonPipe, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -26,8 +25,11 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { serverTimestamp } from 'firebase/firestore';
 import { DraftsService } from '../services/drafts.service';
 import { NetworkService } from '../services/network.service';
-import { TranslateModule } from '@ngx-translate/core';
-import { MessagingService } from '../services/messaging.service';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { MessagingService, FcmNotice } from '../services/messaging.service';
+import { Firestore, doc, docData } from '@angular/fire/firestore';
+import { MatDividerModule } from '@angular/material/divider';
+import { TranslatePipe } from '@ngx-translate/core';
 
 // ---- このページ専用の拡張型 ----
 type ProblemWithDef = Problem & {
@@ -57,11 +59,12 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
   selector: 'pp-home',
   imports: [
     RouterLink, AsyncPipe, NgFor, NgIf, JsonPipe, DatePipe, FormsModule,
-    MatButtonModule, MatSelectModule, MatFormFieldModule, MatIconModule, MatCardModule, MatChipsModule, MatSnackBarModule, TranslateModule
+    MatButtonModule, MatSelectModule, MatFormFieldModule, MatIconModule, 
+    MatCardModule, MatChipsModule, MatSnackBarModule, TranslateModule,
+    MatDividerModule
   ],
   templateUrl: './home.page.html',
   styleUrls: ['./home.page.scss']
-
 })
 export class HomePage implements OnInit, OnDestroy {
   readonly NEW_OPTION_VALUE = '__NEW__';
@@ -95,9 +98,12 @@ export class HomePage implements OnInit, OnDestroy {
   canEdit$!: Observable<boolean>;
 
   // --- FCM（フォアグラウンド表示用） ---
-  fcmToken: string | null = null;
+  fcmToken: string | null = null; // UIには出さないが、権限許可直後の確認用に保持のみ
   fgMessages: Array<{ title?: string; body?: string }> = [];
   private fgSub?: Subscription;
+
+  // --- FCM 状態（users/{uid}/fcmStatus/app） ---
+  fcmStatus$!: Observable<{ enabled?: boolean; lastTokenSavedAt?: any; lastError?: string } | null>;
 
   constructor(
     public prefs: PrefsService,
@@ -114,13 +120,21 @@ export class HomePage implements OnInit, OnDestroy {
     private drafts: DraftsService,
     private network: NetworkService,
     private msg: MessagingService,
+    private fs: Firestore,
+    private i18n: TranslateService,
   ) {
     this.isOnline$ = this.network.isOnline$;
     this.canEdit$ = combineLatest([this.members.isEditor$, this.network.isOnline$]).pipe(
       map(([isEditor, online]) => !!isEditor && !!online)
     );
   }
-  
+
+  /** 翻訳キーが未登録の時に fallback を返す */
+  t(key: string, fallback: string): string {
+    const v = this.i18n.instant(key);
+    return v === key ? fallback : v;
+  }
+
   onLangChange(next: 'ja' | 'en') {
     this.prefs.update({ lang: next });
   }
@@ -201,20 +215,27 @@ export class HomePage implements OnInit, OnDestroy {
         this.tasksMap = nextMap;
       });
 
-    // --- FCM: 既に権限があればトークン取得、保存、フォアグラウンド受信購読 ---
+    // --- FCM: 既に権限があればトークン取得＆保存（UI表示はしない） ---
     try {
       this.fcmToken = await this.msg.getTokenIfGranted();
     } catch {}
-    this.fgSub = this.msg.onMessage$.subscribe(n => {
+
+    // フォアグラウンド通知の購読（最新20件）
+    this.fgSub = this.msg.onMessage$.subscribe((n: FcmNotice) => {
       this.fgMessages = [{ title: n?.title, body: n?.body }, ...this.fgMessages].slice(0, 20);
     });
+
+    // FCM 状態の購読（enabled / lastError など） — AngularFireの doc() を使用（警告回避）
+    this.fcmStatus$ = this.auth.uid$.pipe(
+      switchMap(uid => uid ? docData(doc(this.fs, `users/${uid}/fcmStatus/app`)) : of(null))
+    ) as any;
   }
 
   // 通知の権限リクエスト → トークン取得 → Firestore 保存
   async askNotificationPermission() {
     try {
       const t = await this.msg.requestPermissionAndGetToken();
-      this.fcmToken = t;
+      this.fcmToken = t; // UIは出さないが状態保持のみ
       this.snack.open('通知を有効化しました', undefined, { duration: 2000 });
     } catch (e: any) {
       console.error('[FCM] permission/token error', e);
@@ -620,7 +641,7 @@ export class HomePage implements OnInit, OnDestroy {
     const solution = p.solution.trim();
     if (cause) payload.problemDef.cause = cause;
     if (solution) payload.problemDef.solution = solution;
-    
+
     const ref = await this.problems.create(pid, payload);
     this.selectedProblemId = (ref as any)?.id ?? null;
     this.selectedProblem$.next(this.selectedProblemId);
@@ -715,6 +736,7 @@ export class HomePage implements OnInit, OnDestroy {
     this.fgSub?.unsubscribe();
   }
 }
+
 
 
 

@@ -250,9 +250,20 @@ service cloud.firestore {
       match /fcmTokens/{token} {
         // 読み取りは不要なら禁止（クライアントからの get/list をブロック）
         allow read: if false;
-
         // 自分の配下のみ作成/更新/削除を許可
         allow create, update, delete: if isSignedIn() && request.auth.uid == uid;
+      }
+
+      // ★ FCM 状態の保存先 users/{uid}/fcmStatus/{docId}（UI用の状態だけを保持）
+      match /fcmStatus/{docId} {
+        // 本人のみ参照可（UIで「有効/未設定/エラー」を表示）
+        allow read: if isSignedIn() && request.auth.uid == uid;
+        // 本人のみ作成・更新可。許可フィールドを限定して安全に。
+        allow create, update: if isSignedIn()
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['enabled','lastTokenSavedAt','lastError']);
+        // 削除は不要なので禁止（必要なら後で緩める）
+        allow delete: if false;
       }
     }
 
