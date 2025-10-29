@@ -41,26 +41,26 @@
       2) App Color Tokens (CSS variables)
       - Light / Dark surface set
       --------------------------- */
-   
+
    :root {
-     /* Light */
-     --bg:       #ffffff;
-     --surface:  #272424;
+     --radius:   12px;
+     --bg:       #f5f6f8;
+     --surface:  #ffffff;
      --fg:       #111111;
-     --muted:    #666666;
-     --border:   #e5e7eb;
-     --accent:   #1f6feb; /* link/hover, optional */
+     --muted:    #6b7280;
+     --border:   #d7dce3;
+     --accent:   #2563eb;
    }
-   
+
    :root.dark {
-     /* Dark (ChatGPT っぽい深いグレー寄せ) */
-     --bg:       #222425; /* page background */
-     --surface:  #4d5257; /* cards / panels */
-     --fg:       #e6eaf0; /* text */
-     --muted:    #a2a9b3; /* secondary text */
-     --border:   #242a32; /* thin dividers */
-     --accent:   #6aa9ff; /* link/hover */
-     color-scheme: dark;  /* OS にヒントを渡す */
+     --radius:   12px;
+     --bg:       #1c1d20;
+     --surface:  #2a2d33;
+     --fg:       #e6eaf0;
+     --muted:    #9da5b4;
+     --border:   #343843;
+     --accent:   #60a5fa;
+     color-scheme: dark;
    }
    
    /* ---------------------------
@@ -100,7 +100,7 @@
      background: var(--surface);
      color: var(--fg);
      border: 1px solid var(--border);
-     border-radius: 12px;
+     border-radius: var(--radius);
    }
    
    /* Material overlays (menu/select/dialog/snackbar) */
@@ -183,3 +183,124 @@
    /* Sticky header がある場合の保険（必要なら） */
    /* .cdk-overlay-container { z-index: 2000; } */
    
+   /* ---------------------------
+      9) Layout Shell
+      --------------------------- */
+
+   .shell {
+     height: 100vh;
+     background: var(--bg);
+   }
+
+   .shell__sidenav {
+     width: min(320px, 90vw);
+     border-right: 1px solid var(--border);
+     background: var(--bg);
+     color: var(--fg);
+     padding: 16px;
+   }
+
+   .sidenav__wrapper {
+     display: flex;
+     flex-direction: column;
+     gap: 16px;
+     height: 100%;
+   }
+
+   .sidenav__header {
+     display: flex;
+     align-items: center;
+     gap: 10px;
+     font-weight: 600;
+     font-size: 1rem;
+   }
+
+   .sidenav__header .mat-icon {
+     font-size: 1.4rem;
+     width: 1.4rem;
+     height: 1.4rem;
+   }
+
+   .shell__content {
+     background: var(--bg);
+     color: var(--fg);
+   }
+
+   .topbar {
+     position: sticky;
+     top: 0;
+     z-index: 1000;
+     display: flex;
+     gap: 12px;
+   }
+
+   .topbar .mat-mdc-button {
+     border-radius: 999px;
+   }
+
+   .brand {
+     display: flex;
+     align-items: center;
+     gap: 8px;
+     font-weight: 600;
+     text-transform: uppercase;
+     letter-spacing: 0.08em;
+   }
+
+   .brand .mat-icon {
+     font-size: 1.4rem;
+     width: 1.4rem;
+     height: 1.4rem;
+   }
+
+   .menu-button {
+     margin-right: 4px;
+   }
+
+   .topnav {
+     display: flex;
+     align-items: center;
+     gap: 4px;
+   }
+
+   .topnav a.active {
+     background: rgba(255, 255, 255, 0.18);
+     color: #fff;
+     box-shadow: inset 0 -3px 0 0 rgba(255, 255, 255, 0.45);
+   }
+
+   .spacer {
+     flex: 1 1 auto;
+   }
+
+   .topbar-actions {
+     display: flex;
+     align-items: center;
+   }
+
+   .filter-placeholder {
+     display: inline-flex;
+     align-items: center;
+     gap: 6px;
+     border-radius: 999px !important;
+   }
+
+   .content-area {
+     min-height: calc(100vh - 64px);
+     padding: 24px;
+     background: var(--bg);
+   }
+
+   @media (max-width: 959px) {
+     .content-area {
+       padding: 16px;
+     }
+
+     .topbar-actions {
+       display: none;
+     }
+
+     .topnav {
+       overflow-x: auto;
+     }
+   }

@@ -1,251 +1,259 @@
-
 {
-    "home": {
-      "title": "ホーム",
-      "lead": "ここで 問題（Problem） を選んで、その配下の 課題（Issue） / タスク（Task） を編集します。",
-      "needSignIn": "編集にはサインインが必要です。右上の「サインイン」からログインしてください。",
-      "viewOnlyHint": "閲覧は ツリー / ボード / スケジュール で可能です。"
+  "home": {
+    "title": "ホーム",
+    "lead": "ここで 問題（Problem） を選んで、その配下の 課題（Issue） / タスク（Task） を編集します。",
+    "needSignIn": "編集にはサインインが必要です。右上の「サインイン」からログインしてください。",
+    "viewOnlyHint": "閲覧は ツリー / ボード / スケジュール で可能です。"
+  },
+  "auth": {
+    "signedIn": "サインイン済み",
+    "signOut": "サインアウト",
+    "signInWithGoogle": "Googleでサインイン",
+    "switchAccount": "アカウント切替",
+    "signIn": "サインイン"
+  },
+  "warn": {
+    "offlineEditBlocked": "オフラインのため 追加・編集・削除 はできません（入力はドラフトとして保存されます）。",
+    "viewerOnly": "現在のプロジェクトでは 閲覧のみ（Viewer） です。編集ボタンは非表示になります。",
+    "offlineComments": "現在オフラインです。コメントの投稿・編集・削除はできません。",
+    "noEditPermission": "編集権限がありません（Viewer）",
+    "offlineNoEdit": "オフラインのため編集できません"
+  },
+  "nav": {
+    "tree": "ツリー",
+    "board": "ボード",
+    "schedule": "スケジュール",
+    "home": "ホーム",
+    "my": "マイ"
+  },
+  "label": {
+    "problem": "問題"
+  },
+  "common": {
+    "selectPrompt": "-- 選択してください --",
+    "createNewEllipsis": "新規作成…",
+    "cancel": "キャンセル",
+    "create": "作成",
+    "save": "保存",
+    "rename": "名前変更",
+    "delete": "削除",
+    "edit": "編集",
+    "lastUpdated": "最終更新",
+    "creating": "作成中…",
+    "copy": "コピー",
+    "retry": "再試行",
+    "loading": "読み込み中…",
+    "projectNotSelected": "プロジェクト未選択",
+    "none": "（なし）",
+    "filter": "フィルター"
+  },
+  "template": {
+    "bug": "バグ/不具合",
+    "improve": "改善/パフォーマンス"
+  },
+  "field": {
+    "titleRequired": "タイトル（必須）",
+    "template": "テンプレート",
+    "titleReadonly": "タイトル（参照）",
+    "phenomenon": "現象",
+    "cause": "原因",
+    "solution": "解決策",
+    "goal": "目標"
+  },
+  "problem": {
+    "create": "問題を作成",
+    "phenomenonRequired": "現象（必須）",
+    "causeOptional": "原因（任意）",
+    "solutionOptional": "解決策（任意）",
+    "goalRequired": "目標（必須）"
+  },
+  "problemDef": {
+    "edit": "問題定義を編集",
+    "title": "問題定義"
+  },
+  "hint": {
+    "phenomenon": "何が起きている？再現手順・ユーザー影響・発生率 など",
+    "goalKpi": "どうなればOK？KPI・条件（例：p50 1.5秒 / エラー率0.1%未満）"
+  },
+  "issue": {
+    "listTitle": "課題",
+    "placeholderNewTitle": "新しい課題のタイトル",
+    "add": "課題を追加",
+    "noneYet": "（課題はまだありません）",
+    "loading": "課題を読み込み中…"
+  },
+  "link": {
+    "title": "リンク",
+    "removeAria": "リンクを削除",
+    "none": "（リンクなし）",
+    "selectIssuePrompt": "-- 対象の課題を選択 --",
+    "add": "リンク"
+  },
+  "task": {
+    "placeholderNewTitle": "新しいタスクのタイトル",
+    "add": "タスクを追加",
+    "dueShort": "（期限: {{ date }}）",
+    "editDue": "期限",
+    "editTags": "タグ",
+    "noneYet": "（タスクはまだありません）"
+  },
+  "tag": {
+    "none": "（タグなし）"
+  },
+  "invite": {
+    "byEmailTitle": "メールで招待",
+    "createLink": "招待リンクを作成",
+    "helpText": "生成されたURLをメールで送ってください。相手は開いてログイン→「参加する」でメンバーになります。"
+  },
+  "role": {
+    "adminLabel": "管理者（admin）",
+    "memberLabel": "メンバー（member）",
+    "viewerLabel": "閲覧者（viewer）"
+  },
+  "settings": {
+    "titlePreview": "設定（準備のみ／表示）",
+    "lead": "将来ここで「性格タイプ／言語／テーマ／アクセント色」を編集します。今は下地だけ入っています。",
+    "themeTitle": "テーマ設定",
+    "themeSelect": "テーマを選択",
+    "languageTitle": "言語設定",
+    "languageSelect": "言語を選択"
+  },
+  "theme": {
+    "light": "ライト",
+    "dark": "ダーク",
+    "system": "システムに合わせる"
+  },
+  "tree": {
+    "title": "ツリー",
+    "showDashboard": "ダッシュボードを表示",
+    "hideDashboard": "ダッシュボードを隠す",
+    "overallStatus": "全体の進捗",
+    "openTasksByDue": "期限別の未完了タスク",
+    "open": "未完了",
+    "done": "完了",
+    "total": "合計",
+    "progress": "進捗",
+    "overdue": "期限切れ",
+    "today": "今日",
+    "thisWeek": "今週",
+    "nextWeek": "来週",
+    "later": "以降",
+    "noDue": "期限なし",
+    "prompt": {
+      "renameProblem": "新しい Problem のタイトル",
+      "renameIssue": "新しい Issue のタイトル",
+      "renameTask": "新しい Task のタイトル"
     },
-    "auth": {
-      "signedIn": "サインイン済み",
-      "signOut": "サインアウト",
-      "signInWithGoogle": "Googleでサインイン",
-      "switchAccount": "アカウント切替",
-      "signIn": "サインイン"
+    "confirm": {
+      "deleteProblem": "「{{name}}」を削除しますか？",
+      "deleteIssue": "Issue「{{name}}」を削除しますか？",
+      "deleteTask": "Task「{{name}}」を削除しますか？"
+    }
+  },
+  "status": {
+    "done": "完了",
+    "inProgress": "対応中",
+    "notStarted": "未着手"
+  },
+  "comment": {
+    "title": "コメント",
+    "emptyHint": "左のツリーから対象を選んでコメントを表示",
+    "header": "コメント — {{kind}}: {{name}}",
+    "placeholder": "コメントを入力…",
+    "post": "投稿",
+    "update": "更新",
+    "noneYet": "まだコメントはありません"
+  },
+  "board": {
+    "offlineNotice": "現在オフラインです。カードの移動・更新・担当者変更はできません。",
+    "selectProblemHint": "Problemを選ぶとカンバンを表示します。",
+    "items": "件",
+    "dropHere": "ここにドロップ",
+    "assignToMe": "自分にアサイン",
+    "unassign": "アサイン解除",
+    "col": {
+      "not_started": "未着手",
+      "in_progress": "対応中",
+      "done": "完了"
     },
-    "warn": {
-      "offlineEditBlocked": "オフラインのため 追加・編集・削除 はできません（入力はドラフトとして保存されます）。",
-      "viewerOnly": "現在のプロジェクトでは 閲覧のみ（Viewer） です。編集ボタンは非表示になります。",
-      "offlineComments": "現在オフラインです。コメントの投稿・編集・削除はできません。",
-      "noEditPermission": "編集権限がありません（Viewer）",
-      "offlineNoEdit": "オフラインのため編集できません"
+    "err": {
+      "update": "更新に失敗しました",
+      "statusUpdate": "ステータス更新に失敗しました",
+      "orderSave": "順序の保存に失敗しました",
+      "assign": "Assignに失敗しました",
+      "unassign": "Unassignに失敗しました"
+    }
+  },
+  "schedule": {
+    "export": {
+      "csv": "CSV",
+      "json": "JSON"
     },
-    "nav": {
-      "tree": "ツリー",
-      "board": "ボード",
-      "schedule": "スケジュール",
-      "home": "ホーム",
-      "my": "マイ"
+    "view": {
+      "label": "表示",
+      "onlyOpen": "未完了のみ",
+      "all": "すべて"
     },
-    "label": {
-      "problem": "問題"
+    "tags": {
+      "label": "タグ",
+      "placeholder": "#bug #UI（スペース区切り）"
     },
-    "common": {
-      "selectPrompt": "-- 選択してください --",
-      "createNewEllipsis": "新規作成…",
-      "cancel": "キャンセル",
-      "create": "作成",
-      "save": "保存",
-      "rename": "名前変更",
-      "delete": "削除",
-      "edit": "編集",
-      "lastUpdated": "最終更新",
-      "creating": "作成中…",
-      "copy": "コピー",
-      "retry": "再試行",
-      "loading": "読み込み中…",
-      "projectNotSelected": "プロジェクト未選択",
-      "none": "（なし）"
+    "openInBoard": "Boardで見る",
+    "section": {
+      "overdue": "期限切れ",
+      "today": "今日",
+      "tomorrow": "明日",
+      "thisWeekRest": "今週の残り",
+      "nextWeek": "来週",
+      "later": "以降",
+      "noDue": "期限未設定"
     },
-    "template": {
-      "bug": "バグ/不具合",
-      "improve": "改善/パフォーマンス"
-    },
-    "field": {
-      "titleRequired": "タイトル（必須）",
-      "template": "テンプレート",
-      "titleReadonly": "タイトル（参照）",
-      "phenomenon": "現象",
-      "cause": "原因",
-      "solution": "解決策",
-      "goal": "目標"
-    },
-    "problem": {
-      "create": "問題を作成",
-      "phenomenonRequired": "現象（必須）",
-      "causeOptional": "原因（任意）",
-      "solutionOptional": "解決策（任意）",
-      "goalRequired": "目標（必須）"
-    },
-    "problemDef": {
-      "edit": "問題定義を編集",
-      "title": "問題定義"
-    },
-    "hint": {
-      "phenomenon": "何が起きている？再現手順・ユーザー影響・発生率 など",
-      "goalKpi": "どうなればOK？KPI・条件（例：p50 1.5秒 / エラー率0.1%未満）"
-    },
-    "issue": {
-      "listTitle": "課題",
-      "placeholderNewTitle": "新しい課題のタイトル",
-      "add": "課題を追加",
-      "noneYet": "（課題はまだありません）",
-      "loading": "課題を読み込み中…"
-    },
-    "link": {
-      "title": "リンク",
-      "removeAria": "リンクを削除",
-      "none": "（リンクなし）",
-      "selectIssuePrompt": "-- 対象の課題を選択 --",
-      "add": "リンク"
-    },
-    "task": {
-      "placeholderNewTitle": "新しいタスクのタイトル",
-      "add": "タスクを追加",
-      "dueShort": "（期限: {{ date }}）",
-      "editDue": "期限",
-      "editTags": "タグ",
-      "noneYet": "（タスクはまだありません）"
-    },
-    "tag": {
-      "none": "（タグなし）"
-    },
-    "invite": {
-      "byEmailTitle": "メールで招待",
-      "createLink": "招待リンクを作成",
-      "helpText": "生成されたURLをメールで送ってください。相手は開いてログイン→「参加する」でメンバーになります。"
-    },
-    "role": {
-      "adminLabel": "管理者（admin）",
-      "memberLabel": "メンバー（member）",
-      "viewerLabel": "閲覧者（viewer）"
-    },
-    "settings": {
-      "titlePreview": "設定（準備のみ／表示）",
-      "lead": "将来ここで「性格タイプ／言語／テーマ／アクセント色」を編集します。今は下地だけ入っています。",
-      "themeTitle": "テーマ設定",
-      "themeSelect": "テーマを選択",
-      "languageTitle": "言語設定",
-      "languageSelect": "言語を選択"
-    },
-    "theme": {
-      "light": "ライト",
-      "dark": "ダーク",
-      "system": "システムに合わせる"
-    },
-        "tree": {
-          "title": "ツリー",
-          "showDashboard": "ダッシュボードを表示",
-          "hideDashboard": "ダッシュボードを隠す",
-          "overallStatus": "全体の進捗",
-          "openTasksByDue": "期限別の未完了タスク",
-          "open": "未完了",
-          "done": "完了",
-          "total": "合計",
-          "progress": "進捗",
-          "overdue": "期限切れ",
-          "today": "今日",
-          "thisWeek": "今週",
-          "nextWeek": "来週",
-          "later": "以降",
-          "noDue": "期限なし",
-          "prompt": {
-            "renameProblem": "新しい Problem のタイトル",
-            "renameIssue": "新しい Issue のタイトル",
-            "renameTask": "新しい Task のタイトル"
-          },
-          "confirm": {
-            "deleteProblem": "「{{name}}」を削除しますか？",
-            "deleteIssue": "Issue「{{name}}」を削除しますか？",
-            "deleteTask": "Task「{{name}}」を削除しますか？"
-          }
-        },
-        "status": {
-          "done": "完了",
-          "inProgress": "対応中",
-          "notStarted": "未着手"
-        },
-        "comment": {
-          "title": "コメント",
-          "emptyHint": "左のツリーから対象を選んでコメントを表示",
-          "header": "コメント — {{kind}}: {{name}}",
-          "placeholder": "コメントを入力…",
-          "post": "投稿",
-          "update": "更新",
-          "noneYet": "まだコメントはありません"
-        },
-        "board": {
-            "offlineNotice": "現在オフラインです。カードの移動・更新・担当者変更はできません。",
-            "selectProblemHint": "Problemを選ぶとカンバンを表示します。",
-            "items": "件",
-            "dropHere": "ここにドロップ",
-            "assignToMe": "自分にアサイン",
-            "unassign": "アサイン解除",
-            "col": {
-              "not_started": "未着手",
-              "in_progress": "対応中",
-              "done": "完了"
-            },
-            "err": {
-              "update": "更新に失敗しました",
-              "statusUpdate": "ステータス更新に失敗しました",
-              "orderSave": "順序の保存に失敗しました",
-              "assign": "Assignに失敗しました",
-              "unassign": "Unassignに失敗しました"
-            }
-          },
-          "schedule": {
-            "export": { "csv": "CSV", "json": "JSON" },
-            "view": { "label": "表示", "onlyOpen": "未完了のみ", "all": "すべて" },
-            "tags": { "label": "タグ", "placeholder": "#bug #UI（スペース区切り）" },
-            "openInBoard": "Boardで見る",
-            "section": {
-              "overdue": "期限切れ",
-              "today": "今日",
-              "tomorrow": "明日",
-              "thisWeekRest": "今週の残り",
-              "nextWeek": "来週",
-              "later": "以降",
-              "noDue": "期限未設定"
-            },
-            "none": "なし"
-          },
-          "myTasks": {
-            "title": "自分のタスク",
-            "overdue": "期限切れ",
-            "today": "今日",
-            "tomorrow": "明日",
-            "thisWeekRest": "今週の残り",
-            "nextWeek": "来週",
-            "later": "以降",
-            "nodue": "期限未設定"
-          },
-          "filter": {
-            "show": "表示",
-            "openOnly": "未完了のみ",
-            "all": "すべて",
-            "tags": "タグ",
-            "tagsPlaceholder": "#bug #UI（スペース区切り）"
-          },
-          "export": {
-            "csv": "CSV",
-            "json": "JSON"
-          },
-          "join": {
-            "title": "プロジェクトに参加",
-            "loading": "招待を確認中...",
-            "invalidUrl": "無効な招待URLです。",
-            "notFound": "招待が見つかりません（使用済み/期限切れの可能性）。",
-            "emailMismatch": "この招待は別のメールアドレス用です。正しいアカウントでログインしてください。",
-            "accept": "参加する",
-            "loginToContinue": "ログインして続行",
-            "willJoinAs": "このプロジェクトに {{role}} 権限で参加します。",
-            "acceptFailed": "参加に失敗しました。"
-          },
-          "projectSwitcher": {
-            "project": "プロジェクト",
-            "loading": "読み込み中…",
-            "noProjects": "プロジェクトがありません",
-            "new": "新規作成",
-            "delete": "削除",
-            "leave": "退出"
-          },
-          "cf": {
-                "title": "コメント/ファイル",
-                "header": "コメント / ファイル — {{name}}",
-                "count": "コメント: {{c}} / ファイル: {{f}}"
-                }
-      
+    "none": "なし"
+  },
+  "myTasks": {
+    "title": "自分のタスク",
+    "overdue": "期限切れ",
+    "today": "今日",
+    "tomorrow": "明日",
+    "thisWeekRest": "今週の残り",
+    "nextWeek": "来週",
+    "later": "以降",
+    "nodue": "期限未設定"
+  },
+  "filter": {
+    "show": "表示",
+    "openOnly": "未完了のみ",
+    "all": "すべて",
+    "tags": "タグ",
+    "tagsPlaceholder": "#bug #UI（スペース区切り）"
+  },
+  "export": {
+    "csv": "CSV",
+    "json": "JSON"
+  },
+  "join": {
+    "title": "プロジェクトに参加",
+    "loading": "招待を確認中...",
+    "invalidUrl": "無効な招待URLです。",
+    "notFound": "招待が見つかりません（使用済み/期限切れの可能性）。",
+    "emailMismatch": "この招待は別のメールアドレス用です。正しいアカウントでログインしてください。",
+    "accept": "参加する",
+    "loginToContinue": "ログインして続行",
+    "willJoinAs": "このプロジェクトに {{role}} 権限で参加します。",
+    "acceptFailed": "参加に失敗しました。"
+  },
+  "projectSwitcher": {
+    "project": "プロジェクト",
+    "loading": "読み込み中…",
+    "noProjects": "プロジェクトがありません",
+    "new": "新規作成",
+    "delete": "削除",
+    "leave": "退出",
+    "offline": "オフラインのため操作できません"
+  },
+  "cf": {
+    "title": "コメント/ファイル",
+    "header": "コメント / ファイル — {{name}}",
+    "count": "コメント: {{c}} / ファイル: {{f}}"
   }
-  
-  
+}

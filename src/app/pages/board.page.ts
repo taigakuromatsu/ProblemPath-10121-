@@ -1,10 +1,15 @@
 // src/app/pages/board.page.ts
 import { Component, DestroyRef } from '@angular/core';
-import { AsyncPipe, NgFor, NgIf } from '@angular/common';
+import { AsyncPipe, DatePipe, NgFor, NgIf } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Observable, BehaviorSubject, of, combineLatest, firstValueFrom } from 'rxjs';
 import { switchMap, shareReplay, take, tap, map, distinctUntilChanged } from 'rxjs/operators';
 import { MatButtonModule } from '@angular/material/button';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatSelectModule } from '@angular/material/select';
+import { MatIconModule } from '@angular/material/icon';
+import { MatCardModule } from '@angular/material/card';
+import { MatChipsModule } from '@angular/material/chips';
 
 import { ProblemsService } from '../services/problems.service';
 import { IssuesService } from '../services/issues.service';
@@ -24,143 +29,24 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core'; // ★ 
 @Component({
   standalone: true,
   selector: 'pp-board',
-  imports: [AsyncPipe, NgFor, NgIf, FormsModule, MatButtonModule, RouterLink, DragDropModule, MatSnackBarModule, TranslateModule],
-  template: `
-    <div style="display:flex; align-items:center; gap:12px; margin:8px 0 16px;">
-      <a mat-stroked-button routerLink="/tree">← {{ 'nav.tree' | translate }}</a>
-
-      <label>
-        {{ 'label.problem' | translate }}:
-        <select [(ngModel)]="selectedProblemId" (ngModelChange)="onSelectProblem($event)">
-          <option [ngValue]="null">{{ 'common.selectPrompt' | translate }}</option>
-          <option *ngFor="let p of (problems$ | async)" [ngValue]="p.id">{{ p.title }}</option>
-        </select>
-      </label>
-
-      <span style="flex:1 1 auto;"></span>
-
-      <ng-container *ngIf="auth.loggedIn$ | async; else signinB">
-        <span style="opacity:.8; margin-right:6px;">{{ (auth.displayName$ | async) || ('auth.signedIn' | translate) }}</span>
-        <button mat-stroked-button type="button" (click)="auth.signOut()">{{ 'auth.signOut' | translate }}</button>
-      </ng-container>
-      <ng-template #signinB>
-        <button mat-raised-button color="primary" type="button" (click)="auth.signInWithGoogle()">{{ 'auth.signIn' | translate }}</button>
-      </ng-template>
-    </div>
-
-    <div *ngIf="!(isOnline$ | async)" style="margin:-8px 0 12px; font-size:12px; color:#b45309; background:#fffbeb; border:1px solid #fcd34d; padding:6px 8px; border-radius:6px;">
-      {{ 'board.offlineNotice' | translate }}
-    </div>
-
-    <div *ngIf="!selectedProblemId" style="opacity:.7">{{ 'board.selectProblemHint' | translate }}</div>
-
-    <ng-container *ngIf="selectedProblemId as pid">
-      <div *ngIf="(issues$ | async) === null">{{ 'issue.loading' | translate }}</div>
-
-      <div *ngIf="(issues$ | async) as issues">
-        <div *ngIf="!issues.length" style="opacity:.7">{{ 'issue.noneYet' | translate }}</div>
-
-        <div *ngIf="issues.length" style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px;">
-          <div
-            *ngFor="let col of statusCols"
-            style="border:1px solid #eee; border-radius:10px; padding:10px; min-height:80px;"
-          >
-            <div style="font-weight:600; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
-              <span>{{ ('board.col.' + col) | translate }}</span>
-              <span style="display:inline-block; min-width:20px; padding:2px 6px; font-size:12px; line-height:1; text-align:center; border-radius:999px; border:1px solid #e5e7eb; background:#f8fafc;">
-                {{ totals[col] }}
-              </span>
-            </div>
-
-            <!-- 列内を Issue ごとにグループ表示 -->
-            <ng-container *ngFor="let i of issues">
-              <ng-container *ngIf="tasksMap[key(pid, i.id!)] | async as tasks">
-                <ng-container *ngIf="tasksByStatus(tasks, col) as ts">
-                  <div
-                    cdkDropList
-                    [cdkDropListData]="ts"
-                    [cdkDropListConnectedTo]="listIds(i.id!)"
-                    [id]="listId(col, i.id!)"
-                    (cdkDropListDropped)="onListDrop($event, pid, i.id!)"
-                    [cdkDropListEnterPredicate]="canEnter"
-                    [cdkDropListDisabled]="!(canEdit$ | async)"
-                    style="border:1px solid #e5e7eb; border-radius:10px; padding:8px; margin-bottom:10px; min-height:60px; transition:border-color .15s ease;"
-                    (cdkDropListEntered)="($event.container.element.nativeElement.style.borderColor = '#9ca3af')"
-                    (cdkDropListExited)="($event.container.element.nativeElement.style.borderColor = '#e5e7eb')"
-                  >
-                    <!-- Issueグループのヘッダ -->
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
-                      <div style="font-weight:600;">{{ i.title }}</div>
-                      <span style="font-size:12px; opacity:.7;">{{ ts.length }} {{ 'board.items' | translate }}</span>
-                    </div>
-
-                    <!-- カード本体 -->
-                    <div *ngFor="let t of ts; trackBy: trackTask"
-                         cdkDrag
-                         [cdkDragData]="{ task: t, issueId: i.id }"
-                         [cdkDragDisabled]="isBusy(t.id!) || !(canEdit$ | async)"
-                         [style.opacity]="(isBusy(t.id!) || !(canEdit$ | async)) ? 0.5 : 1"
-                         style="border:1px solid #ddd; border-radius:8px; padding:8px; margin-bottom:6px;">
-                      <ng-template cdkDragPreview>
-                        <div style="border:1px solid #bbb; border-radius:8px; padding:8px; background:#fff;">
-                          {{ t.title }}
-                        </div>
-                      </ng-template>
-                      <ng-template cdkDragPlaceholder>
-                        <div style="border:1px dashed #bbb; border-radius:8px; padding:8px; background:#fafafa;"></div>
-                      </ng-template>
-
-                      <div>{{ t.title }}</div>
-
-                      <div style="display:flex; gap:6px; margin-top:6px;" *ngIf="isEditor$ | async">
-                        <button mat-button *ngFor="let next of statusCols"
-                                [disabled]="next===t.status || isBusy(t.id!) || !(canEdit$ | async)"
-                                (click)="setTaskStatus(pid, i.id!, t, next)">
-                          {{ ('board.col.' + next) | translate }}
-                        </button>
-                      </div>
-
-                      <div style="display:flex; gap:6px; margin-top:6px;" *ngIf="auth.loggedIn$ | async">
-                        <button mat-stroked-button
-                                *ngIf="(members.isEditor$ | async) && !(t.assignees || []).includes((auth.uid$ | async) || '')"
-                                [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
-                                (click)="assignToMe(pid, i.id!, t)">
-                          {{ 'board.assignToMe' | translate }}
-                        </button>
-                        <button mat-stroked-button
-                                *ngIf="(members.isEditor$ | async) && (t.assignees || []).includes((auth.uid$ | async) || '')"
-                                [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
-                                (click)="unassignMe(pid, i.id!, t)">
-                          {{ 'board.unassign' | translate }}
-                        </button>
-                        <span
-                          style="font-size:12px; opacity:.75; align-self:center;"
-                          *ngIf="(t.assignees?.length || 0) > 0">
-                          👥 {{ t.assignees?.length || 0 }}
-                        </span>
-
-                      </div>
-
-                    </div>
-
-                    <!-- 空プレースホルダ -->
-                    <div *ngIf="ts.length === 0"
-                         style="padding:8px; border:1px dashed #d1d5db; border-radius:8px; text-align:center; opacity:.6; min-height: 100px;">
-                      {{ 'board.dropHere' | translate }}
-                    </div>
-                  </div>
-                </ng-container>
-              </ng-container>
-            </ng-container>
-          </div>
-        </div>
-      </div>
-    </ng-container>
-  `
+  imports: [
+    AsyncPipe, NgFor, NgIf, DatePipe,
+    FormsModule,
+    MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule, MatCardModule, MatChipsModule,
+    RouterLink, DragDropModule, MatSnackBarModule, TranslateModule
+  ],
+  templateUrl: './board.page.html',
+  styleUrls: ['./board.page.scss']
 })
 export class BoardPage {
   // 列定義（表示は翻訳キーで行う）
   statusCols = ['not_started','in_progress','done'] as const;
+
+  readonly colAccent: Record<(typeof this.statusCols)[number], string> = {
+    not_started: '#9ca3af',
+    in_progress: '#0ea5e9',
+    done: '#22c55e'
+  };
 
   problems$!: Observable<Problem[]>;
   selectedProblemId: string | null = null;
@@ -384,7 +270,7 @@ export class BoardPage {
     });
   }
 
-  private bucket(s: Task['status'] | undefined): 'not_started'|'in_progress'|'done' {
+  bucket(s: Task['status'] | undefined): 'not_started'|'in_progress'|'done' {
     if (s === 'done') return 'done';
     if (s === 'in_progress' || s === 'review_wait' || s === 'fixing') return 'in_progress';
     return 'not_started';

@@ -1,0 +1,174 @@
+<section class="board-page">
+  <header class="board-header">
+    <div class="header-left">
+      <div class="title-block">
+        <h1>{{ 'nav.board' | translate }}</h1>
+        <p class="subtitle" *ngIf="!selectedProblemId">{{ 'board.selectProblemHint' | translate }}</p>
+      </div>
+      <div class="problem-select">
+        <mat-form-field appearance="outline" floatLabel="always">
+          <mat-label>{{ 'label.problem' | translate }}</mat-label>
+          <mat-select
+            [(ngModel)]="selectedProblemId"
+            (ngModelChange)="onSelectProblem($event)"
+            [disabled]="(problems$ | async)?.length === 0"
+          >
+            <mat-option [value]="null">{{ 'common.selectPrompt' | translate }}</mat-option>
+            <mat-option *ngFor="let p of (problems$ | async)" [value]="p.id">{{ p.title }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <button mat-stroked-button type="button" class="filter-button">
+        <mat-icon>tune</mat-icon>
+        <span>{{ 'common.filter' | translate }}</span>
+      </button>
+
+      <div class="account" *ngIf="auth.loggedIn$ | async; else signin">
+        <span class="name">{{ (auth.displayName$ | async) || ('auth.signedIn' | translate) }}</span>
+        <button mat-stroked-button type="button" (click)="auth.signOut()">{{ 'auth.signOut' | translate }}</button>
+      </div>
+      <ng-template #signin>
+        <button mat-raised-button color="primary" type="button" (click)="auth.signInWithGoogle()">
+          {{ 'auth.signIn' | translate }}
+        </button>
+      </ng-template>
+    </div>
+  </header>
+
+  <div class="status-banner" *ngIf="!(isOnline$ | async)">
+    <mat-icon>signal_wifi_off</mat-icon>
+    <span>{{ 'board.offlineNotice' | translate }}</span>
+  </div>
+
+  <ng-container *ngIf="selectedProblemId as pid">
+    <div class="loading" *ngIf="(issues$ | async) === null">{{ 'issue.loading' | translate }}</div>
+
+    <ng-container *ngIf="(issues$ | async) as issues">
+      <div class="empty" *ngIf="!issues.length">{{ 'issue.noneYet' | translate }}</div>
+
+      <div class="board-grid" *ngIf="issues.length">
+        <section
+          class="board-column"
+          *ngFor="let col of statusCols"
+          [style.--col-accent]="colAccent[col]"
+        >
+          <header class="column-header">
+            <div class="column-title">{{ ('board.col.' + col) | translate }}</div>
+            <span class="column-count">{{ totals[col] }}</span>
+          </header>
+
+          <div class="column-body">
+            <ng-container *ngFor="let issue of issues">
+              <ng-container *ngIf="tasksMap[key(pid, issue.id!)] | async as tasks">
+                <ng-container *ngIf="tasksByStatus(tasks, col) as ts">
+                  <section
+                    class="issue-stack"
+                    cdkDropList
+                    [cdkDropListData]="ts"
+                    [cdkDropListConnectedTo]="listIds(issue.id!)"
+                    [id]="listId(col, issue.id!)"
+                    (cdkDropListDropped)="onListDrop($event, pid, issue.id!)"
+                    [cdkDropListEnterPredicate]="canEnter"
+                    [cdkDropListDisabled]="!(canEdit$ | async)"
+                    cdkDropListOrientation="vertical"
+                  >
+                    <div class="issue-stack__header">
+                      <div class="issue-title">{{ issue.title }}</div>
+                      <span class="issue-count">{{ ts.length }} {{ 'board.items' | translate }}</span>
+                    </div>
+
+                    <mat-card
+                      class="task-card"
+                      *ngFor="let t of ts; trackBy: trackTask"
+                      cdkDrag
+                      [cdkDragData]="{ task: t, issueId: issue.id }"
+                      [cdkDragDisabled]="isBusy(t.id!) || !(canEdit$ | async)"
+                      [class.task-card--disabled]="isBusy(t.id!) || !(canEdit$ | async)"
+                    >
+                      <ng-template cdkDragPreview>
+                        <mat-card class="task-card task-card--preview">
+                          <div class="task-card__title">{{ t.title }}</div>
+                        </mat-card>
+                      </ng-template>
+                      <ng-template cdkDragPlaceholder>
+                        <div class="task-card task-card--placeholder"></div>
+                      </ng-template>
+
+                      <div class="task-card__meta">
+                        <span class="task-id" *ngIf="t.id">#{{ t.id.slice(0, 6) }}</span>
+                        <span class="task-assignees" *ngIf="(t.assignees?.length || 0) > 0">
+                          <mat-icon>group</mat-icon>
+                          {{ t.assignees?.length || 0 }}
+                        </span>
+                      </div>
+
+                      <div class="task-card__title">{{ t.title }}</div>
+                      <p class="task-card__description" *ngIf="t.description">{{ t.description }}</p>
+
+                      <div class="task-card__chips">
+                        <mat-chip-set>
+                          <mat-chip appearance="outlined" class="chip chip-priority">
+                            <mat-icon matChipAvatar>flag</mat-icon>
+                            <span>{{ t.priority || ('common.none' | translate) }}</span>
+                          </mat-chip>
+                          <mat-chip appearance="outlined" class="chip chip-status">
+                            <mat-icon matChipAvatar>timeline</mat-icon>
+                            <span>{{ ('board.col.' + bucket(t.status)) | translate }}</span>
+                          </mat-chip>
+                          <mat-chip appearance="outlined" class="chip chip-due">
+                            <mat-icon matChipAvatar>event</mat-icon>
+                            <ng-container *ngIf="t.dueDate; else noDue">
+                              {{ t.dueDate | date:'yyyy/MM/dd' }}
+                            </ng-container>
+                            <ng-template #noDue>{{ 'common.none' | translate }}</ng-template>
+                          </mat-chip>
+                        </mat-chip-set>
+                      </div>
+
+                      <div class="task-card__actions" *ngIf="isEditor$ | async">
+                        <button
+                          mat-stroked-button
+                          *ngFor="let next of statusCols"
+                          [disabled]="next === t.status || isBusy(t.id!) || !(canEdit$ | async)"
+                          (click)="setTaskStatus(pid, issue.id!, t, next)"
+                        >
+                          {{ ('board.col.' + next) | translate }}
+                        </button>
+                      </div>
+
+                      <div class="task-card__assign" *ngIf="auth.loggedIn$ | async">
+                        <button
+                          mat-stroked-button
+                          *ngIf="(members.isEditor$ | async) && !(t.assignees || []).includes((auth.uid$ | async) || '')"
+                          [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
+                          (click)="assignToMe(pid, issue.id!, t)"
+                        >
+                          {{ 'board.assignToMe' | translate }}
+                        </button>
+                        <button
+                          mat-stroked-button
+                          *ngIf="(members.isEditor$ | async) && (t.assignees || []).includes((auth.uid$ | async) || '')"
+                          [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
+                          (click)="unassignMe(pid, issue.id!, t)"
+                        >
+                          {{ 'board.unassign' | translate }}
+                        </button>
+                      </div>
+                    </mat-card>
+
+                    <div class="issue-placeholder" *ngIf="ts.length === 0">
+                      {{ 'board.dropHere' | translate }}
+                    </div>
+                  </section>
+                </ng-container>
+              </ng-container>
+            </ng-container>
+          </div>
+        </section>
+      </div>
+    </ng-container>
+  </ng-container>
+</section>

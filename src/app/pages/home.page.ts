@@ -118,12 +118,6 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
     </ng-template>
 
     <ng-template #editor>
-      <nav style="margin-bottom:12px;">
-        <a routerLink="/tree">🌳 {{ 'nav.tree' | translate }}</a> |
-        <a routerLink="/board">📋 {{ 'nav.board' | translate }}</a> |
-        <a routerLink="/schedule">📆 {{ 'nav.schedule' | translate }}</a>
-      </nav>
-
       <!-- 問題セレクト -->
       <div style="display:flex; align-items:center; gap:12px; margin:8px 0 12px;">
         <label>{{ 'label.problem' | translate }}：
