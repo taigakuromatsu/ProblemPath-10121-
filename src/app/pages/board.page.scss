@@ -105,6 +105,8 @@
   border: 1px solid var(--border);
   min-height: calc(240px * var(--m));
   overflow: visible;
+}
+
 .board-column.not_started {
   --col-accent: var(--accent-red);
 }

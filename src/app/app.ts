@@ -74,11 +74,6 @@ import { AuthService } from './services/auth.service';
           <span class="spacer"></span>
 
           <div class="topbar-actions topbar-right minw-0" role="group" aria-label="Toolbar actions">
-            <button mat-stroked-button type="button" class="filter-button" disabled>
-              <mat-icon>tune</mat-icon>
-              <span>{{ 'common.filter' | translate }}</span>
-            </button>
-
             <ng-container *ngIf="auth.loggedIn$ | async; else signIn">
               <button mat-stroked-button type="button" class="auth-button" (click)="auth.signOut()">
                 {{ 'auth.signOut' | translate }}

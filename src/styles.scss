@@ -38,9 +38,9 @@ html.dark {
    --------------------------- */
 
 :root {
-  /* Fluid × Density */
+  /* Fluid × Density - 約20%コンパクトに */
   --scale: clamp(0.85, calc(100vw / 1440), 1);
-  --density: 0.8;
+  --density: 0.64;
   --m: calc(var(--scale) * var(--density));
 
   /* Space & Size */
@@ -59,7 +59,7 @@ html.dark {
 
   /* Layout */
   --card-w: calc(340px * var(--m));
-  --sidebar: calc(280px * var(--m));
+  --sidebar: calc(140px * var(--m));
   --topbar-h: calc(56px * var(--m));
 
   /* Palette */
@@ -484,26 +484,32 @@ hr {
   flex-wrap: wrap;
 }
 
-.filter-button,
 .auth-button {
   border-radius: 999px !important;
-  height: calc(34px * var(--m));
-  padding: 0 calc(14px * var(--m));
+  height: calc(17px * var(--m));
+  padding: 0 calc(7px * var(--m));
   display: inline-flex;
   align-items: center;
   gap: var(--gap-1);
+  font-size: calc(11px * var(--m));
 }
 
 .user-chip {
   display: inline-flex;
   align-items: center;
-  padding: 0 calc(12px * var(--m));
-  height: calc(30px * var(--m));
+  padding: 0 calc(6px * var(--m));
+  height: calc(15px * var(--m));
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
   color: inherit;
-  font-size: calc(13px * var(--m));
+  font-size: calc(11px * var(--m));
   min-width: 0;
+}
+
+.topbar .mat-icon {
+  font-size: calc(11px * var(--m));
+  width: calc(11px * var(--m));
+  height: calc(11px * var(--m));
 }
 
 .content-area {

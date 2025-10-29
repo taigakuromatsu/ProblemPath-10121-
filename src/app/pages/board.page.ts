@@ -1,6 +1,6 @@
 // src/app/pages/board.page.ts
 import { Component, DestroyRef } from '@angular/core';
-import { AsyncPipe, DatePipe, NgFor, NgIf } from '@angular/common';
+import { AsyncPipe, DatePipe, NgFor, NgIf, NgClass } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Observable, BehaviorSubject, of, combineLatest, firstValueFrom } from 'rxjs';
 import { switchMap, shareReplay, take, tap, map, distinctUntilChanged } from 'rxjs/operators';
@@ -30,7 +30,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core'; // ★ 
   standalone: true,
   selector: 'pp-board',
   imports: [
-    AsyncPipe, NgFor, NgIf, DatePipe,
+    AsyncPipe, NgFor, NgIf, NgClass, DatePipe,
     FormsModule,
     MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule, MatCardModule, MatChipsModule,
     DragDropModule, MatSnackBarModule, TranslateModule
