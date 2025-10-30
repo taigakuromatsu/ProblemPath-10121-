@@ -10,4 +10,4 @@ export type Suggestion = {
 export type SuggestOutput = {
     suggestions: Suggestion[];
 };
-export declare const issueSuggest: functionsV1.HttpsFunction & functionsV1.Runnable<any>;
+export declare const issueSuggestHttp: functionsV1.HttpsFunction;
