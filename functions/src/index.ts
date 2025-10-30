@@ -6,7 +6,7 @@ import {
   type DocumentReference,
 } from "firebase-admin/firestore";
 import type { MulticastMessage, MessagingOptions } from "firebase-admin/messaging";
-import { onRequest } from "firebase-functions/v2/https";
+import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
 import { setGlobalOptions } from "firebase-functions/v2";
 import {
   onDocumentCreated,
@@ -21,6 +21,8 @@ import {
   sendToTokens,
   wasReminderSent,
 } from "./notify";
+import { callGemini } from "./providers/gemini";
+import { callOpenAI } from "./providers/openai";
 
 if (!getApps().length) {
   initializeApp();
@@ -453,3 +455,249 @@ export const taskDueReminder = onSchedule(
   }
 );
 
+
+const ALLOWED_SUGGESTION_ORIGINS = [
+  "https://kensyu10121.web.app",
+  "https://kensyu10121.firebaseapp.com",
+];
+
+const JSON_SCHEMA_PROMPT = `必ず次の JSON だけを返すこと: {
+  "suggestions": [
+    {
+      "title": string,
+      "description": string,
+      "acceptanceCriteria": string[]
+    }
+  ]
+}`;
+
+interface SuggestIssuesInput {
+  problemTitle?: unknown;
+  problemTemplate?: Record<string, unknown> | null;
+  locale?: string;
+}
+
+interface SanitizedTemplate {
+  phenomenon?: string;
+  cause?: string;
+  goal?: string;
+  constraints?: string;
+  stakeholders?: string;
+  metrics?: string;
+  solution?: string;
+}
+
+interface SanitizedSuggestInput {
+  problemTitle: string;
+  problemTemplate: SanitizedTemplate;
+  locale: "ja" | "en";
+}
+
+type IssueSuggestionPayload = {
+  title: string;
+  description: string;
+  acceptanceCriteria: string[];
+};
+
+const MAX_SUGGESTIONS = 5;
+const MAX_ACCEPTANCE_CRITERIA = 5;
+
+export const suggestIssues = onCall(
+  {
+    cors: ALLOWED_SUGGESTION_ORIGINS,
+    enforceAppCheck: true,
+  },
+  async (request) => {
+    if (!request.auth?.uid) {
+      throw new HttpsError("unauthenticated", "Auth required");
+    }
+
+    const sanitized = sanitizeInput((request.data ?? {}) as SuggestIssuesInput);
+
+    if (!sanitized.problemTitle) {
+      throw new HttpsError("invalid-argument", "problemTitle is required");
+    }
+
+    const prompt = buildPrompt(sanitized);
+    const provider = (process.env.AI_PROVIDER ?? "").toLowerCase();
+    const modelOverride = process.env.AI_MODEL;
+    const maxTokens = parseInt(process.env.AI_MAX_TOKENS ?? "", 10);
+    const safeMaxTokens = Number.isFinite(maxTokens) && maxTokens > 0
+      ? Math.min(maxTokens, 1600)
+      : 800;
+
+    let aiResponse = "";
+
+    try {
+      if (provider === "openai") {
+        const apiKey = process.env.AI_OPENAI_KEY;
+        if (!apiKey) {
+          throw new HttpsError("failed-precondition", "Missing OpenAI key");
+        }
+        const model = modelOverride || "gpt-4o-mini";
+        aiResponse = await callOpenAI(apiKey, model, prompt, safeMaxTokens);
+      } else if (provider === "gemini") {
+        const apiKey = process.env.AI_GEMINI_KEY;
+        if (!apiKey) {
+          throw new HttpsError("failed-precondition", "Missing Gemini key");
+        }
+        const model = modelOverride || "gemini-1.5-pro";
+        aiResponse = await callGemini(apiKey, model, prompt, safeMaxTokens);
+      } else {
+        throw new HttpsError("failed-precondition", "AI provider not configured");
+      }
+    } catch (error) {
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+      console.error("[suggestIssues] AI provider error", error);
+      throw new HttpsError("internal", "AI provider error");
+    }
+
+    const suggestions = parseAiSuggestions(aiResponse);
+    return { suggestions };
+  }
+);
+
+function sanitizeInput(raw: SuggestIssuesInput): SanitizedSuggestInput {
+  const problemTitle = safeString(raw.problemTitle, 200);
+  const locale: "ja" | "en" = raw.locale === "en" ? "en" : "ja";
+
+  const templateRaw = raw.problemTemplate ?? {};
+  const template: SanitizedTemplate = {};
+
+  const assignIfAny = (
+    key: keyof SanitizedTemplate,
+    maxLength = 800
+  ) => {
+    const value = safeString((templateRaw as any)[key], maxLength);
+    if (value) {
+      template[key] = value;
+    }
+  };
+
+  assignIfAny("phenomenon");
+  assignIfAny("cause");
+  assignIfAny("goal");
+  assignIfAny("constraints");
+  assignIfAny("stakeholders");
+  assignIfAny("metrics");
+  assignIfAny("solution");
+
+  return {
+    problemTitle,
+    problemTemplate: template,
+    locale,
+  };
+}
+
+function buildPrompt(input: SanitizedSuggestInput): string {
+  const detailLines = [
+    `- タイトル: ${input.problemTitle}`,
+  ];
+
+  const tpl = input.problemTemplate;
+  if (tpl.phenomenon) detailLines.push(`- 現象: ${tpl.phenomenon}`);
+  if (tpl.cause) detailLines.push(`- 原因: ${tpl.cause}`);
+  if (tpl.goal) detailLines.push(`- 目標: ${tpl.goal}`);
+  if (tpl.constraints) detailLines.push(`- 制約: ${tpl.constraints}`);
+  if (tpl.stakeholders) detailLines.push(`- 関係者: ${tpl.stakeholders}`);
+  if (tpl.metrics) detailLines.push(`- 指標: ${tpl.metrics}`);
+  if (tpl.solution) detailLines.push(`- 想定される解決策: ${tpl.solution}`);
+
+  return [
+    `あなたはプロジェクトマネジメントの専門家です。言語は ${input.locale} で回答してください。`,
+    "",
+    "上位 Problem の概要:",
+    ...detailLines,
+    "",
+    "要件:",
+    "- 実行可能で独立した Issue 候補を 3 件提案。",
+    "- 各候補は受け入れ条件(acceptanceCriteria)を 2-5 個。",
+    "- タイトルは簡潔で具体的に。",
+    "",
+    JSON_SCHEMA_PROMPT.trim(),
+    "",
+    "注意: JSON 以外の文字は出力しない。",
+  ].join("\n");
+}
+
+function parseAiSuggestions(text: string): IssueSuggestionPayload[] {
+  if (!text) {
+    return [];
+  }
+
+  const cleaned = stripCodeFences(text).trim();
+  const parsed = tryParseJson(cleaned);
+
+  if (!parsed || !Array.isArray(parsed.suggestions)) {
+    return [];
+  }
+
+  const result: IssueSuggestionPayload[] = [];
+
+  for (const raw of parsed.suggestions) {
+    const title = safeString(raw?.title, 160);
+    if (!title) {
+      continue;
+    }
+
+    const description = safeString(raw?.description, 2000);
+    const acceptanceCriteria = Array.isArray(raw?.acceptanceCriteria)
+      ? raw.acceptanceCriteria
+          .map((item: unknown) => safeString(item, 300))
+          .filter((item): item is string => Boolean(item))
+          .slice(0, MAX_ACCEPTANCE_CRITERIA)
+      : [];
+
+    result.push({
+      title,
+      description,
+      acceptanceCriteria,
+    });
+
+    if (result.length >= MAX_SUGGESTIONS) {
+      break;
+    }
+  }
+
+  return result;
+}
+
+function stripCodeFences(text: string): string {
+  return text.replace(/```(?:json)?/gi, "");
+}
+
+function tryParseJson(text: string): any | null {
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start !== -1 && end !== -1 && end > start) {
+      const sliced = text.slice(start, end + 1);
+      try {
+        return JSON.parse(sliced);
+      } catch (nested) {
+        console.warn("[suggestIssues] Failed to parse JSON", nested);
+      }
+    }
+  }
+
+  return null;
+}
+
+function safeString(value: unknown, maxLength = 800): string {
+  if (value === undefined || value === null) {
+    return "";
+  }
+  const str = String(value).trim();
+  if (!str) {
+    return "";
+  }
+  return str.length > maxLength ? str.slice(0, maxLength) : str;
+}

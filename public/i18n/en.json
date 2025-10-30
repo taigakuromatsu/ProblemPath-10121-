@@ -45,7 +45,21 @@
     "loading": "Loading…",
     "projectNotSelected": "Project is not selected",
     "none": "(None)",
-    "filter": "Filter"
+    "filter": "Filter",
+    "close": "Close"
+  },
+  "assist": {
+    "button": "AI Suggest",
+    "title": "AI Issue Suggestions",
+    "useThis": "Use this",
+    "empty": "No suggestions were returned. Please adjust your inputs.",
+    "loading": "Fetching suggestions…",
+    "error": "Failed to fetch AI suggestions. Please try again later.",
+    "selectedTitle": "Applied suggestion",
+    "previewNote": "Edit the content as needed and move the acceptance criteria into tasks or comments.",
+    "clear": "Clear",
+    "acceptanceCriteria": "Acceptance criteria",
+    "selectProblem": "Please select a Problem before requesting suggestions."
   },
   "template": {
     "bug": "Bug/Issue",

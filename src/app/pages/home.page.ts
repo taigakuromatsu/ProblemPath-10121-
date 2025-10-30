@@ -8,6 +8,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { PrefsService } from '../services/prefs.service';
 import { ThemeService } from '../services/theme.service';
@@ -30,6 +31,8 @@ import { MessagingService, FcmNotice } from '../services/messaging.service';
 import { Firestore, doc, docData } from '@angular/fire/firestore';
 import { MatDividerModule } from '@angular/material/divider';
 import { TranslatePipe } from '@ngx-translate/core';
+import { AiAssistService, IssueSuggestion as AiIssueSuggestion, SuggestIssuesPayload } from '../services/ai-assist.service';
+import { IssueSuggestDialogComponent } from '../components/issue-suggest-dialog.component';
 
 // ---- このページ専用の拡張型 ----
 type ProblemWithDef = Problem & {
@@ -59,9 +62,9 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
   selector: 'pp-home',
   imports: [
     RouterLink, AsyncPipe, NgFor, NgIf, JsonPipe, DatePipe, FormsModule,
-    MatButtonModule, MatSelectModule, MatFormFieldModule, MatIconModule, 
-    MatCardModule, MatChipsModule, MatSnackBarModule, TranslateModule,
-    MatDividerModule
+    MatButtonModule, MatSelectModule, MatFormFieldModule, MatIconModule,
+    MatCardModule, MatChipsModule, MatSnackBarModule, MatDialogModule,
+    TranslateModule, MatDividerModule
   ],
   templateUrl: './home.page.html',
   styleUrls: ['./home.page.scss']
@@ -79,6 +82,8 @@ export class HomePage implements OnInit, OnDestroy {
   selectedProblemDoc$!: Observable<ProblemWithDef | null>;
 
   issueTitle = '';
+  aiBusy = false;
+  aiSuggestion: AiIssueSuggestion | null = null;
   taskTitle: Record<string, string> = {}; // key = issueId
   tasksMap: Record<string, Observable<Task[]>> = {};
 
@@ -117,11 +122,13 @@ export class HomePage implements OnInit, OnDestroy {
     public members: MembersService,
     private invites: InvitesService,
     private snack: MatSnackBar,
+    private dialog: MatDialog,
     private drafts: DraftsService,
     private network: NetworkService,
     private msg: MessagingService,
     private fs: Firestore,
     private i18n: TranslateService,
+    private aiAssist: AiAssistService,
   ) {
     this.isOnline$ = this.network.isOnline$;
     this.canEdit$ = combineLatest([this.members.isEditor$, this.network.isOnline$]).pipe(
@@ -343,11 +350,85 @@ export class HomePage implements OnInit, OnDestroy {
     return `issueTitle:${pid}:${problemId}`;
   }
   onIssueTitleChange(val: string) {
+    if (this.aiSuggestion && val !== this.aiSuggestion.title) {
+      this.aiSuggestion = null;
+    }
     if (this.issueTitleTimer) clearTimeout(this.issueTitleTimer);
     this.issueTitleTimer = setTimeout(() => {
       const key = this.draftKeyIssueTitle(this.selectedProblemId);
       if (key) this.drafts.set(key, (val ?? '').toString());
     }, 600);
+  }
+
+  async openAiSuggestions() {
+    if (!(await this.requireOnline())) return;
+    if (!this.selectedProblemId) {
+      this.snack.open(this.t('assist.selectProblem', 'Problemを選択してください'), undefined, { duration: 4000 });
+      return;
+    }
+
+    this.aiBusy = true;
+    try {
+      const problem = await firstValueFrom(this.selectedProblemDoc$.pipe(take(1)));
+      if (!problem) {
+        this.snack.open(this.t('assist.selectProblem', 'Problemを選択してください'), undefined, { duration: 4000 });
+        return;
+      }
+
+      const suggestions = await this.aiAssist.suggestIssues({
+        problemTitle: problem.title,
+        problemTemplate: this.buildAiProblemTemplate(problem),
+        locale: this.lang,
+      });
+
+      const dialogRef = this.dialog.open(IssueSuggestDialogComponent, {
+        data: { suggestions },
+        width: '720px',
+        autoFocus: false,
+      });
+
+      const picked = await firstValueFrom(dialogRef.afterClosed());
+      if (picked) {
+        this.issueTitle = picked.title;
+        this.aiSuggestion = picked;
+        this.onIssueTitleChange(this.issueTitle);
+      }
+    } catch (e) {
+      console.error('[assist] suggestIssues error', e);
+      this.snack.open(this.t('assist.error', 'AI提案の取得に失敗しました'), undefined, { duration: 5000 });
+    } finally {
+      this.aiBusy = false;
+    }
+  }
+
+  clearAiSuggestion() {
+    this.aiSuggestion = null;
+  }
+
+  private buildAiProblemTemplate(problem: ProblemWithDef | null): SuggestIssuesPayload['problemTemplate'] {
+    const template: SuggestIssuesPayload['problemTemplate'] = {};
+    if (!problem) return template;
+
+    const def = problem.problemDef ?? {};
+    const preset = problem.template ?? {};
+
+    const setField = (key: keyof SuggestIssuesPayload['problemTemplate'], ...values: Array<string | null | undefined>) => {
+      for (const value of values) {
+        if (typeof value !== 'string') continue;
+        const trimmed = value.trim();
+        if (trimmed) {
+          template[key] = trimmed;
+          break;
+        }
+      }
+    };
+
+    setField('phenomenon', def.phenomenon, preset.phenomenon);
+    setField('cause', def.cause ?? undefined, preset.cause);
+    setField('goal', def.goal, preset.goal);
+    setField('solution', def.solution ?? undefined, preset.solution);
+
+    return template;
   }
 
   // --- Problem 操作 ---
@@ -377,6 +458,7 @@ export class HomePage implements OnInit, OnDestroy {
     if (!t) return;
     this.withPid(pid => this.issues.create(pid, problemId, { title: t }).then(() => {
       this.issueTitle = '';
+      this.aiSuggestion = null;
       const key = this.draftKeyIssueTitle(this.selectedProblemId);
       if (key) this.drafts.clear(key);
     }));
