@@ -280,5 +280,13 @@
     "title": "Comments / Files",
     "header": "Comments / Files — {{name}}",
     "count": "Comments: {{c}} / Files: {{f}}"
+  },
+  "ai": {
+    "suggestIssuesBtn": "Suggest with AI",
+    "pickOne": "Pick a suggestion:",
+    "loading": "Generating suggestions…",
+    "error": "AI error",
+    "clear": "Clear",
+    "noProblem": "Select a Problem first"
   }
 }

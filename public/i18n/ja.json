@@ -280,5 +280,13 @@
     "title": "コメント/ファイル",
     "header": "コメント / ファイル — {{name}}",
     "count": "コメント: {{c}} / ファイル: {{f}}"
+  },
+  "ai": {
+    "suggestIssuesBtn": "AIで課題を提案",
+    "pickOne": "課題を選択:",
+    "loading": "課題を生成中…",
+    "error": "AIエラー",
+    "clear": "クリア",
+    "noProblem": "問題を選択してください"
   }
 }

@@ -1,14 +1,22 @@
-
 // src/app/app.config.ts
-import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZoneChangeDetection, importProvidersFrom, APP_INITIALIZER } from '@angular/core';
+import {
+  ApplicationConfig,
+  provideBrowserGlobalErrorListeners,
+  provideZoneChangeDetection,
+  importProvidersFrom,
+  APP_INITIALIZER,
+} from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { routes } from './app.routes';
 import { provideHttpClient, withFetch, HttpClient } from '@angular/common/http';
+
 import { TranslateModule, TranslateLoader } from '@ngx-translate/core';
 import { I18nService } from './i18n/i18n.service';
+
 import { provideStorage, getStorage } from '@angular/fire/storage';
-import { provideMessaging, getMessaging, } from '@angular/fire/messaging';
-// loader はそのまま
+import { provideMessaging, getMessaging } from '@angular/fire/messaging';
+
+// ---- loader ----
 class SimpleHttpTranslateLoader implements TranslateLoader {
   constructor(private http: HttpClient) {}
   getTranslation(lang: string) {
@@ -19,8 +27,10 @@ export function simpleHttpLoaderFactory(http: HttpClient): TranslateLoader {
   return new SimpleHttpTranslateLoader(http);
 }
 
-// ★ I18nService を必ず起動させる（中身は no-op でOK）
-function initI18n(_i18n: I18nService) { return () => void 0; }
+// 起動時に I18nService を確実に初期化
+function initI18n(_i18n: I18nService) {
+  return () => void 0;
+}
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -28,12 +38,14 @@ export const appConfig: ApplicationConfig = {
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes),
     provideHttpClient(withFetch()),
+
+    // ★ これらは「そのまま」並べる（importProvidersFromに入れない）
     provideStorage(() => getStorage()),
     provideMessaging(() => getMessaging()),
 
+    // ★ importProvidersFrom には NgModule だけを渡す
     importProvidersFrom(
       TranslateModule.forRoot({
-        // deprecate 対応：defaultLanguage / useDefaultLang は使わない
         fallbackLang: 'ja',
         loader: {
           provide: TranslateLoader,
@@ -45,7 +57,9 @@ export const appConfig: ApplicationConfig = {
 
     I18nService,
     { provide: APP_INITIALIZER, useFactory: initI18n, deps: [I18nService], multi: true },
-  ]
+  ],
 };
+
+
 
 

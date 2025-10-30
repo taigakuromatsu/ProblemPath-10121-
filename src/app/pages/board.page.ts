@@ -24,7 +24,7 @@ import { AuthService } from '../services/auth.service';
 import { MembersService } from '../services/members.service';
 import { NetworkService } from '../services/network.service';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { TranslateModule, TranslateService } from '@ngx-translate/core'; // ★ 追加
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 
 @Component({
   standalone: true,

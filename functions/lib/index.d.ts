@@ -1,3 +1,4 @@
+export { issueSuggest } from "./issue-suggest";
 export declare const ping: unknown;
 export declare const commentCreatedOnProblem: any;
 export declare const commentCreatedOnIssue: any;

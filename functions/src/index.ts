@@ -21,6 +21,7 @@ import {
   sendToTokens,
   wasReminderSent,
 } from "./notify";
+export { issueSuggest } from "./issue-suggest";
 
 if (!getApps().length) {
   initializeApp();

@@ -29,6 +29,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { MessagingService, FcmNotice } from '../services/messaging.service';
 import { Firestore, doc, docData } from '@angular/fire/firestore';
 import { MatDividerModule } from '@angular/material/divider';
+import { AiIssueSuggestComponent } from '../components/ai-issue-suggest.component';
 import { TranslatePipe } from '@ngx-translate/core';
 
 // ---- このページ専用の拡張型 ----
@@ -61,7 +62,7 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
     RouterLink, AsyncPipe, NgFor, NgIf, JsonPipe, DatePipe, FormsModule,
     MatButtonModule, MatSelectModule, MatFormFieldModule, MatIconModule, 
     MatCardModule, MatChipsModule, MatSnackBarModule, TranslateModule,
-    MatDividerModule
+    MatDividerModule, AiIssueSuggestComponent
   ],
   templateUrl: './home.page.html',
   styleUrls: ['./home.page.scss']
