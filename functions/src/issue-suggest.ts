@@ -1,54 +1,26 @@
-// ✅ v1 を明示して読み込む
+// ✅ v1 明示
 import * as functionsV1 from 'firebase-functions/v1';
 import type { Request, Response } from 'express';
 import { getAuth } from 'firebase-admin/auth';
+import { AiClient, IssueSuggestInput } from './ai';
 
-// ---- 型定義 ----
-export type SuggestInput = {
-  title?: string;
-  description?: string;
-};
-
-export type Suggestion = {
-  text: string;
-  reason?: string;
-};
-
-export type SuggestOutput = {
-  suggestions: Suggestion[];
-};
-
-// ---- 共通ロジック ----
-async function handleIssueSuggest(data: SuggestInput, userId: string | null): Promise<SuggestOutput> {
-  if (!userId) {
-    throw new functionsV1.https.HttpsError('unauthenticated', 'Authentication required.');
-  }
-
-  const title = (data?.title ?? '').trim();
-  const description = (data?.description ?? '').trim();
-  if (!title && !description) {
-    throw new functionsV1.https.HttpsError('invalid-argument', 'Either "title" or "description" is required.');
-  }
-
-  // ---- ダミーの提案生成ロジック ----
-  const normalized = (title + ' ' + description).toLowerCase();
-  const suggestions: Suggestion[] = [];
-
-  if (normalized.includes('ui') || normalized.includes('design') || normalized.includes('レイアウト')) {
-    suggestions.push({ text: 'UI改善：主要カードの情報密度を整理', reason: '重複情報の統合と階層化で可読性を向上' });
-  }
-  if (normalized.includes('deadline') || normalized.includes('due') || normalized.includes('期限')) {
-    suggestions.push({ text: '期限アラートの段階制御（7日/3日/当日）', reason: '緊急度に応じた通知で見逃し防止' });
-  }
-  if (suggestions.length === 0) {
-    suggestions.push(
-      { text: '要件ブレイクダウン（Problem→Issue→Taskの再配分）' },
-      { text: 'タグ/担当/優先度の付与を自動補助' }
-    );
-  }
-
-  return { suggestions };
-}
+// ---- 入力型（後方互換も吸収）----
+type HttpInput =
+  | {
+      lang?: 'ja' | 'en';
+      projectId?: string;
+      problem?: {
+        title?: string;
+        phenomenon?: string;
+        cause?: string | null;
+        solution?: string | null;
+        goal?: string;
+      };
+      // 旧フォーマット互換
+      title?: string;
+      description?: string;
+    }
+  | undefined;
 
 // ---- CORS ----
 function setCorsHeaders(res: Response) {
@@ -58,68 +30,101 @@ function setCorsHeaders(res: Response) {
   res.set('Access-Control-Max-Age', '3600');
 }
 
-// ---- Body を安全に JSON 化 ----
-function safeParseBody(req: Request): SuggestInput {
+// ---- JSON パース（Buffer/文字列対応）----
+function safeParseBody(req: Request): HttpInput {
   const b: any = (req as any).body;
   if (!b) return {};
   if (typeof b === 'string') {
     try { return JSON.parse(b); } catch { return {}; }
   }
-  // Cloud Functions 環境で Buffer の可能性もある
   if (typeof Buffer !== 'undefined' && Buffer.isBuffer(b)) {
     try { return JSON.parse(b.toString('utf8')); } catch { return {}; }
   }
-  // 既にオブジェクトならそのまま
-  return b as SuggestInput;
+  return b as HttpInput;
 }
 
-// ✅ v1 の region() を使用（CORS を明示的に処理する onRequest 版）
 export const issueSuggestHttp = functionsV1
+  .runWith({})
   .region('asia-northeast1')
   .https.onRequest(async (req: Request, res: Response) => {
-    // CORS プリフライト
     if (req.method === 'OPTIONS') {
       setCorsHeaders(res);
       res.status(204).send('');
       return;
     }
-
     setCorsHeaders(res);
 
     try {
-      // 認証トークンの検証
+      // 認証
       const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      if (!authHeader?.startsWith('Bearer ')) {
         res.status(401).json({ error: 'Unauthorized: Missing or invalid authorization header' });
         return;
       }
-
       const token = authHeader.split('Bearer ')[1];
-      const auth = getAuth();
-      const decodedToken = await auth.verifyIdToken(token);
-      const userId = decodedToken.uid;
-
-      // リクエストボディの解析（確実に JSON 化）
-      const data: SuggestInput = safeParseBody(req);
-
-      // 受信確認ログ（短く）
-      console.log('[issueSuggestHttp] received', {
-        t: (data.title || '').slice(0, 40),
-        d: (data.description || '').slice(0, 40),
-      });
-
-      // ビジネスロジック
-      const result = await handleIssueSuggest(data, userId);
-      res.status(200).json(result);
-    } catch (error: any) {
-      console.error('issueSuggest error:', error);
-      if (error?.code === 'auth/id-token-expired' || error?.code === 'auth/argument-error') {
-        res.status(401).json({ error: 'Unauthorized: Invalid token' });
-      } else if (error instanceof functionsV1.https.HttpsError) {
-        res.status(400).json({ error: error.message, code: error.code });
-      } else {
-        res.status(500).json({ error: 'Internal server error' });
+      const decoded = await getAuth().verifyIdToken(token);
+      const uid = decoded.uid || null;
+      if (!uid) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
       }
-    }
+
+      // 入力
+      const raw = safeParseBody(req) || {};
+      const lang = (raw.lang === 'en' ? 'en' : 'ja') as 'ja'|'en';
+      const projectId = (raw.projectId || '').trim();
+
+      // 後方互換: title/description だけ来た場合でも最低限の Problem を作る
+      const fallbackProblem = {
+        title: (raw as any)?.title ?? '',
+        // description を分解して best-effort でフィールドに割り振り（軽いヒューリスティック）
+        phenomenon: (raw as any)?.description ?? undefined,
+      };
+
+      const prob = {
+        title: raw.problem?.title?.trim() || fallbackProblem.title,
+        phenomenon: raw.problem?.phenomenon ?? undefined,
+        cause: raw.problem?.cause ?? undefined,
+        solution: raw.problem?.solution ?? undefined,
+        goal: raw.problem?.goal ?? undefined,
+      };
+
+      if (!prob.title && !prob.phenomenon && !prob.goal) {
+        throw new functionsV1.https.HttpsError(
+          'invalid-argument',
+          'Problem definition is empty. Provide at least title or phenomenon/goal.'
+        );
+      }
+
+      const input: IssueSuggestInput = {
+        lang,
+        projectId: projectId || 'unknown',
+        problem: {
+          title: prob.title || '(untitled problem)',
+          phenomenon: prob.phenomenon,
+          cause: prob.cause,
+          solution: prob.solution,
+          goal: prob.goal,
+        },
+      };
+
+      // AI 呼び出し
+      const ai = new AiClient();
+      const out = await ai.suggestIssues(input);
+
+      res.status(200).json({ suggestions: out.suggestions.map((s) => ({ text: s })) });
+    } catch (error: any) {
+        console.error('[issueSuggestHttp] error', error);
+        if (error instanceof functionsV1.https.HttpsError) {
+          res.status(400).json({ error: error.message, code: error.code });
+        } else if (error?.code === 'auth/id-token-expired' || error?.code === 'auth/argument-error') {
+          res.status(401).json({ error: 'Unauthorized: Invalid token' });
+        } else {
+          res.status(500).json({ error: 'Internal server error', message: String(error?.message ?? error) });
+        }
+      }      
+
+  
   });
+
 

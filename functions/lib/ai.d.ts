@@ -13,7 +13,7 @@ export type IssueSuggestOutput = {
     suggestions: string[];
 };
 export declare class AiClient {
-    private client;
+    private vertexPromise;
     constructor();
     suggestIssues(input: IssueSuggestInput): Promise<IssueSuggestOutput>;
 }
