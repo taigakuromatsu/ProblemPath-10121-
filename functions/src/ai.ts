@@ -103,23 +103,40 @@ export class AiClient {
 
       // 応答本文（JSON 期待）
       const parts = (resp as any)?.response?.candidates?.[0]?.content?.parts ?? [];
-      const text = parts.map((p: any) => p?.text ?? "").join("");
+      const text = parts.map((p: any) => (p?.text ?? "").trim()).filter(Boolean).join("\n");
+
+        // 追加: parts が複数ならそれをそのまま候補化（JSON不達時の強化）
+        if (Array.isArray(parts) && parts.length > 1) {
+        const fromParts = parts
+            .map((p: any) => (p?.text ?? "").trim())
+            .filter(Boolean);
+        if (fromParts.length >= 3) {
+            return { suggestions: fromParts.slice(0, 7) };
+        }
+        }
 
       // 1) JSON 優先
-      try {
-        const parsed = JSON.parse(text);
-        if (Array.isArray(parsed?.suggestions)) {
-          const arr = parsed.suggestions as unknown[];
-          return {
-            suggestions: arr
-              .map((x) => (typeof x === "string" ? x.trim() : ""))
-              .filter(Boolean)
-              .slice(0, 7),
-          };
+        try {
+            const parsed = JSON.parse(text);
+            if (Array.isArray(parsed?.suggestions)) {
+            const arr = parsed.suggestions as unknown[];
+            const normalized = arr
+                .map(x => {
+                if (typeof x === "string") return x.trim();
+                if (x && typeof x === "object" && typeof (x as any).text === "string") {
+                    return String((x as any).text).trim();
+                }
+                return "";
+                })
+                .filter(Boolean);
+            if (normalized.length) {
+                return { suggestions: normalized.slice(0, 7) };
+            }
+            }
+        } catch {
+            /* JSON でなければ行分割へ */
         }
-      } catch {
-        // 2) JSON でなければ行分割フェイルセーフ
-      }
+  
 
       const suggestions = cleanLines(text).slice(0, 7);
       return { suggestions };
