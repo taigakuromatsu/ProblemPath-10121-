@@ -45,7 +45,21 @@
     "loading": "読み込み中…",
     "projectNotSelected": "プロジェクト未選択",
     "none": "（なし）",
-    "filter": "フィルター"
+    "filter": "フィルター",
+    "close": "閉じる"
+  },
+  "assist": {
+    "button": "AI提案",
+    "title": "AIが提案する課題候補",
+    "useThis": "この案を使う",
+    "empty": "提案が取得できませんでした。入力内容を確認してください。",
+    "loading": "提案を取得しています…",
+    "error": "AI提案の取得に失敗しました。時間をおいて再試行してください。",
+    "selectedTitle": "適用中の提案",
+    "previewNote": "内容を必要に応じて編集し、受け入れ条件はタスクなどに転記してください。",
+    "clear": "リセット",
+    "acceptanceCriteria": "受け入れ条件",
+    "selectProblem": "Problemを選択してから実行してください。"
   },
   "template": {
     "bug": "バグ/不具合",

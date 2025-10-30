@@ -157,6 +157,30 @@
             <input [(ngModel)]="issueTitle" name="issueTitle" [placeholder]="'issue.placeholderNewTitle' | translate" required (ngModelChange)="onIssueTitleChange($event)" />
             <button mat-raised-button color="primary" type="submit" [disabled]="!(canEdit$ | async)">＋ {{ 'issue.add' | translate }}</button>
           </form>
+          <div class="ai-assist-row" *ngIf="members.isEditor$ | async">
+            <button mat-stroked-button type="button" (click)="openAiSuggestions()" [disabled]="aiBusy || !(canEdit$ | async)">
+              <mat-icon>psychology</mat-icon>
+              {{ 'assist.button' | translate }}
+            </button>
+            <span class="assist-hint" *ngIf="aiBusy">{{ 'assist.loading' | translate }}</span>
+          </div>
+          <div class="ai-suggestion-preview" *ngIf="aiSuggestion as suggestion">
+            <div class="ai-suggestion-preview__header">
+              <strong>{{ 'assist.selectedTitle' | translate }}</strong>
+              <span class="ai-suggestion-preview__title">{{ suggestion.title }}</span>
+            </div>
+            <p class="ai-suggestion-preview__description">{{ suggestion.description }}</p>
+            <div *ngIf="suggestion.acceptanceCriteria?.length" class="ai-suggestion-preview__criteria">
+              <p class="ai-suggestion-preview__criteria-title">{{ 'assist.acceptanceCriteria' | translate }}</p>
+              <ul>
+                <li *ngFor="let ac of suggestion.acceptanceCriteria">{{ ac }}</li>
+              </ul>
+            </div>
+            <p class="ai-suggestion-preview__note">{{ 'assist.previewNote' | translate }}</p>
+            <div class="ai-suggestion-preview__actions">
+              <button mat-button type="button" (click)="clearAiSuggestion()">{{ 'assist.clear' | translate }}</button>
+            </div>
+          </div>
 
           <!-- Issue 一覧 -->
           <ng-container *ngIf="issues$ | async as issues; else loadingIssues">
