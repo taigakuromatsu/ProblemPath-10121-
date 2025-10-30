@@ -6,13 +6,7 @@ import {
   type DocumentReference,
 } from "firebase-admin/firestore";
 import type { MulticastMessage, MessagingOptions } from "firebase-admin/messaging";
-import { HttpsError, onCall, onRequest } from "firebase-functions/v2/https";
-import { setGlobalOptions } from "firebase-functions/v2";
-import {
-  onDocumentCreated,
-  type FirestoreEvent,
-} from "firebase-functions/v2/firestore";
-import { onSchedule } from "firebase-functions/v2/scheduler";
+import * as functions from "firebase-functions";
 import {
   listFcmTokensForUsers,
   listProjectMemberUids,
@@ -28,29 +22,12 @@ if (!getApps().length) {
   initializeApp();
 }
 
-setGlobalOptions({ region });
-
-export const ping = onRequest(async (_req, res) => {
+export const ping = functions.region("asia-northeast1").https.onRequest(async (_req, res) => {
   res.status(200).send("ok");
 });
 
 const firestore = getFirestore();
 
-type CommentParams = {
-  projectId: string;
-  problemId: string;
-  issueId?: string;
-  taskId?: string;
-  commentId: string;
-};
-
-type AttachmentParams = {
-  projectId: string;
-  problemId: string;
-  issueId?: string;
-  taskId?: string;
-  attachmentId: string;
-};
 
 const openTaskStatuses = ["not_started", "in_progress", "review_wait", "fixing"] as const;
 type ReminderWindow = "1d" | "7d";
@@ -95,13 +72,25 @@ function withWebPushLink(
 
 /** コメント作成時の通知（自己通知の抑止＋リンク付与） */
 async function handleCommentCreated(
-  event: FirestoreEvent<any, CommentParams>
-) {
-  const { projectId, problemId, issueId, taskId, commentId } = event.params;
-  const scope = determineScope(event.params);
+  event: functions.firestore.QueryDocumentSnapshot
+): Promise<void> {
+  const pathParts = event.ref.path.split("/");
+  const projectIdIndex = pathParts.indexOf("projects");
+  const problemIdIndex = pathParts.indexOf("problems");
+  const issueIdIndex = pathParts.indexOf("issues");
+  const taskIdIndex = pathParts.indexOf("tasks");
+  const commentIdIndex = pathParts.indexOf("comments");
+  
+  const projectId = projectIdIndex >= 0 ? pathParts[projectIdIndex + 1] : "";
+  const problemId = problemIdIndex >= 0 ? pathParts[problemIdIndex + 1] : "";
+  const issueId = issueIdIndex >= 0 ? pathParts[issueIdIndex + 1] : undefined;
+  const taskId = taskIdIndex >= 0 ? pathParts[taskIdIndex + 1] : undefined;
+  const commentId = commentIdIndex >= 0 ? pathParts[commentIdIndex + 1] : "";
+  
+  const scope = determineScope({ issueId, taskId });
 
   // 送信者（authorId）を onCreate データから取得して自己通知を除外
-  const authorId: string | undefined = event.data?.data()?.authorId;
+  const authorId: string | undefined = event.data()?.authorId;
 
   const allMemberUids = await listProjectMemberUids(projectId);
   const targetUids = authorId ? allMemberUids.filter(uid => uid !== authorId) : allMemberUids;
@@ -163,13 +152,25 @@ async function handleCommentCreated(
 
 /** 添付作成時の通知（自己通知の抑止＋リンク付与） */
 async function handleAttachmentCreated(
-  event: FirestoreEvent<any, AttachmentParams>
-) {
-  const { projectId, problemId, issueId, taskId, attachmentId } = event.params;
-  const scope = determineScope(event.params);
+  event: functions.firestore.QueryDocumentSnapshot
+): Promise<void> {
+  const pathParts = event.ref.path.split("/");
+  const projectIdIndex = pathParts.indexOf("projects");
+  const problemIdIndex = pathParts.indexOf("problems");
+  const issueIdIndex = pathParts.indexOf("issues");
+  const taskIdIndex = pathParts.indexOf("tasks");
+  const attachmentIdIndex = pathParts.indexOf("attachments");
+  
+  const projectId = projectIdIndex >= 0 ? pathParts[projectIdIndex + 1] : "";
+  const problemId = problemIdIndex >= 0 ? pathParts[problemIdIndex + 1] : "";
+  const issueId = issueIdIndex >= 0 ? pathParts[issueIdIndex + 1] : undefined;
+  const taskId = taskIdIndex >= 0 ? pathParts[taskIdIndex + 1] : undefined;
+  const attachmentId = attachmentIdIndex >= 0 ? pathParts[attachmentIdIndex + 1] : "";
+  
+  const scope = determineScope({ issueId, taskId });
 
   // 送信者（createdBy）を onCreate データから取得して自己通知を除外
-  const createdBy: string | undefined = event.data?.data()?.createdBy;
+  const createdBy: string | undefined = event.data()?.createdBy;
 
   const allMemberUids = await listProjectMemberUids(projectId);
   const targetUids = createdBy ? allMemberUids.filter(uid => uid !== createdBy) : allMemberUids;
@@ -324,86 +325,79 @@ async function notifyTaskReminder(
 
 // ======== Firestore triggers (自己通知抑止 & WebPushリンク 版) ========
 
-export const commentCreatedOnProblem = onDocumentCreated(
-  "projects/{projectId}/problems/{problemId}/comments/{commentId}",
-  async (event: FirestoreEvent<any, CommentParams>) => {
+export const commentCreatedOnProblem = functions
+  .region("asia-northeast1")
+  .firestore.document("projects/{projectId}/problems/{problemId}/comments/{commentId}")
+  .onCreate(async (snapshot: functions.firestore.QueryDocumentSnapshot) => {
     try {
-      if (!event.data) return;
-      await handleCommentCreated(event);
+      await handleCommentCreated(snapshot);
     } catch (e) {
-      console.error("[notify] commentCreatedOnProblem error", event.params, e);
+      console.error("[notify] commentCreatedOnProblem error", snapshot.ref.path, e);
     }
-  }
-);
+  });
 
-export const commentCreatedOnIssue = onDocumentCreated(
-  "projects/{projectId}/problems/{problemId}/issues/{issueId}/comments/{commentId}",
-  async (event: FirestoreEvent<any, CommentParams>) => {
+export const commentCreatedOnIssue = functions
+  .region("asia-northeast1")
+  .firestore.document("projects/{projectId}/problems/{problemId}/issues/{issueId}/comments/{commentId}")
+  .onCreate(async (snapshot) => {
     try {
-      if (!event.data) return;
-      await handleCommentCreated(event);
+      await handleCommentCreated(snapshot);
     } catch (e) {
-      console.error("[notify] commentCreatedOnIssue error", event.params, e);
+      console.error("[notify] commentCreatedOnIssue error", snapshot.ref.path, e);
     }
-  }
-);
+  });
 
-export const commentCreatedOnTask = onDocumentCreated(
-  "projects/{projectId}/problems/{problemId}/issues/{issueId}/tasks/{taskId}/comments/{commentId}",
-  async (event: FirestoreEvent<any, CommentParams>) => {
+export const commentCreatedOnTask = functions
+  .region("asia-northeast1")
+  .firestore.document("projects/{projectId}/problems/{problemId}/issues/{issueId}/tasks/{taskId}/comments/{commentId}")
+  .onCreate(async (snapshot: functions.firestore.QueryDocumentSnapshot) => {
     try {
-      if (!event.data) return;
-      await handleCommentCreated(event);
+      await handleCommentCreated(snapshot);
     } catch (e) {
-      console.error("[notify] commentCreatedOnTask error", event.params, e);
+      console.error("[notify] commentCreatedOnTask error", snapshot.ref.path, e);
     }
-  }
-);
+  });
 
-export const attachmentCreatedOnProblem = onDocumentCreated(
-  "projects/{projectId}/problems/{problemId}/attachments/{attachmentId}",
-  async (event: FirestoreEvent<any, AttachmentParams>) => {
+export const attachmentCreatedOnProblem = functions
+  .region("asia-northeast1")
+  .firestore.document("projects/{projectId}/problems/{problemId}/attachments/{attachmentId}")
+  .onCreate(async (snapshot: functions.firestore.QueryDocumentSnapshot) => {
     try {
-      if (!event.data) return;
-      await handleAttachmentCreated(event);
+      await handleAttachmentCreated(snapshot);
     } catch (e) {
-      console.error("[notify] attachmentCreatedOnProblem error", event.params, e);
+      console.error("[notify] attachmentCreatedOnProblem error", snapshot.ref.path, e);
     }
-  }
-);
+  });
 
-export const attachmentCreatedOnIssue = onDocumentCreated(
-  "projects/{projectId}/problems/{problemId}/issues/{issueId}/attachments/{attachmentId}",
-  async (event: FirestoreEvent<any, AttachmentParams>) => {
+export const attachmentCreatedOnIssue = functions
+  .region("asia-northeast1")
+innovation.firestore.document("projects/{projectId}/problems/{problemId}/issues/{issueId}/attachments/{attachmentId}")
+  .onCreate(async (snapshot: functions.firestore.QueryDocumentSnapshot) => {
     try {
-      if (!event.data) return;
-      await handleAttachmentCreated(event);
+      await handleAttachmentCreated(snapshot);
     } catch (e) {
-      console.error("[notify] attachmentCreatedOnIssue error", event.params, e);
+      console.error("[notify] attachmentCreatedOnIssue error", snapshot.ref.path, e);
     }
-  }
-);
+  });
 
-export const attachmentCreatedOnTask = onDocumentCreated(
-  "projects/{projectId}/problems/{problemId}/issues/{issueId}/tasks/{taskId}/attachments/{attachmentId}",
-  async (event: FirestoreEvent<any, AttachmentParams>) => {
+export const attachmentCreatedOnTask = functions
+  .region("asia-northeast1")
+  .firestore.document("projects/{projectId}/problems/{problemId}/issues/{issueId}/tasks/{taskId}/attachments/{attachmentId}")
+  .onCreate(async (snapshot: functions.firestore.QueryDocumentSnapshot) => {
     try {
-      if (!event.data) return;
-      await handleAttachmentCreated(event);
+      await handleAttachmentCreated(snapshot);
     } catch (e) {
-      console.error("[notify] attachmentCreatedOnTask error", event.params, e);
+      console.error("[notify] attachmentCreatedOnTask error", snapshot.ref.path, e);
     }
-  }
-);
+  });
 
 // ======== Scheduler (既存のまま + WebPushリンク付与) ========
 
-export const taskDueReminder = onSchedule(
-  {
-    schedule: "every 1 hours",
-    timeZone: "Asia/Tokyo",
-  },
-  async () => {
+export const taskDueReminder = functions
+  .region("asia-northeast1")
+  .pubsub.schedule("every 1 hours")
+  .timeZone("Asia/Tokyo")
+  .onRun(async () => {
     const today = getJstToday();
     const windows: { window: ReminderWindow; offset: number }[] = [
       { window: "1d", offset: 1 },
@@ -452,8 +446,7 @@ export const taskDueReminder = onSchedule(
         }
       }
     }
-  }
-);
+  });
 
 
 const ALLOWED_SUGGESTION_ORIGINS = [
@@ -502,20 +495,17 @@ type IssueSuggestionPayload = {
 const MAX_SUGGESTIONS = 5;
 const MAX_ACCEPTANCE_CRITERIA = 5;
 
-export const suggestIssues = onCall(
-  {
-    cors: ALLOWED_SUGGESTION_ORIGINS,
-    enforceAppCheck: true,
-  },
-  async (request) => {
-    if (!request.auth?.uid) {
-      throw new HttpsError("unauthenticated", "Auth required");
+export const suggestIssues = functions
+  .region("asia-northeast1")
+  .https.onCall(async (data: any, context: functions.https.CallableContext) => {
+    if (!context.auth?.uid) {
+      throw new functions.https.HttpsError("unauthenticated", "Auth required");
     }
 
-    const sanitized = sanitizeInput((request.data ?? {}) as SuggestIssuesInput);
+    const sanitized = sanitizeInput((data ?? {}) as SuggestIssuesInput);
 
     if (!sanitized.problemTitle) {
-      throw new HttpsError("invalid-argument", "problemTitle is required");
+      throw new functions.https.HttpsError("invalid-argument", "problemTitle is required");
     }
 
     const prompt = buildPrompt(sanitized);
@@ -532,32 +522,31 @@ export const suggestIssues = onCall(
       if (provider === "openai") {
         const apiKey = process.env.AI_OPENAI_KEY;
         if (!apiKey) {
-          throw new HttpsError("failed-precondition", "Missing OpenAI key");
+          throw new functions.https.HttpsError("failed-precondition", "Missing OpenAI key");
         }
         const model = modelOverride || "gpt-4o-mini";
         aiResponse = await callOpenAI(apiKey, model, prompt, safeMaxTokens);
       } else if (provider === "gemini") {
         const apiKey = process.env.AI_GEMINI_KEY;
         if (!apiKey) {
-          throw new HttpsError("failed-precondition", "Missing Gemini key");
+          throw new functions.https.HttpsError("failed-precondition", "Missing Gemini key");
         }
         const model = modelOverride || "gemini-1.5-pro";
         aiResponse = await callGemini(apiKey, model, prompt, safeMaxTokens);
       } else {
-        throw new HttpsError("failed-precondition", "AI provider not configured");
+        throw new functions.https.HttpsError("failed-precondition", "AI provider not configured");
       }
     } catch (error) {
-      if (error instanceof HttpsError) {
+      if (error instanceof functions.https.HttpsError) {
         throw error;
       }
       console.error("[suggestIssues] AI provider error", error);
-      throw new HttpsError("internal", "AI provider error");
+      throw new functions.https.HttpsError("internal", "AI provider error");
     }
 
     const suggestions = parseAiSuggestions(aiResponse);
     return { suggestions };
-  }
-);
+  });
 
 function sanitizeInput(raw: SuggestIssuesInput): SanitizedSuggestInput {
   const problemTitle = safeString(raw.problemTitle, 200);
@@ -646,7 +635,7 @@ function parseAiSuggestions(text: string): IssueSuggestionPayload[] {
     const acceptanceCriteria = Array.isArray(raw?.acceptanceCriteria)
       ? raw.acceptanceCriteria
           .map((item: unknown) => safeString(item, 300))
-          .filter((item): item is string => Boolean(item))
+          .filter((item: unknown): item is string => typeof item === "string" && item.length > 0)
           .slice(0, MAX_ACCEPTANCE_CRITERIA)
       : [];
 
