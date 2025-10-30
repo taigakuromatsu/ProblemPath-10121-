@@ -5,6 +5,9 @@
   padding: var(--pad-2);
   font-size: var(--fs-b);
   line-height: 1.5;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .page-header {
@@ -72,8 +75,14 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--gap-2);
+  max-width: 100%;
+  box-sizing: border-box;
 }
-.section-header > * { min-width: 0; }
+.section-header > * { 
+  min-width: 0; 
+  max-width: 100%;
+  box-sizing: border-box;
+}
 
 .section-title {
   display: inline-flex;
@@ -90,6 +99,9 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--gap-2);
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .section-body {

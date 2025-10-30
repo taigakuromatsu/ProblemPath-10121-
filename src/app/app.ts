@@ -1,11 +1,11 @@
-import { Component } from '@angular/core';
+import { Component, ViewChild } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { AsyncPipe, NgFor, NgIf } from '@angular/common';
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
 import { map } from 'rxjs/operators';
 import { Observable } from 'rxjs';
 
-import { MatSidenavModule } from '@angular/material/sidenav';
+import { MatSidenavModule, MatSidenav } from '@angular/material/sidenav';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
@@ -15,6 +15,7 @@ import { ThemeService } from './services/theme.service';
 import { TranslateModule } from '@ngx-translate/core';
 import { AuthService } from './services/auth.service';
 import { MessagingService } from './services/messaging.service';
+
 
 @Component({
   standalone: true,
@@ -30,15 +31,12 @@ import { MessagingService } from './services/messaging.service';
       <!-- 左サイド（幅は styles.scss の --sidebar で調整） -->
       <mat-sidenav
         #drawer
-        class="shell__sidenav"
+        class="shell__sidenav sidenav--dark"
         [mode]="(isHandset$ | async) ? 'over' : 'side'"
         [opened]="!(isHandset$ | async)"
         [autoFocus]="false"
       >
         <div class="sidenav__wrapper">
-          <div class="sidenav__header" aria-label="ProblemPath">
-            <span class="sidenav__brand">ProblemPath</span>
-          </div>
           <pp-project-switcher></pp-project-switcher>
         </div>
       </mat-sidenav>
@@ -114,6 +112,8 @@ export class App {
   ];
 
   readonly isHandset$: Observable<boolean>;
+
+  @ViewChild('drawer') drawer!: MatSidenav;
 
   constructor(
     private theme: ThemeService,
