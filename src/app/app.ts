@@ -36,9 +36,8 @@ import { MessagingService } from './services/messaging.service';
         [autoFocus]="false"
       >
         <div class="sidenav__wrapper">
-          <div class="sidenav__header">
-            <mat-icon>view_kanban</mat-icon>
-            <span>ProblemPath</span>
+          <div class="sidenav__header" aria-label="ProblemPath">
+            <span class="sidenav__brand">ProblemPath</span>
           </div>
           <pp-project-switcher></pp-project-switcher>
         </div>
@@ -59,16 +58,12 @@ import { MessagingService } from './services/messaging.service';
           </button>
 
           <!-- ブランド -->
-          <div class="brand">
-            <mat-icon>view_kanban</mat-icon>
+          <div class="brand" aria-label="ProblemPath">
             <span class="brand__title">ProblemPath</span>
           </div>
 
-          <!-- ブランドとタブの間隔を大きめに確保 -->
-          <div class="brand-gap"></div>
-
           <!-- タブ（押しやすい“ボタン”表示） -->
-          <nav class="topnav minw-0" aria-label="Primary">
+          <nav class="topnav minw-0" aria-label="Primary navigation">
             <a
               mat-stroked-button
               class="tab-btn"

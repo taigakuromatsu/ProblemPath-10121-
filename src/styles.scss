@@ -38,10 +38,9 @@ html.dark {
 
   /* Layout */
   --card-w: calc(340px * var(--m));
-  --sidebar-base: 240px;
-  /* ▼ 以前: *0.5 → 「今の半分程度」にするため *0.28 に縮小 */
-  --sidebar: calc(var(--sidebar-base) * 0.28 * var(--m));
-  --topbar-h: calc(48px * var(--m));
+  --sidebar-base: 200px;
+  --sidebar: clamp(182px, 17vw, 224px);
+  --topbar-h: clamp(52px, calc(52px * var(--m)), 64px);
 
   /* Palette */
   --bg: #f5f6f8;
@@ -83,67 +82,110 @@ html.dark {
 .shell__sidenav {
   width: min(var(--sidebar), 90vw);
   flex: 0 0 min(var(--sidebar), 90vw);
-  border-right: 1px solid var(--divider);
-  background: var(--surface-subtle);
-  color: var(--fg);
-  padding: var(--pad-2) calc(10px * var(--m));
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  background: #000000;
+  color: #f5f7fb;
+  padding: calc(20px * var(--m)) calc(16px * var(--m));
   display: flex;
   flex-direction: column;
   gap: var(--gap-2);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.04);
 }
 
 .sidenav__wrapper { display: flex; flex-direction: column; gap: var(--gap-2); height: 100%; }
 
 .sidenav__header {
-  display: flex; align-items: center; gap: var(--gap-1);
-  font-weight: 600; font-size: calc(12px * var(--m));
+  display: flex;
+  align-items: center;
+  min-height: calc(32px * var(--m));
+  padding-inline: calc(4px * var(--m));
 }
-.sidenav__header .mat-icon { font-size: calc(18px * var(--m)); width: calc(18px * var(--m)); height: calc(18px * var(--m)); }
+.sidenav__brand {
+  font-size: clamp(15px, calc(16px * var(--m)), 18px);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
 
-.shell__content { background: var(--bg); color: var(--fg); min-width: 0; }
+.shell__content {
+  background: var(--bg);
+  color: var(--fg);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
 
 /* ---------------------------
    Topbar（ブランドとタブの間隔 & タブをボタン化）
    --------------------------- */
 .topbar {
-  position: sticky; top: 0; z-index: 1000;
-  display: flex; align-items: center;
-  gap: var(--gap-2);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: clamp(12px, 2vw, 24px);
   height: var(--topbar-h);
-  padding-inline: calc(10px * var(--m));
+  padding-inline: clamp(16px, 4vw, 32px);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.08);
+}
+.mat-toolbar.topbar.mat-primary {
+  background: var(--surface);
+  color: var(--fg);
 }
 
-.brand { display: flex; align-items: center; gap: var(--gap-2); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; min-width: 0; }
-.brand .mat-icon { font-size: calc(22px * var(--m)); width: calc(22px * var(--m)); height: calc(22px * var(--m)); }
-.brand__title { letter-spacing: 0.12em; }
-
-.brand-gap {
-  /* ブランドとタブの“しっかりした”間隔 */
-  width: clamp(24px, 6vw, 96px);
-  flex: 0 0 auto;
+.topbar .menu-button {
+  color: inherit;
 }
+
+.brand {
+  display: flex;
+  align-items: center;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  min-width: 0;
+  font-size: clamp(14px, calc(15px * var(--m)), 18px);
+}
+.brand__title { white-space: nowrap; }
 
 .topnav {
-  display: flex; align-items: center; gap: calc(10px * var(--m));
-  min-width: 0; white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: calc(10px * var(--m));
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  flex: 1 1 auto;
 }
 
 /* タブを“ボタンUI”に */
 .topnav .tab-btn {
   border-radius: 999px !important;
   border: 1px solid var(--border) !important;
-  padding: 0 calc(12px * var(--m)) !important;
-  height: calc(32px * var(--m)) !important;
-  min-height: calc(32px * var(--m)) !important;
+  padding: 0 clamp(16px, 2vw, 24px) !important;
+  height: clamp(30px, calc(32px * var(--m)), 36px) !important;
+  min-height: clamp(30px, calc(32px * var(--m)), 36px) !important;
   line-height: 1 !important;
+  backdrop-filter: blur(6px);
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.topnav .tab-btn:hover {
+  background: color-mix(in srgb, var(--accent-blue) 6%, #ffffff 94%);
 }
 .topnav .tab-btn.active {
-  background: color-mix(in srgb, #ffffff 18%, transparent);
-  box-shadow: inset 0 -2px 0 0 color-mix(in srgb, #ffffff 40%, transparent);
+  background: color-mix(in srgb, var(--accent-blue) 12%, #ffffff 88%);
+  border-color: color-mix(in srgb, var(--accent-blue) 40%, transparent) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-blue) 32%, transparent);
+}
+
+.topbar .spacer {
+  flex: 0 0 clamp(24px, 6vw, 96px);
 }
 
 /* 右上：サインイン／アウト＆ユーザー名を40%縮小 */
-.topbar-actions { display: flex; align-items: center; gap: calc(6px * var(--m)); flex-wrap: wrap; min-width: 0; }
+.topbar-actions { display: flex; align-items: center; gap: calc(6px * var(--m)); flex-wrap: nowrap; min-width: 0; margin-left: auto; }
 
 .auth-button.auth--compact {
   border-radius: 999px !important;
@@ -161,12 +203,20 @@ html.dark {
 }
 
 /* 残りの既存スタイル（Base / Cards / Utilities / Content area など）は現行を維持 */
-.content-area { min-height: calc(100vh - var(--topbar-h)); padding: var(--pad-2); background: var(--bg); }
+.content-area {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: calc(100vh - var(--topbar-h));
+  padding: clamp(16px, 3vw, 28px);
+  background: var(--bg);
+}
 
 @media (max-width: 959px) {
-  .content-area { padding: var(--pad-1); }
+  .content-area { padding: clamp(12px, 4vw, 20px); }
   .topnav { overflow-x: auto; }
-  .topbar-actions { justify-content: flex-end; }
+  .topnav .tab-btn { flex: 0 0 auto; }
+  .topbar-actions { margin-left: auto; }
 }
 
 .shell__sidenav.mat-drawer,
@@ -196,7 +246,12 @@ html.dark {
 /* 念のため、コンテンツ側のはみ出し・縮み対策 */
 .shell :where(.mat-drawer-content, .mat-sidenav-content, .shell__content) {
   min-width: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.shell :where(.mat-drawer-content, .mat-sidenav-content) > * {
+  min-width: 0;
 }
 
 
