@@ -22,6 +22,8 @@ import {
   wasReminderSent,
 } from "./notify";
 export { issueSuggestHttp } from "./issue-suggest";
+export { refreshAnalyticsSummary } from "./analytics";
+export { generateProgressReportDraft } from "./ai";
 
 if (!getApps().length) {
   initializeApp();
