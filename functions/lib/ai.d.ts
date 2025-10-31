@@ -17,3 +17,4 @@ export declare class AiClient {
     constructor();
     suggestIssues(input: IssueSuggestInput): Promise<IssueSuggestOutput>;
 }
+export declare const generateProgressReportDraft: any;

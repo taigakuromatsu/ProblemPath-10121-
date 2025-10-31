@@ -1,6 +1,9 @@
 // functions/src/ai.ts
 // Vertex AI (Gemini) 版: JSON 優先 + 行分割フェイルセーフ
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+// @ts-ignore - firebase-functions/v2/httpsの型定義の問題を回避
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+// @ts-ignore
+import type { CallableRequest } from "firebase-functions/v2/https";
 
 // ==== Vertex defaults（環境変数が無ければこれを使う）====
 const PROJECT =
@@ -160,7 +163,7 @@ export const generateProgressReportDraft = onCall<
     body: string;
     metrics: { completedTasks: number; avgProgressPercent: number; notes: string };
   }
->(async (request) => {
+>(async (request: CallableRequest<{ projectId: string }>) => {
   // TODO: role check (viewerは不可)
   const { projectId } = request.data ?? {};
   if (!projectId) {

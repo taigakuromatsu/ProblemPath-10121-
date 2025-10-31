@@ -1,4 +1,6 @@
 export { issueSuggestHttp } from "./issue-suggest";
+export { refreshAnalyticsSummary } from "./analytics";
+export { generateProgressReportDraft } from "./ai";
 export declare const ping: unknown;
 export declare const commentCreatedOnProblem: any;
 export declare const commentCreatedOnIssue: any;
