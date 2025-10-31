@@ -1,3 +1,4 @@
+// functions/src/index.ts
 
 import { getApps, initializeApp } from "firebase-admin/app";
 import {
@@ -6,6 +7,7 @@ import {
   type DocumentReference,
 } from "firebase-admin/firestore";
 import type { MulticastMessage, MessagingOptions } from "firebase-admin/messaging";
+
 import { onRequest } from "firebase-functions/v2/https";
 import { setGlobalOptions } from "firebase-functions/v2";
 import {
@@ -13,6 +15,7 @@ import {
   type FirestoreEvent,
 } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+
 import {
   listFcmTokensForUsers,
   listProjectMemberUids,
@@ -21,7 +24,6 @@ import {
   sendToTokens,
   wasReminderSent,
 } from "./notify";
-export { issueSuggestHttp } from "./issue-suggest";
 
 if (!getApps().length) {
   initializeApp();
@@ -51,35 +53,42 @@ type AttachmentParams = {
   attachmentId: string;
 };
 
-const openTaskStatuses = ["not_started", "in_progress", "review_wait", "fixing"] as const;
+const openTaskStatuses = [
+  "not_started",
+  "in_progress",
+  "review_wait",
+  "fixing",
+] as const;
+
 type ReminderWindow = "1d" | "7d";
 
-function determineScope(params: { issueId?: string; taskId?: string }): "problem" | "issue" | "task" {
+function determineScope(params: {
+  issueId?: string;
+  taskId?: string;
+}): "problem" | "issue" | "task" {
   if (params.taskId) return "task";
   if (params.issueId) return "issue";
   return "problem";
 }
 
-/** Web Push で通知クリック時に飛ばすリンクを生成（必要に応じて詳細化してください） */
+/** Web Push で通知クリック時に飛ばすリンクを生成 */
 function buildDeepLink(
   projectId: string,
   problemId?: string,
   issueId?: string,
   taskId?: string
 ): string {
-  // 例: /project/:pid まで（必要なら問題/Issue/Task 詳細に拡張）
+  // TODO: 問題/Issue/Task 個別詳細に飛ばす導線をあとで拡張してOK
   const base = `https://kensyu10121.web.app/project/${projectId}`;
-  // もし詳細導線を付けたいなら下記のように調整
-  // if (taskId) return `${base}/tasks/${taskId}`;
-  // if (issueId) return `${base}/issues/${issueId}`;
-  // if (problemId) return `${base}/problems/${problemId}`;
   return base;
 }
 
 function withWebPushLink(
   payload: Omit<MulticastMessage, "tokens">,
   link: string
-): Omit<MulticastMessage, "tokens"> & { webpush: NonNullable<MessagingOptions["webpush"]> } {
+): Omit<MulticastMessage, "tokens"> & {
+  webpush: NonNullable<MessagingOptions["webpush"]>;
+} {
   return {
     ...payload,
     webpush: {
@@ -99,11 +108,14 @@ async function handleCommentCreated(
   const { projectId, problemId, issueId, taskId, commentId } = event.params;
   const scope = determineScope(event.params);
 
-  // 送信者（authorId）を onCreate データから取得して自己通知を除外
+  // 作成者 (authorId) を onCreate の doc データから取得
   const authorId: string | undefined = event.data?.data()?.authorId;
 
   const allMemberUids = await listProjectMemberUids(projectId);
-  const targetUids = authorId ? allMemberUids.filter(uid => uid !== authorId) : allMemberUids;
+  const targetUids = authorId
+    ? allMemberUids.filter((uid) => uid !== authorId)
+    : allMemberUids;
+
   const tokens = await listFcmTokensForUsers(targetUids);
 
   const notification = {
@@ -124,27 +136,40 @@ async function handleCommentCreated(
     commentId,
   };
   if (issueId) data.issueId = issueId;
-  if (taskId)  data.taskId  = taskId;
+  if (taskId) data.taskId = taskId;
 
   const link = buildDeepLink(projectId, problemId, issueId, taskId);
   const payload = withWebPushLink({ notification, data }, link);
 
   console.log(
     "[notify] Comment created",
-    JSON.stringify({ projectId, problemId, issueId, taskId, commentId, authorId, targetUids: targetUids.length, tokens: tokens.length })
+    JSON.stringify({
+      projectId,
+      problemId,
+      issueId,
+      taskId,
+      commentId,
+      authorId,
+      targetUids: targetUids.length,
+      tokens: tokens.length,
+    })
   );
 
   const result = tokens.length
     ? await sendToTokens(tokens, payload)
     : { successCount: 0, failureCount: 0, attemptedTokens: 0 };
 
-  console.log("[notify] Comment notification result", JSON.stringify(result));
+  console.log(
+    "[notify] Comment notification result",
+    JSON.stringify(result)
+  );
 
   const auditRef = firestore
     .collection(`projects/${projectId}/auditLogs`)
     .doc("events")
     .collection("notifications")
     .doc();
+
   await auditRef.set({
     type: "comment_created",
     scope,
@@ -157,6 +182,7 @@ async function handleCommentCreated(
     sentAt: FieldValue.serverTimestamp(),
     result,
   });
+
   return result;
 }
 
@@ -167,11 +193,14 @@ async function handleAttachmentCreated(
   const { projectId, problemId, issueId, taskId, attachmentId } = event.params;
   const scope = determineScope(event.params);
 
-  // 送信者（createdBy）を onCreate データから取得して自己通知を除外
+  // 作成者 (createdBy) を onCreate の doc データから取得
   const createdBy: string | undefined = event.data?.data()?.createdBy;
 
   const allMemberUids = await listProjectMemberUids(projectId);
-  const targetUids = createdBy ? allMemberUids.filter(uid => uid !== createdBy) : allMemberUids;
+  const targetUids = createdBy
+    ? allMemberUids.filter((uid) => uid !== createdBy)
+    : allMemberUids;
+
   const tokens = await listFcmTokensForUsers(targetUids);
 
   const notification = {
@@ -192,27 +221,40 @@ async function handleAttachmentCreated(
     attachmentId,
   };
   if (issueId) data.issueId = issueId;
-  if (taskId)  data.taskId  = taskId;
+  if (taskId) data.taskId = taskId;
 
   const link = buildDeepLink(projectId, problemId, issueId, taskId);
   const payload = withWebPushLink({ notification, data }, link);
 
   console.log(
     "[notify] Attachment created",
-    JSON.stringify({ projectId, problemId, issueId, taskId, attachmentId, createdBy, targetUids: targetUids.length, tokens: tokens.length })
+    JSON.stringify({
+      projectId,
+      problemId,
+      issueId,
+      taskId,
+      attachmentId,
+      createdBy,
+      targetUids: targetUids.length,
+      tokens: tokens.length,
+    })
   );
 
   const result = tokens.length
     ? await sendToTokens(tokens, payload)
     : { successCount: 0, failureCount: 0, attemptedTokens: 0 };
 
-  console.log("[notify] Attachment notification result", JSON.stringify(result));
+  console.log(
+    "[notify] Attachment notification result",
+    JSON.stringify(result)
+  );
 
   const auditRef = firestore
     .collection(`projects/${projectId}/auditLogs`)
     .doc("events")
     .collection("notifications")
     .doc();
+
   await auditRef.set({
     type: "attachment_created",
     scope,
@@ -225,6 +267,7 @@ async function handleAttachmentCreated(
     sentAt: FieldValue.serverTimestamp(),
     result,
   });
+
   return result;
 }
 
@@ -232,7 +275,13 @@ function getJstToday(): Date {
   const nowUtcMs = Date.now();
   const jstMs = nowUtcMs + 9 * 60 * 60 * 1000;
   const jstDate = new Date(jstMs);
-  return new Date(Date.UTC(jstDate.getUTCFullYear(), jstDate.getUTCMonth(), jstDate.getUTCDate()));
+  return new Date(
+    Date.UTC(
+      jstDate.getUTCFullYear(),
+      jstDate.getUTCMonth(),
+      jstDate.getUTCDate()
+    )
+  );
 }
 
 function addDays(base: Date, days: number): Date {
@@ -248,13 +297,16 @@ function formatYmd(date: Date): string {
 
 function extractPathParams(ref: DocumentReference) {
   const segments = ref.path.split("/");
+
   const projectIndex = segments.indexOf("projects");
   const problemIndex = segments.indexOf("problems");
   const issueIndex = segments.indexOf("issues");
   const taskIndex = segments.indexOf("tasks");
 
-  const projectId = projectIndex >= 0 ? segments[projectIndex + 1] : undefined;
-  const problemId = problemIndex >= 0 ? segments[problemIndex + 1] : undefined;
+  const projectId =
+    projectIndex >= 0 ? segments[projectIndex + 1] : undefined;
+  const problemId =
+    problemIndex >= 0 ? segments[problemIndex + 1] : undefined;
   const issueId = issueIndex >= 0 ? segments[issueIndex + 1] : undefined;
   const taskId = taskIndex >= 0 ? segments[taskIndex + 1] : undefined;
 
@@ -273,6 +325,7 @@ async function notifyTaskReminder(
   cache: Map<string, string[]>
 ) {
   const { projectId, problemId, issueId, taskId } = params;
+
   let tokens = cache.get(projectId);
   if (!tokens) {
     const memberUids = await listProjectMemberUids(projectId);
@@ -297,14 +350,17 @@ async function notifyTaskReminder(
     taskId,
   };
   if (problemId) data.problemId = problemId;
-  if (issueId)   data.issueId   = issueId;
+  if (issueId) data.issueId = issueId;
 
   const link = buildDeepLink(projectId, problemId, issueId, taskId);
   const payload = withWebPushLink(
     {
       notification: {
         title: "期限リマインド",
-        body: window === "1d" ? "タスク期限が明日に迫っています" : "タスク期限まで1週間です",
+        body:
+          window === "1d"
+            ? "タスク期限が明日に迫っています"
+            : "タスク期限まで1週間です",
       },
       data,
     },
@@ -321,7 +377,7 @@ async function notifyTaskReminder(
   await markReminderSent(projectId, taskId, dueDate, window);
 }
 
-// ======== Firestore triggers (自己通知抑止 & WebPushリンク 版) ========
+// ======== Firestore triggers ========
 
 export const commentCreatedOnProblem = onDocumentCreated(
   "projects/{projectId}/problems/{problemId}/comments/{commentId}",
@@ -330,7 +386,11 @@ export const commentCreatedOnProblem = onDocumentCreated(
       if (!event.data) return;
       await handleCommentCreated(event);
     } catch (e) {
-      console.error("[notify] commentCreatedOnProblem error", event.params, e);
+      console.error(
+        "[notify] commentCreatedOnProblem error",
+        event.params,
+        e
+      );
     }
   }
 );
@@ -342,7 +402,11 @@ export const commentCreatedOnIssue = onDocumentCreated(
       if (!event.data) return;
       await handleCommentCreated(event);
     } catch (e) {
-      console.error("[notify] commentCreatedOnIssue error", event.params, e);
+      console.error(
+        "[notify] commentCreatedOnIssue error",
+        event.params,
+        e
+      );
     }
   }
 );
@@ -354,7 +418,11 @@ export const commentCreatedOnTask = onDocumentCreated(
       if (!event.data) return;
       await handleCommentCreated(event);
     } catch (e) {
-      console.error("[notify] commentCreatedOnTask error", event.params, e);
+      console.error(
+        "[notify] commentCreatedOnTask error",
+        event.params,
+        e
+      );
     }
   }
 );
@@ -366,7 +434,11 @@ export const attachmentCreatedOnProblem = onDocumentCreated(
       if (!event.data) return;
       await handleAttachmentCreated(event);
     } catch (e) {
-      console.error("[notify] attachmentCreatedOnProblem error", event.params, e);
+      console.error(
+        "[notify] attachmentCreatedOnProblem error",
+        event.params,
+        e
+      );
     }
   }
 );
@@ -378,7 +450,11 @@ export const attachmentCreatedOnIssue = onDocumentCreated(
       if (!event.data) return;
       await handleAttachmentCreated(event);
     } catch (e) {
-      console.error("[notify] attachmentCreatedOnIssue error", event.params, e);
+      console.error(
+        "[notify] attachmentCreatedOnIssue error",
+        event.params,
+        e
+      );
     }
   }
 );
@@ -390,12 +466,16 @@ export const attachmentCreatedOnTask = onDocumentCreated(
       if (!event.data) return;
       await handleAttachmentCreated(event);
     } catch (e) {
-      console.error("[notify] attachmentCreatedOnTask error", event.params, e);
+      console.error(
+        "[notify] attachmentCreatedOnTask error",
+        event.params,
+        e
+      );
     }
   }
 );
 
-// ======== Scheduler (既存のまま + WebPushリンク付与) ========
+// ======== Scheduler (期限リマインド) ========
 
 export const taskDueReminder = onSchedule(
   {
@@ -413,7 +493,10 @@ export const taskDueReminder = onSchedule(
 
     for (const { window, offset } of windows) {
       const targetDate = formatYmd(addDays(today, offset));
-      console.log("[notify] Checking reminders", JSON.stringify({ window, targetDate }));
+      console.log(
+        "[notify] Checking reminders",
+        JSON.stringify({ window, targetDate })
+      );
 
       const snapshot = await firestore
         .collectionGroup("tasks")
@@ -426,16 +509,29 @@ export const taskDueReminder = onSchedule(
         const taskId = doc.id;
         const { projectId, problemId, issueId } = extractPathParams(doc.ref);
         if (!projectId) {
-          console.warn("[notify] Could not determine project for task", doc.ref.path);
+          console.warn(
+            "[notify] Could not determine project for task",
+            doc.ref.path
+          );
           continue;
         }
 
         try {
-          const alreadySent = await wasReminderSent(projectId, taskId, targetDate, window);
+          const alreadySent = await wasReminderSent(
+            projectId,
+            taskId,
+            targetDate,
+            window
+          );
           if (alreadySent) {
             console.log(
               "[notify] Reminder already sent",
-              JSON.stringify({ projectId, taskId, window, targetDate })
+              JSON.stringify({
+                projectId,
+                taskId,
+                window,
+                targetDate,
+              })
             );
             continue;
           }
@@ -447,7 +543,11 @@ export const taskDueReminder = onSchedule(
             tokenCache
           );
         } catch (e) {
-          console.error("[notify] taskDueReminder item error", { projectId, taskId, window, targetDate }, e);
+          console.error(
+            "[notify] taskDueReminder item error",
+            { projectId, taskId, window, targetDate },
+            e
+          );
         }
       }
     }

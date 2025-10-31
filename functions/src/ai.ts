@@ -1,17 +1,20 @@
-// functions/src/ai.ts
-// Vertex AI (Gemini) 版: JSON 優先 + 行分割フェイルセーフ
 
-// ==== Vertex defaults（環境変数が無ければこれを使う）====
+// functions/src/ai.ts
+
+// ==== Vertex defaults ====
+// Firebase Functions 側で使う Vertex AI 呼び出しロジック。
+// ブラウザ専用の HttpClient / getAuth とかは絶対に使わないこと。
+
 const PROJECT =
   process.env.GCLOUD_PROJECT ||
   process.env.GCP_PROJECT ||
   process.env.PROJECT_ID ||
   "kensyu10121";
 
-const LOCATION = process.env.VERTEX_LOCATION || "asia-northeast1";       // まずは us-central1 が堅い
-const MODEL    = process.env.VERTEX_MODEL    || "gemini-2.5-flash";   // 無印 flash（-002 等は権限/提供地域差で 404 出やすい）
+const LOCATION = "asia-northeast1";
+const MODEL    = "gemini-2.5-pro";
 
-// ====== 型 ======
+// ---- 型 ----
 export type IssueSuggestInput = {
   lang: "ja" | "en";
   projectId: string;
@@ -26,132 +29,247 @@ export type IssueSuggestInput = {
 
 export type IssueSuggestOutput = { suggestions: string[] };
 
-// ====== System prompts ======
-const SYSTEM_EN =
-  `You generate concise, actionable issue titles for a Kanban/issue tracker. ` +
-  `Reply ONLY as JSON: {"suggestions": string[]}. 5-7 items, 8–36 chars, imperative, no duplicates.`;
+// 要件
+const TARGET_MIN = 5; // 最低ほしい件数
+const TARGET_MAX = 7; // 返す上限
+const MAX_RETRY  = 2; // draftIdeas() の追加呼び出し回数 (不足時)
 
-const SYSTEM_JA =
-  `あなたは課題管理ツール向けに短く実行可能なイシュータイトルを作成します。` +
-  `必ず JSON でのみ返答: {"suggestions": string[]}。5〜7件、8〜36文字、命令形、重複なし。`;
-
-// ====== helper ======
-function cleanLines(s: string): string[] {
-  return s
-    .split(/\r?\n/)
-    .map((x) => x.replace(/^[-*●・\d\.\)\]]+\s*/, "").trim())
-    .filter(Boolean);
+// ------------------------------
+// ユーティリティ / 正規化系
+// ------------------------------
+function squeezeSpaces(s: string): string {
+  return s.replace(/\s+/g, " ").trim();
 }
 
-function buildPrompt(input: IssueSuggestInput): string {
-  const preferLang = input.lang === "ja" ? "Japanese" : "English";
-  return [
-    `Project ID: ${input.projectId}`,
-    `Problem Title: ${input.problem.title}`,
-    input.problem.phenomenon ? `Phenomenon: ${input.problem.phenomenon}` : "",
-    input.problem.cause ? `Cause: ${input.problem.cause}` : "",
-    input.problem.solution ? `Solution: ${input.problem.solution}` : "",
-    input.problem.goal ? `Goal/KPI: ${input.problem.goal}` : "",
-    "",
-    `Return ${preferLang} issue titles only.`,
-    `Rules:`,
-    `- 8–36 characters`,
-    `- Start with a verb`,
-    `- Specific & scannable`,
-    `- No numbering, no markdown`,
-    `- Avoid duplicates`,
-    `- Provide 5 to 7 lines`,
-  ]
-    .filter(Boolean)
-    .join("\n");
+/** 箇条書きマーカー・先頭番号などを削る */
+function stripListMarker(line: string): string {
+  return line
+    .replace(/^[\s\-*●・•]+/, "")         // 先頭の箇条書き記号
+    .replace(/^\s*\d+[\.\)]\s*/, "")      // "1. " / "2) " など
+    .trim();
 }
 
-// ====== Vertex クライアント ======
+/** 行末の句読点やカッコ閉じだけ落とす（文章の尻尾をチップにしやすくする） */
+function stripEdgePunct(line: string): string {
+  return line
+    .replace(/[\s"「『（(【]+$/, "")
+    .replace(/["」』）)】\s]+$/, "")
+    .replace(/[。．､、，,.…]+$/, "")
+    .trim();
+}
+
+/** 1行の案を「Issueタイトルっぽい短い命令形」に整える */
+function sanitizeTitle(raw: string): string {
+  let t = raw ?? "";
+  t = t.replace(/\r/g, " ").replace(/\n/g, " ");
+  t = squeezeSpaces(t);
+  t = stripListMarker(t);
+  t = stripEdgePunct(t);
+
+  // JSON臭・制御文字ざっくり排除
+  if (/[{}\[\]`]/.test(t)) return "";
+
+  // 長すぎる文章は80文字付近で切る（単語途中は切らない）
+  if (t.length > 80) {
+    const cut = t.slice(0, 80);
+    const lastSpace = cut.lastIndexOf(" ");
+    if (lastSpace > 0) t = cut.slice(0, lastSpace).trim();
+    else t = cut.trim();
+  }
+
+  // 記号だけは却下
+  if (!/[A-Za-z0-9\u3040-\u30FF\u4E00-\u9FFF]/.test(t)) return "";
+
+  return t.trim();
+}
+
+/** モデルの生テキストを候補群にしてクリーンアップ */
+function normalizeDraftLines(lines: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const raw of lines) {
+    const title = sanitizeTitle(raw);
+    if (!title) continue;
+
+    // 短すぎ・長すぎは落とす
+    if (title.length < 6) continue;
+    if (title.length > 60) continue;
+
+    const key = title.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    result.push(title);
+    if (result.length >= 20) break; // プールとして20個あれば十分
+  }
+
+  return result;
+}
+
+/** モデルの返答テキストを1行ずつばらして正規化 */
+function normalizeDraftText(draftText: string): string[] {
+  const rawLines = draftText
+    .split(/\r?\n+/)
+    .map(l => l.trim())
+    .filter(l => l.length > 0);
+
+  return normalizeDraftLines(rawLines);
+}
+
+/** 複数プールをマージし、重複除去して 5〜7件にまとめる */
+function finalizeSuggestions(pools: string[][]): string[] {
+  const merged: string[] = [];
+  const seen = new Set<string>();
+
+  for (const pool of pools) {
+    for (const t of pool) {
+      const k = t.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      merged.push(t);
+      if (merged.length >= TARGET_MAX) break;
+    }
+    if (merged.length >= TARGET_MAX) break;
+  }
+
+  return merged.slice(0, TARGET_MAX);
+}
+
+// ------------------------------
+// プロンプト生成
+// ------------------------------
+function buildDraftPrompt(input: IssueSuggestInput): { system: string; user: string } {
+  const isJa = input.lang === "ja";
+
+  if (isJa) {
+    const system = [
+      "あなたはプロダクトマネージャーです。",
+      "以下の課題を解決するための、具体的な作業タスク案をできるだけ多く提案してください。",
+      "・各タスク案は1行だけの短い命令形で書いてください（〜する、〜を実装する など）",
+      "・似た案は避けてください",
+      "・そのままissueタイトルに使える粒度で、誰が見ても行動がわかる表現にしてください",
+      "・形式はテキストのみでOKです。JSONで返さないでください。",
+      "・最低8案は出してください。",
+    ].join("\n");
+
+    const userLines = [
+      `プロジェクトID: ${input.projectId}`,
+      `課題タイトル: ${input.problem.title || ""}`,
+      input.problem.phenomenon ? `現象: ${input.problem.phenomenon}` : "",
+      input.problem.cause ? `原因: ${input.problem.cause}` : "",
+      input.problem.solution ? `現在の想定解決策: ${input.problem.solution}` : "",
+      input.problem.goal ? `目標/ゴール: ${input.problem.goal}` : "",
+      "",
+      "では、箇条書きのように1行ずつ案を列挙してください。"
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    return { system, user: userLines };
+  } else {
+    const system = [
+      "You are a product manager.",
+      "Generate as many concrete, actionable task ideas as possible to address the problem below.",
+      "- Each idea should be one short imperative/title line (e.g. 'Add long-press drag start').",
+      "- Avoid near-duplicates.",
+      "- Make each line usable directly as an issue title.",
+      "- Plain text only. Do NOT respond in JSON.",
+      "- Output at least 8 ideas.",
+    ].join("\n");
+
+    const userLines = [
+      `Project ID: ${input.projectId}`,
+      `Problem Title: ${input.problem.title || ""}`,
+      input.problem.phenomenon ? `Observed Behavior: ${input.problem.phenomenon}` : "",
+      input.problem.cause ? `Likely Cause: ${input.problem.cause}` : "",
+      input.problem.solution ? `Proposed Direction: ${input.problem.solution}` : "",
+      input.problem.goal ? `Goal / Target: ${input.problem.goal}` : "",
+      "",
+      "Now list actionable issue/task titles, one per line."
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    return { system, user: userLines };
+  }
+}
+
+// ------------------------------
+// Vertex 呼び出しクライアント
+// ------------------------------
 export class AiClient {
   private vertexPromise: Promise<any>;
 
   constructor() {
     const project = PROJECT;
     const location = LOCATION;
-    // 遅延 import で他関数への影響を最小化
     this.vertexPromise = (async () => {
       const { VertexAI } = await import("@google-cloud/vertexai");
       return new VertexAI({ project, location });
     })();
   }
 
-  async suggestIssues(input: IssueSuggestInput): Promise<IssueSuggestOutput> {
+  /** モデルから「案の束テキスト」をもらう */
+  private async draftIdeas(input: IssueSuggestInput): Promise<string> {
     const vertex = await this.vertexPromise;
-
-    const sys = input.lang === "ja" ? SYSTEM_JA : SYSTEM_EN;
-    const prompt = buildPrompt(input);
+    const { system, user } = buildDraftPrompt(input);
 
     const model = vertex.getGenerativeModel({
       model: MODEL,
-      systemInstruction: sys,
+      systemInstruction: system,
       generationConfig: {
-        responseMimeType: "application/json",
-        temperature: 0.3,
+        temperature: 0.4,
+        topP: 0.9,
+        maxOutputTokens: 512,
+        candidateCount: 1,
       },
     });
 
-    try {
-      // Vertex SDK の generateContent は { contents } 形式
-      const resp = await model.generateContent({
-        contents: [{ role: "user", parts: [{ text: prompt }] }] as any,
-      });
+    const resp = await model.generateContent({
+      contents: [
+        { role: "user", parts: [{ text: user }] }
+      ] as any,
+    });
 
-      // 応答本文（JSON 期待）
-      const parts = (resp as any)?.response?.candidates?.[0]?.content?.parts ?? [];
-      const text = parts.map((p: any) => (p?.text ?? "").trim()).filter(Boolean).join("\n");
-
-        // 追加: parts が複数ならそれをそのまま候補化（JSON不達時の強化）
-        if (Array.isArray(parts) && parts.length > 1) {
-        const fromParts = parts
-            .map((p: any) => (p?.text ?? "").trim())
-            .filter(Boolean);
-        if (fromParts.length >= 3) {
-            return { suggestions: fromParts.slice(0, 7) };
+    const cands = resp?.response?.candidates ?? [];
+    const chunks: string[] = [];
+    for (const c of cands) {
+      const parts = c?.content?.parts ?? [];
+      for (const p of parts) {
+        if (typeof p?.text === "string") {
+          chunks.push(p.text);
         }
-        }
-
-      // 1) JSON 優先
-        try {
-            const parsed = JSON.parse(text);
-            if (Array.isArray(parsed?.suggestions)) {
-            const arr = parsed.suggestions as unknown[];
-            const normalized = arr
-                .map(x => {
-                if (typeof x === "string") return x.trim();
-                if (x && typeof x === "object" && typeof (x as any).text === "string") {
-                    return String((x as any).text).trim();
-                }
-                return "";
-                })
-                .filter(Boolean);
-            if (normalized.length) {
-                return { suggestions: normalized.slice(0, 7) };
-            }
-            }
-        } catch {
-            /* JSON でなければ行分割へ */
-        }
-  
-
-      const suggestions = cleanLines(text).slice(0, 7);
-      return { suggestions };
-    } catch (e: any) {
-      console.error("[VertexAI] call failed", {
-        message: e?.message,
-        model: MODEL,
-        location: LOCATION,
-        details: e,
-      });
-      throw new Error(`Vertex request failed: ${String(e?.message ?? e)}`);
+      }
     }
+    return chunks.join("\n");
+  }
+
+  /**
+   * 最終API:
+   * - モデルを1回叩く
+   * - 必要なら追加でもう数回叩いて候補プールを増やす
+   * - normalize / finalize して 5〜7件返す
+   */
+  async suggestIssues(input: IssueSuggestInput): Promise<IssueSuggestOutput> {
+    const pools: string[][] = [];
+
+    // 1回目
+    const firstText = await this.draftIdeas(input);
+    const firstPool = normalizeDraftText(firstText);
+    pools.push(firstPool);
+
+    // 少なすぎたら追加で叩く（最大 MAX_RETRY 回）
+    for (let i = 0; i < MAX_RETRY; i++) {
+      const currentCount = finalizeSuggestions(pools).length;
+      if (currentCount >= TARGET_MIN) break;
+      const moreText = await this.draftIdeas(input);
+      const morePool = normalizeDraftText(moreText);
+      pools.push(morePool);
+    }
+
+    const finalList = finalizeSuggestions(pools);
+
+    return { suggestions: finalList };
   }
 }
-
-  
-
-  
