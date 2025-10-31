@@ -3,20 +3,14 @@ import { getFirestore } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 // @ts-ignore
 import type { CallableRequest } from "firebase-functions/v2/https";
+// @ts-ignore - firebase-functions/v2/schedulerの型定義の問題を回避
+import { onSchedule } from "firebase-functions/v2/scheduler";
 
-// Callable Function: refresh analytics summary for a project.
-export const refreshAnalyticsSummary = onCall<
-  { projectId: string },
-  { ok: boolean }
->(async (request: CallableRequest<{ projectId: string }>) => {
-  // TODO: Security Rules will restrict writes to analytics/currentSummary
-  // so that only backend Functions can write here. Clients will read only.
-  // TODO: role check (viewerは不可)
-  const { projectId } = request.data ?? {};
-  if (!projectId) {
-    throw new HttpsError("invalid-argument", "projectId is required");
-  }
+// TODO: Firestore Security Rules では
+// analytics/currentSummary へのwriteはFunctionsのみ許可、
+// クライアントはreadのみ許可する予定。
 
+export const computeAndWriteAnalytics = async (projectId: string) => {
   const firestore = getFirestore();
   // TODO: 各taskドキュメントに projectId フィールド前提。ただし存在しない場合は今後付与予定
   const tasksSnapshot = await firestore
@@ -76,15 +70,44 @@ export const refreshAnalyticsSummary = onCall<
   await summaryRef.set(
     {
       completedTasks7d: completedTasksCount,
-      // TODO: will compute using startAt/doneAt timestamps and dueDate in a later step
+      // TODO: リードタイム・遅延率はdueDateや完了時刻から計算予定
       avgLeadTime30dDays: 3.6,
-      // TODO: will compute using startAt/doneAt timestamps and dueDate in a later step
+      // TODO: リードタイム・遅延率はdueDateや完了時刻から計算予定
       lateRateThisWeekPercent: 18.2,
       statusBreakdown,
       problemProgress,
+      // TODO: 負荷とコスト次第で指標追加予定
     },
     { merge: true }
   );
+};
+
+// Callable Function: refresh analytics summary for a project.
+export const refreshAnalyticsSummary = onCall<
+  { projectId: string },
+  { ok: boolean }
+>(async (request: CallableRequest<{ projectId: string }>) => {
+  // TODO: role check (viewerは不可)
+  const { projectId } = request.data ?? {};
+  if (!projectId) {
+    throw new HttpsError("invalid-argument", "projectId is required");
+  }
+
+  await computeAndWriteAnalytics(projectId);
 
   return { ok: true };
 });
+
+export const refreshAllAnalyticsSummaries = onSchedule(
+  { schedule: "every 1 hours", timeZone: "Asia/Tokyo" },
+  async () => {
+    const firestore = getFirestore();
+    const projectsSnapshot = await firestore.collection("projects").get();
+    // TODO: 将来的にはアクティブなプロジェクトだけに絞る
+    for (const projectDoc of projectsSnapshot.docs) {
+      const projectId = projectDoc.id;
+      await computeAndWriteAnalytics(projectId);
+    }
+    // TODO: 課金・パフォーマンスを監視して間隔を調整する
+  }
+);
