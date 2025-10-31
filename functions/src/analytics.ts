@@ -177,23 +177,41 @@ export const computeAndWriteAnalytics = async (projectId: string) => {
 
   const problemProgress = await Promise.all(
     problemsSnapshot.docs.map(async (problemDoc: QueryDocumentSnapshotLike) => {
-      const tasksForProblem = await problemDoc.ref.collection("tasks").get();
-      const activeTasks = (tasksForProblem.docs as QueryDocumentSnapshotLike[]).filter((taskDoc) => {
-        const data = taskDoc.data() ?? {};
-        return !data.softDeleted;
-      });
-      const totalTasks = activeTasks.length;
-      const doneTasks = activeTasks.reduce((count: number, taskDoc: QueryDocumentSnapshotLike) => {
-        const status = taskDoc.get("status");
-        return status === "done" ? count + 1 : count;
-      }, 0);
+      // 1. この Problem の配下の Issue を全部読む
+      const issuesSnap = await problemDoc.ref.collection("issues").get();
+
+      let totalTasks = 0;
+      let doneTasks = 0;
+
+      // 2. 各 Issue の配下の tasks をすべて集計
+      for (const issueDoc of issuesSnap.docs as QueryDocumentSnapshotLike[]) {
+        const tasksSnap = await issueDoc.ref.collection("tasks").get();
+
+        for (const taskDoc of tasksSnap.docs as QueryDocumentSnapshotLike[]) {
+          const data = taskDoc.data() ?? {};
+          if (data.softDeleted) continue;
+
+          totalTasks += 1;
+
+          const status = taskDoc.get("status");
+          if (status === "done") {
+            doneTasks += 1;
+          }
+        }
+      }
+
+      // 3. 完了率を算出
       const percent =
-        totalTasks === 0 ? 0 : Math.round((doneTasks / totalTasks) * 100);
+        totalTasks === 0
+          ? 0
+          : Math.round((doneTasks / totalTasks) * 100);
+
       const title = (problemDoc.get("title") as string) ?? "";
 
       return { title, percent };
     })
   );
+
 
   const summaryRef = firestore.doc(`projects/${projectId}/analytics/currentSummary`);
   await summaryRef.set(

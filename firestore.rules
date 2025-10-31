@@ -26,6 +26,16 @@ service cloud.firestore {
     // ---- プロジェクトツリー ----
     match /projects/{projectId} {
 
+        // Analytics summary (集計結果のダッシュボード用)
+        match /analytics/currentSummary {
+        // ダッシュボード表示用に、プロジェクトメンバーは読み取りOK
+        allow read: if isMember(projectId);
+
+        // 書き込みはクライアント側は禁止。Cloud Functions(admin)はルールをバイパスするのでそれで更新する。
+        allow create, update, delete: if false;
+      }
+
+
       // 読み取りはメンバーのみ
       allow read: if isMember(projectId);
 
