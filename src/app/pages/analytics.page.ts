@@ -7,7 +7,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatButtonModule } from '@angular/material/button';
 import { TranslateModule } from '@ngx-translate/core';
 import { doc, docData, Firestore } from '@angular/fire/firestore';
-import { Functions, httpsCallable } from '@angular/fire/functions';
+import { getFunctions, httpsCallable } from '@angular/fire/functions';
 import { catchError, firstValueFrom, map, Observable, of, switchMap } from 'rxjs';
 
 import { CurrentProjectService } from '../services/current-project.service';
@@ -58,7 +58,6 @@ const MOCK_SUMMARY: AnalyticsSummary = {
 export class AnalyticsPage {
   private readonly currentProject = inject(CurrentProjectService);
   private readonly firestore = inject(Firestore);
-  private readonly functions = inject(Functions);
 
   readonly projectId$: Observable<string | null> = this.currentProject.projectId$;
 
@@ -90,22 +89,26 @@ export class AnalyticsPage {
   );
 
   async onRefreshAnalytics(): Promise<void> {
+    console.log('[analytics] TEST LOG onRefreshAnalytics() start');
     const projectId = await firstValueFrom(this.projectId$);
+    console.log('[analytics] projectId =', projectId);
     if (!projectId) {
-      console.warn('Cannot refresh analytics summary without a projectId');
+      console.warn('[analytics] Cannot refresh analytics summary without a projectId');
       return;
     }
-    // TODO: 将来的にはこの操作はAdminユーザーのみ許可予定
-    // TODO: 最終的にはSchedulerで自動実行予定
-    const callable = httpsCallable<{ projectId: string }, unknown>(
-      this.functions,
-      'refreshAnalyticsSummary',
+
+    // Functions呼び出し。リージョンが asia-northeast1 なので明示します。
+    const functions = getFunctions(undefined, 'asia-northeast1');
+    const callable = httpsCallable<{ projectId: string }, { ok: boolean }>(
+      functions,
+      'refreshAnalyticsSummaryV2',
     );
+
     try {
-      const result = await callable({ projectId });
-      console.log('refreshAnalyticsSummary invoked', result);
-    } catch (error) {
-      console.warn('Failed to invoke refreshAnalyticsSummary', error);
+      await callable({ projectId });
+      console.log('[analytics] manual refresh OK');
+    } catch (err) {
+      console.error('[analytics] manual refresh failed', err);
     }
   }
 }
