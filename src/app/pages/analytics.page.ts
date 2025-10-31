@@ -5,7 +5,8 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatDividerModule } from '@angular/material/divider';
 import { TranslateModule } from '@ngx-translate/core';
-import { Observable } from 'rxjs';
+import { doc, docData, Firestore } from '@angular/fire/firestore';
+import { catchError, map, Observable, of, switchMap } from 'rxjs';
 
 import { CurrentProjectService } from '../services/current-project.service';
 
@@ -53,16 +54,34 @@ const MOCK_SUMMARY: AnalyticsSummary = {
 })
 export class AnalyticsPage {
   private readonly currentProject = inject(CurrentProjectService);
+  private readonly firestore = inject(Firestore);
+
   readonly projectId$: Observable<string | null> = this.currentProject.projectId$;
-  // TODO: Firestore projects/{projectId}/analytics/currentSummary を購読して置き換える予定
-  readonly summary = MOCK_SUMMARY;
-  private readonly statusTotal = this.summary.statusBreakdown.reduce(
-    (acc, entry) => acc + entry.count,
-    0,
-  ) || 1;
-  readonly statusEntries: Array<{ label: string; count: number; percent: number }> = this.summary.statusBreakdown.map(entry => ({
-    ...entry,
-    percent: (entry.count / this.statusTotal) * 100,
-  }));
-  readonly problemProgress = this.summary.problemProgress;
+
+  readonly summary$: Observable<AnalyticsSummary> = this.projectId$.pipe(
+    switchMap(projectId => {
+      if (!projectId) {
+        return of(MOCK_SUMMARY);
+      }
+      const summaryRef = doc(
+        this.firestore,
+        `projects/${projectId}/analytics/currentSummary`,
+      );
+      // TODO: このドキュメントはCloud Functions側で集計して定期更新する予定（7日間完了数・30日平均リードタイム・今週の遅延率など）
+      return docData<AnalyticsSummary>(summaryRef).pipe(
+        catchError(() => of(MOCK_SUMMARY)),
+      );
+    }),
+    map(summary => summary ?? MOCK_SUMMARY),
+  );
+
+  readonly statusEntries$ = this.summary$.pipe(
+    map(summary => {
+      const total = summary.statusBreakdown.reduce((acc, entry) => acc + entry.count, 0) || 1;
+      return summary.statusBreakdown.map(entry => ({
+        ...entry,
+        percent: (entry.count / total) * 100,
+      }));
+    }),
+  );
 }

@@ -67,7 +67,7 @@
       <mat-card-header>
         <mat-card-title>{{ 'reports.list.title' | translate }}</mat-card-title>
       </mat-card-header>
-      <mat-card-content>
+      <mat-card-content *ngIf="reports$ | async as reports">
         <mat-nav-list>
           <a
             mat-list-item
@@ -78,8 +78,8 @@
             <div class="reports-page__list-item">
               <div class="reports-page__list-item-title">{{ report.title }}</div>
               <div class="reports-page__list-item-meta">
-                <span>{{ report.createdAt | date: 'yyyy/MM/dd' }}</span>
-                <span class="reports-page__list-item-summary">{{ report.summary }}</span>
+                <span>{{ createdAtToDate(report.createdAt) | date: 'yyyy/MM/dd' }}</span>
+                <span class="reports-page__list-item-summary">{{ report.metrics.notes }}</span>
               </div>
             </div>
           </a>
@@ -92,7 +92,7 @@
       <mat-card-header>
         <mat-card-title>{{ report.title }}</mat-card-title>
         <mat-card-subtitle>
-          {{ report.createdAt | date: 'yyyy/MM/dd (EEE)' }}
+          {{ createdAtToDate(report.createdAt) | date: 'yyyy/MM/dd (EEE)' }}
         </mat-card-subtitle>
       </mat-card-header>
       <mat-divider></mat-divider>
