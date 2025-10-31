@@ -1,8 +1,8 @@
 // src/app/services/ai.service.ts
 import { Injectable } from '@angular/core';
 import { getApp } from 'firebase/app';
-import { getFunctions, httpsCallable /*, httpsCallableFromURL*/ } from 'firebase/functions';
 import { getAuth } from 'firebase/auth';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 
 export type AiIssueSuggestRequest = {
   title?: string;
@@ -21,7 +21,9 @@ export type AiIssueSuggestRequest = {
 @Injectable({ providedIn: 'root' })
 export class AiService {
   private auth = getAuth(getApp());
-  private functions = getFunctions(getApp(), 'asia-northeast1');
+  private functionsUrl = 'https://asia-northeast1-kensyu10121.cloudfunctions.net/issueSuggestHttp';
+
+  constructor(private http: HttpClient) {}
 
   async suggestIssues(req: AiIssueSuggestRequest): Promise<string[]> {
     if (!this.auth.currentUser) throw new Error('Unauthorized');
@@ -54,18 +56,30 @@ export class AiService {
 
     const payload = { title, description, projectId: req.projectId ?? '', lang: req.lang ?? 'ja' };
 
-    // 通常の callable
-    const call = httpsCallable<any, { suggestions: { text: string }[] }>(this.functions, 'issueSuggest');
+    // 認証トークンを取得
+    const token = await this.auth.currentUser?.getIdToken();
+    if (!token) {
+      throw new Error('Unauthorized: No token available');
+    }
 
-    // ※もし切り分けたければ直URLでも試せます（コメント解除）
-    // const call = httpsCallableFromURL<any, { suggestions: { text: string }[] }>(
-    //   this.functions,
-    //   'https://asia-northeast1-kensyu10121.cloudfunctions.net/issueSuggest'
-    // );
+    // HTTPリクエストで呼び出し
+    const headers = new HttpHeaders({
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    });
 
-    const res = await call(payload);
-    const suggestions = Array.isArray(res?.data?.suggestions) ? res.data.suggestions : [];
-    return suggestions.map(s => s?.text).filter(Boolean);
+    const res = await this.http.post<{ suggestions: { text: string }[] }>(
+      this.functionsUrl,
+      payload,
+      { headers }
+    ).toPromise();
+
+    if (!res) {
+      throw new Error('No response from server');
+    }
+
+    const suggestions = Array.isArray(res.suggestions) ? res.suggestions : [];
+    return suggestions.map((s: { text: string }) => s?.text).filter(Boolean);
   }
 }
 

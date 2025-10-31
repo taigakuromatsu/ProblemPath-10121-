@@ -15,6 +15,17 @@ import { ThemeService } from './services/theme.service';
 import { TranslateModule } from '@ngx-translate/core';
 import { AuthService } from './services/auth.service';
 import { MessagingService } from './services/messaging.service';
+// 追加：DevTools から `await window.ppGetToken()` で常に最新IDトークンを取得
+import { getAuth } from '@angular/fire/auth';
+(globalThis as any).ppGetToken = async () => {
+  const auth = getAuth();
+  const u = auth.currentUser || await new Promise<any>(r => {
+    const off = auth.onAuthStateChanged(x => { off(); r(x); });
+  });
+  const t = await u.getIdToken(true); // ← 強制リフレッシュ
+  console.log('ID_TOKEN=', t);
+  return t;
+};
 
 
 @Component({
@@ -127,4 +138,5 @@ export class App {
   ngOnInit() {
     this.theme.init();
   }
+
 }

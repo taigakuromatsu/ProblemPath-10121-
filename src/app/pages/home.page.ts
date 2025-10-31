@@ -29,8 +29,9 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { MessagingService, FcmNotice } from '../services/messaging.service';
 import { Firestore, doc, docData } from '@angular/fire/firestore';
 import { MatDividerModule } from '@angular/material/divider';
-import { AiIssueSuggestComponent } from '../components/ai-issue-suggest.component';
+import { AiService } from '../services/ai.service';
 import { TranslatePipe } from '@ngx-translate/core';
+import { AiIssueSuggestComponent } from '../components/ai-issue-suggest.component';
 
 // ---- このページ専用の拡張型 ----
 type ProblemWithDef = Problem & {
@@ -106,6 +107,8 @@ export class HomePage implements OnInit, OnDestroy {
   // --- FCM 状態（users/{uid}/fcmStatus/app） ---
   fcmStatus$!: Observable<{ enabled?: boolean; lastTokenSavedAt?: any; lastError?: string } | null>;
 
+
+
   constructor(
     public prefs: PrefsService,
     private theme: ThemeService,
@@ -123,6 +126,7 @@ export class HomePage implements OnInit, OnDestroy {
     private msg: MessagingService,
     private fs: Firestore,
     private i18n: TranslateService,
+    private ai: AiService,
   ) {
     this.isOnline$ = this.network.isOnline$;
     this.canEdit$ = combineLatest([this.members.isEditor$, this.network.isOnline$]).pipe(
@@ -736,6 +740,7 @@ export class HomePage implements OnInit, OnDestroy {
 
     this.fgSub?.unsubscribe();
   }
+
 }
 
 

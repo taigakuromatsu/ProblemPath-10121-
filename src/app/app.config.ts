@@ -15,6 +15,7 @@ import { I18nService } from './i18n/i18n.service';
 
 import { provideStorage, getStorage } from '@angular/fire/storage';
 import { provideMessaging, getMessaging } from '@angular/fire/messaging';
+import { provideFunctions, getFunctions } from '@angular/fire/functions';
 
 // ---- loader ----
 class SimpleHttpTranslateLoader implements TranslateLoader {
@@ -42,6 +43,7 @@ export const appConfig: ApplicationConfig = {
     // ★ これらは「そのまま」並べる（importProvidersFromに入れない）
     provideStorage(() => getStorage()),
     provideMessaging(() => getMessaging()),
+    provideFunctions(() => getFunctions(undefined, 'asia-northeast1')),
 
     // ★ importProvidersFrom には NgModule だけを渡す
     importProvidersFrom(

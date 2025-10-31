@@ -158,13 +158,15 @@
             <button mat-raised-button color="primary" type="submit" [disabled]="!(canEdit$ | async)">＋ {{ 'issue.add' | translate }}</button>
           </form>
 
-          <!-- 既存の Issue 追加フォームのすぐ下に追加 -->
-          <pp-ai-issue-suggest
-          *ngIf="selectedProblemDoc$ | async as prob"
-          [problem]="prob"
-          [disabled]="!(canEdit$ | async)"
-          (pick)="issueTitle = $event">
-          </pp-ai-issue-suggest>
+          <!-- ▼ 問題定義を材料にワンクリック提案（ヒント入力なし） -->
+          <div *ngIf="selectedProblemDoc$ | async as prob">
+            <pp-ai-issue-suggest
+              [problem]="prob"
+              [disabled]="!(canEdit$ | async)"
+              (pick)="issueTitle = $event">
+            </pp-ai-issue-suggest>
+          </div>
+
 
 
           <!-- Issue 一覧 -->
