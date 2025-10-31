@@ -1,0 +1,93 @@
+.page.analytics-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.page__header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.page__subtitle {
+  color: var(--pp-muted-fg, rgba(0, 0, 0, 0.56));
+  margin: 0;
+}
+
+.page__project {
+  font-size: 0.875rem;
+  margin: 0;
+  color: var(--pp-muted-fg, rgba(0, 0, 0, 0.56));
+}
+
+.analytics-page__metrics {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.metric-card__value {
+  font-size: 2rem;
+  font-weight: 600;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.metric-card__unit {
+  font-size: 0.875rem;
+  color: var(--pp-muted-fg, rgba(0, 0, 0, 0.56));
+}
+
+.status-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.status-row + .status-row {
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.status-row__meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-weight: 500;
+}
+
+.status-row__label {
+  color: var(--pp-muted-fg, rgba(0, 0, 0, 0.68));
+}
+
+.status-row__value {
+  font-variant-numeric: tabular-nums;
+}
+
+.problem-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.problem-progress__meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.problem-progress__title {
+  font-weight: 500;
+}
+
+.problem-progress__value {
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--pp-muted-fg, rgba(0, 0, 0, 0.56));
+  margin: 0;
+}

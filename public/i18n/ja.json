@@ -24,7 +24,58 @@
     "board": "ボード",
     "schedule": "スケジュール",
     "home": "ホーム",
-    "my": "マイ"
+    "my": "マイ",
+    "analytics": "分析",
+    "reports": "レポート"
+  },
+  "analytics": {
+    "title": "Analytics / プロジェクト分析",
+    "subtitle": "プロジェクト全体の定量指標をまとめたダッシュボードです。",
+    "projectContext": "現在のプロジェクト ID: {{id}}",
+    "cards": {
+      "completedTasks7d": "完了タスク (過去7日)",
+      "avgLeadTime30d": "平均対応日数 (30日平均)",
+      "avgLeadTime30dUnit": "日",
+      "lateRateThisWeek": "遅延率 (今週)"
+    },
+    "statusBreakdown": {
+      "title": "ステータス別タスク分布",
+      "todo": "未着手",
+      "inProgress": "対応中",
+      "review": "レビュー中",
+      "done": "完了"
+    },
+    "problemProgress": {
+      "title": "Problem別の進捗",
+      "empty": "現在表示できるProblemはありません。"
+    }
+  },
+  "reports": {
+    "title": "Reports / 進捗レポート",
+    "subtitle": "AI下書きや手動入力で週次・日次のレポートを管理します。",
+    "projectContext": "現在のプロジェクト ID: {{id}}",
+    "actions": {
+      "generateAi": "AI下書きを生成",
+      "addManual": "手動レポートを追加"
+    },
+    "form": {
+      "titleLabel": "タイトル",
+      "titlePlaceholder": "例: 2024-W15 Progress",
+      "bodyLabel": "本文",
+      "bodyPlaceholder": "完了タスクや課題、次のアクションなどを記入",
+      "cancel": "キャンセル",
+      "save": "保存"
+    },
+    "list": {
+      "title": "過去レポート",
+      "empty": "まだレポートはありません"
+    },
+    "preview": {
+      "metricsTitle": "指標メモ",
+      "completedTasks": "完了タスク",
+      "avgProgress": "平均進捗率",
+      "notes": "メモ"
+    }
   },
   "label": {
     "problem": "問題"

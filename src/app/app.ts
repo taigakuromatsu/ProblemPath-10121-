@@ -119,7 +119,9 @@ export class App {
     { label: 'nav.tree', path: '/tree', exact: false },
     { label: 'nav.board', path: '/board', exact: false },
     { label: 'nav.schedule', path: '/schedule', exact: false },
-    { label: 'nav.my', path: '/my', exact: false }
+    { label: 'nav.my', path: '/my', exact: false },
+    { label: 'nav.analytics', path: '/analytics', exact: false },
+    { label: 'nav.reports', path: '/reports', exact: false }
   ];
 
   readonly isHandset$: Observable<boolean>;

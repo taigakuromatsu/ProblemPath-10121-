@@ -1,0 +1,83 @@
+<section class="page analytics-page">
+  <header class="page__header">
+    <h1 class="section-title section-title--info no-truncate">
+      {{ 'analytics.title' | translate }}
+    </h1>
+    <p class="page__subtitle">{{ 'analytics.subtitle' | translate }}</p>
+    <p class="page__project" *ngIf="projectId$ | async as projectId">
+      {{ 'analytics.projectContext' | translate: { id: projectId } }}
+    </p>
+  </header>
+
+  <div class="analytics-page__metrics">
+    <mat-card class="metric-card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar color="primary">task_alt</mat-icon>
+        <mat-card-title>{{ 'analytics.cards.completedTasks7d' | translate }}</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="metric-card__value">{{ summary.completedTasks7d }}</div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="metric-card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar color="primary">schedule</mat-icon>
+        <mat-card-title>{{ 'analytics.cards.avgLeadTime30d' | translate }}</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="metric-card__value">
+          {{ summary.avgLeadTime30d | number: '1.0-1' }}
+          <span class="metric-card__unit">{{ 'analytics.cards.avgLeadTime30dUnit' | translate }}</span>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="metric-card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar color="primary">trending_down</mat-icon>
+        <mat-card-title>{{ 'analytics.cards.lateRateThisWeek' | translate }}</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="metric-card__value">
+          {{ summary.lateRateThisWeek | percent: '1.0-1' }}
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <mat-card class="analytics-page__status-card">
+    <mat-card-header>
+      <mat-card-title>{{ 'analytics.statusBreakdown.title' | translate }}</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="status-row" *ngFor="let entry of statusEntries">
+        <div class="status-row__meta">
+          <span class="status-row__label">{{ entry.labelKey | translate }}</span>
+          <span class="status-row__value">{{ entry.count }}</span>
+        </div>
+        <mat-progress-bar mode="determinate" [value]="entry.percent"></mat-progress-bar>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card class="analytics-page__problem-card">
+    <mat-card-header>
+      <mat-card-title>{{ 'analytics.problemProgress.title' | translate }}</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <div *ngIf="problemProgress.length; else noProblems" class="problem-progress">
+        <div class="problem-progress__item" *ngFor="let problem of problemProgress">
+          <div class="problem-progress__meta">
+            <span class="problem-progress__title">{{ problem.problemTitle }}</span>
+            <span class="problem-progress__value">{{ problem.progressPercent | number: '1.0-0' }}%</span>
+          </div>
+          <mat-progress-bar mode="determinate" [value]="problem.progressPercent"></mat-progress-bar>
+        </div>
+      </div>
+      <ng-template #noProblems>
+        <p class="muted">{{ 'analytics.problemProgress.empty' | translate }}</p>
+      </ng-template>
+    </mat-card-content>
+  </mat-card>
+</section>
