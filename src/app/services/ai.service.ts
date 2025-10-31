@@ -14,21 +14,32 @@ export type AiIssueSuggestRequest = {
   solution?: string;
   goal?: string;
   problem?: string | {
-    title?: string; description?: string; phenomenon?: string; cause?: string; solution?: string; goal?: string;
+    title?: string;
+    description?: string;
+    phenomenon?: string;
+    cause?: string;
+    solution?: string;
+    goal?: string;
   };
+};
+
+// Gen1側レスポンスの型
+type IssueSuggestHttpResponse = {
+  suggestions: Array<{ text: string }>;
 };
 
 @Injectable({ providedIn: 'root' })
 export class AiService {
   private auth = getAuth(getApp());
-  private functionsUrl = 'https://asia-northeast1-kensyu10121.cloudfunctions.net/issueSuggestHttp';
+  private functionsUrl =
+    'https://asia-northeast1-kensyu10121.cloudfunctions.net/issueSuggestHttp';
 
   constructor(private http: HttpClient) {}
 
   async suggestIssues(req: AiIssueSuggestRequest): Promise<string[]> {
     if (!this.auth.currentUser) throw new Error('Unauthorized');
 
-    // 後方互換の正規化
+    // 後方互換まとめ
     let title = req.title ?? '';
     let description = req.description ?? '';
     let { phenomenon, cause, solution, goal } = req;
@@ -40,48 +51,61 @@ export class AiService {
         title ||= req.problem.title ?? '';
         description ||= req.problem.description ?? '';
         phenomenon ||= req.problem.phenomenon;
-        cause ||= req.problem.cause;
-        solution ||= req.problem.solution;
-        goal ||= req.problem.goal;
+        cause      ||= req.problem.cause;
+        solution   ||= req.problem.solution;
+        goal       ||= req.problem.goal;
       }
     }
 
-    const lines: string[] = [];
-    if (phenomenon) lines.push(`現象: ${phenomenon}`);
-    if (cause)      lines.push(`原因: ${cause}`);
-    if (solution)   lines.push(`対策: ${solution}`);
-    if (goal)       lines.push(`目標: ${goal}`);
-    const block = lines.join('\n');
-    if (block) description = description ? `${description}\n\n${block}` : block;
-
-    const payload = { title, description, projectId: req.projectId ?? '', lang: req.lang ?? 'ja' };
-
-    // 認証トークンを取得
-    const token = await this.auth.currentUser?.getIdToken();
-    if (!token) {
-      throw new Error('Unauthorized: No token available');
+    const infoLines: string[] = [];
+    if (phenomenon) infoLines.push(`現象: ${phenomenon}`);
+    if (cause)      infoLines.push(`原因: ${cause}`);
+    if (solution)   infoLines.push(`対策: ${solution}`);
+    if (goal)       infoLines.push(`目標: ${goal}`);
+    const block = infoLines.join('\n');
+    if (block) {
+      description = description ? `${description}\n\n${block}` : block;
     }
 
-    // HTTPリクエストで呼び出し
+    const payload = {
+      lang: req.lang ?? 'ja',
+      projectId: req.projectId ?? '',
+      title,
+      description,
+      problem: {
+        title,
+        phenomenon: phenomenon ?? '',
+        cause:      cause ?? '',
+        solution:   solution ?? '',
+        goal:       goal ?? '',
+      },
+    };
+
+    // Firebase ID token を Authorization に付与
+    const token = await this.auth.currentUser?.getIdToken();
+    if (!token) throw new Error('Unauthorized: No token available');
+
     const headers = new HttpHeaders({
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
     });
 
-    const res = await this.http.post<{ suggestions: { text: string }[] }>(
-      this.functionsUrl,
-      payload,
-      { headers }
-    ).toPromise();
+    // Gen1のHTTP関数を叩く
+    const res = await this.http
+      .post<IssueSuggestHttpResponse>(this.functionsUrl, payload, { headers })
+      .toPromise();
 
-    if (!res) {
-      throw new Error('No response from server');
+    if (!res || !Array.isArray(res.suggestions)) {
+      return [];
     }
 
-    const suggestions = Array.isArray(res.suggestions) ? res.suggestions : [];
-    return suggestions.map((s: { text: string }) => s?.text).filter(Boolean);
+    // [{text:"..."}] → ["..."]
+    return res.suggestions
+      .map(item => (item && item.text) ? item.text.trim() : '')
+      .filter(s => !!s);
   }
 }
+
 
 
 

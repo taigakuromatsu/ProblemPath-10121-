@@ -1,4 +1,5 @@
 // src/app/components/ai-issue-suggest.component.ts
+
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { NgIf, NgFor } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
@@ -25,9 +26,14 @@ import { CurrentProjectService } from '../services/current-project.service';
       <div class="ai-suggest__chips" *ngIf="suggestions?.length">
         <span class="muted">{{ 'ai.pickOne' | translate }}</span>
         <mat-chip-set>
-          <mat-chip *ngFor="let s of suggestions" (click)="pick.emit(s)" appearance="outlined">{{ s }}</mat-chip>
+          <mat-chip
+            *ngFor="let s of suggestions"
+            (click)="pick.emit(s)"
+            appearance="outlined">{{ s }}</mat-chip>
         </mat-chip-set>
-        <button mat-button type="button" (click)="clear()" aria-label="clear">{{ 'ai.clear' | translate }}</button>
+        <button mat-button type="button" (click)="clear()" aria-label="clear">
+          {{ 'ai.clear' | translate }}
+        </button>
       </div>
 
       <div class="ai-suggest__loading" *ngIf="loading">
@@ -66,8 +72,14 @@ export class AiIssueSuggestComponent {
     this.error = null;
     this.suggestions = [];
     const pid = this.current.getSync();
-    if (!pid) { this.error = this.tr.instant('common.projectNotSelected'); return; }
-    if (!this.problem?.title) { this.error = this.tr.instant('ai.noProblem'); return; }
+    if (!pid) {
+      this.error = this.tr.instant('common.projectNotSelected');
+      return;
+    }
+    if (!this.problem?.title) {
+      this.error = this.tr.instant('ai.noProblem');
+      return;
+    }
 
     this.loading = true;
     try {
@@ -78,11 +90,12 @@ export class AiIssueSuggestComponent {
         problem: {
           title: this.problem.title,
           phenomenon: this.problem.problemDef?.phenomenon ?? '',
-          cause: this.problem.problemDef?.cause ?? '',
-          solution: this.problem.problemDef?.solution ?? '',
-          goal: this.problem.problemDef?.goal ?? '',
+          cause:      this.problem.problemDef?.cause ?? '',
+          solution:   this.problem.problemDef?.solution ?? '',
+          goal:       this.problem.problemDef?.goal ?? '',
         }
       });
+      // out は string[] 前提
       this.suggestions = out;
     } catch (e: any) {
       this.error = e?.message ?? String(e);
@@ -91,5 +104,8 @@ export class AiIssueSuggestComponent {
     }
   }
 
-  clear() { this.suggestions = []; this.error = null; }
+  clear() {
+    this.suggestions = [];
+    this.error = null;
+  }
 }

@@ -4,7 +4,6 @@ import { Observable, map } from 'rxjs';
 import { Problem } from '../models/types';
 import { ProblemDef } from '../models/types';
 
-
 const DEBUG_PROBLEMS = false; // ← 必要な時だけ true に
 
 // Firebase SDK (native) ＋ rxfire
@@ -21,6 +20,7 @@ import {
   limit as nativeLimit,
   where as nativeWhere,
   writeBatch as nativeWriteBatch,
+  deleteField as nativeDeleteField,   // ★ 追加：空欄時はフィールド削除へ
 } from 'firebase/firestore';
 import { collectionData as rxCollectionData } from 'rxfire/firestore';
 
@@ -28,12 +28,11 @@ import { collectionData as rxCollectionData } from 'rxfire/firestore';
 export class ProblemsService {
   constructor(private fs: Firestore) {}
 
-
   private colPath(projectId: string) {
     if (!projectId) throw new Error('[ProblemsService] projectId is required');
     return `projects/${projectId}/problems`;
   }
-  
+
   private dlog(...args: any[]) {
     if (DEBUG_PROBLEMS) console.debug(...args);
   }
@@ -42,8 +41,12 @@ export class ProblemsService {
   list(projectId: string): Observable<Problem[]> {
     this.dlog('[ProblemsService.list]', { pid: projectId, path: this.colPath(projectId) });
     const colRef = nativeCollection(this.fs as any, this.colPath(projectId));
-    const q = nativeQuery(colRef, 
-      nativeWhere('visible','==', true), nativeOrderBy('order', 'asc'), nativeOrderBy('createdAt', 'asc'));
+    const q = nativeQuery(
+      colRef,
+      nativeWhere('visible', '==', true),
+      nativeOrderBy('order', 'asc'),
+      nativeOrderBy('createdAt', 'asc'),
+    );
     return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Problem[]>)
       .pipe(map((xs: any[]) => xs.filter((p: any) => !p?.softDeleted)));
   }
@@ -58,43 +61,41 @@ export class ProblemsService {
     return (Number(max) || 0) + 1;
   }
 
-// -------- create --------
-async create(projectId: string, p: Partial<Problem>): Promise<any> {
-  const colRef = nativeCollection(this.fs as any, this.colPath(projectId));
-  const order = p.order ?? await this.nextOrder(projectId);
+  // -------- create --------
+  async create(projectId: string, p: Partial<Problem>): Promise<any> {
+    const colRef = nativeCollection(this.fs as any, this.colPath(projectId));
+    const order = p.order ?? await this.nextOrder(projectId);
 
-  const rawDef = (p as any).problemDef;
-  let problemDef: any | undefined;
-  if (rawDef) {
-    const phenomenon = (rawDef.phenomenon ?? '').trim();
-    const goal = (rawDef.goal ?? '').trim();
-    const updatedBy = rawDef.updatedBy ?? '';
-  
-    problemDef = { phenomenon, goal, updatedBy, updatedAt: serverTimestamp() };
-  
-    const cause = (rawDef.cause ?? '').trim();
-    const solution = (rawDef.solution ?? '').trim();
-    if (cause) problemDef.cause = cause;           // 空なら付けない
-    if (solution) problemDef.solution = solution;  // 空なら付けない
+    const rawDef = (p as any).problemDef;
+    let problemDef: any | undefined;
+    if (rawDef) {
+      const phenomenon = (rawDef.phenomenon ?? '').trim();
+      const goal = (rawDef.goal ?? '').trim();
+      const updatedBy = rawDef.updatedBy ?? '';
+
+      problemDef = { phenomenon, goal, updatedBy, updatedAt: serverTimestamp() };
+
+      const cause = (rawDef.cause ?? '').trim();
+      const solution = (rawDef.solution ?? '').trim();
+      if (cause) problemDef.cause = cause;           // 空なら付けない
+      if (solution) problemDef.solution = solution;  // 空なら付けない
+    }
+
+    return nativeAddDoc(colRef, {
+      title: p.title ?? 'Untitled',
+      description: p.description ?? '',
+      status: p.status ?? 'not_started',
+      progress: p.progress ?? 0,
+      tags: p.tags ?? [],
+      assignees: p.assignees ?? [],
+      order,
+      visible: true,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      template: p.template ?? {},
+      ...(problemDef ? { problemDef } : {}),
+    });
   }
-  
-
-  return nativeAddDoc(colRef, {
-    title: p.title ?? 'Untitled',
-    description: p.description ?? '',
-    status: p.status ?? 'not_started',
-    progress: p.progress ?? 0,
-    tags: p.tags ?? [],
-    assignees: p.assignees ?? [],
-    order,
-    visible:true,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    template: p.template ?? {},
-    ...(problemDef ? { problemDef } : {})
-  });
-}
-
 
   // -------- update --------
   async update(projectId: string, id: string, patch: Partial<Problem>): Promise<void> {
@@ -109,7 +110,7 @@ async create(projectId: string, p: Partial<Problem>): Promise<any> {
       colRef,
       nativeWhere('order', '<', currentOrder),
       nativeOrderBy('order', 'desc'),
-      nativeLimit(1)
+      nativeLimit(1),
     );
     const snap = await nativeGetDocs(q);
     if (snap.empty) return;
@@ -129,7 +130,7 @@ async create(projectId: string, p: Partial<Problem>): Promise<any> {
       colRef,
       nativeWhere('order', '>', currentOrder),
       nativeOrderBy('order', 'asc'),
-      nativeLimit(1)
+      nativeLimit(1),
     );
     const snap = await nativeGetDocs(q);
     if (snap.empty) return;
@@ -169,24 +170,26 @@ async create(projectId: string, p: Partial<Problem>): Promise<any> {
       const q = nativeQuery(issuesColRef, nativeLimit(batchSize));
       const snap = await nativeGetDocs(q);
       if (snap.empty) break;
-  
+
       for (const issueDoc of snap.docs) {
         const issueId = issueDoc.id;
-  
+
         // issue 直下の attachments
         await this.deleteCollection(`${issuesColPath}/${issueId}/attachments`);
-  
+
         // tasks 配下
         const tasksPath = `${issuesColPath}/${issueId}/tasks`;
         // 各 task の attachments を削除
-        const taskSnap = await nativeGetDocs(nativeQuery(nativeCollection(this.fs as any, tasksPath), nativeLimit(batchSize)));
+        const taskSnap = await nativeGetDocs(
+          nativeQuery(nativeCollection(this.fs as any, tasksPath), nativeLimit(batchSize)),
+        );
         for (const taskDoc of taskSnap.docs) {
           await this.deleteCollection(`${tasksPath}/${taskDoc.id}/attachments`);
         }
         // tasks 自体を削除
         await this.deleteCollection(tasksPath);
       }
-  
+
       const batch = nativeWriteBatch(this.fs as any);
       snap.docs.forEach((d) => batch.delete(d.ref));
       await batch.commit();
@@ -203,25 +206,34 @@ async create(projectId: string, p: Partial<Problem>): Promise<any> {
   async updateProblemDef(
     projectId: string,
     id: string,
-    def: Partial<ProblemDef> & { phenomenon: string; goal: string; updatedBy: string; }
+    def: Partial<ProblemDef> & { phenomenon: string; goal: string; updatedBy: string },
   ): Promise<void> {
     const ref = nativeDoc(this.fs as any, `${this.colPath(projectId)}/${id}`);
-  
+
     const patch: any = {};
+
+    // 必須2項目（空チェックは呼び出し側で済ませている前提）
     if (def.phenomenon !== undefined) patch['problemDef.phenomenon'] = def.phenomenon;
-    if (def.goal       !== undefined) patch['problemDef.goal']       = def.goal;
-    if (def.cause      !== undefined) patch['problemDef.cause']      = def.cause?.trim() || null;
-    if (def.solution   !== undefined) patch['problemDef.solution']   = def.solution?.trim() || null;
-    if (def.updatedBy  !== undefined) patch['problemDef.updatedBy']  = def.updatedBy;
-    // 外から来なければ内部で付与
-    patch['problemDef.updatedAt'] = def.updatedAt ?? serverTimestamp();
-  
+    if (def.goal !== undefined)       patch['problemDef.goal']       = def.goal;
+
+    // 任意項目：空文字は「削除」で送る（rules は null を許可しないため）
+    if (def.cause !== undefined) {
+      const c = (def.cause ?? '').toString().trim();
+      patch['problemDef.cause'] = c ? c : nativeDeleteField();
+    }
+    if (def.solution !== undefined) {
+      const s = (def.solution ?? '').toString().trim();
+      patch['problemDef.solution'] = s ? s : nativeDeleteField();
+    }
+
+    // 監査系
+    if (def.updatedBy !== undefined) patch['problemDef.updatedBy'] = def.updatedBy;
+    patch['problemDef.updatedAt'] = def['updatedAt'] ?? serverTimestamp();
+
     // ルートの updatedAt も更新
     patch['updatedAt'] = serverTimestamp();
-  
+
     return nativeUpdateDoc(ref, patch) as any;
   }
-  
-  
-
 }
+
