@@ -10,6 +10,19 @@
   gap: 8px;
 }
 
+.page__title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.analytics-page__refresh-button {
+  margin-left: auto;
+  padding: 0 12px;
+  line-height: 32px;
+  height: 32px;
+}
+
 .page__subtitle {
   color: var(--pp-muted-fg, rgba(0, 0, 0, 0.56));
   margin: 0;
