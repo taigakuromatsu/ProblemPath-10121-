@@ -9,7 +9,14 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatDividerModule } from '@angular/material/divider';
 import { TranslateModule } from '@ngx-translate/core';
-import { collection, collectionData, Firestore, Timestamp } from '@angular/fire/firestore';
+import {
+  addDoc,
+  collection,
+  collectionData,
+  Firestore,
+  Timestamp,
+  serverTimestamp,
+} from '@angular/fire/firestore';
 import { Functions, httpsCallable } from '@angular/fire/functions';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { BehaviorSubject, catchError, combineLatest, map, Observable, of, switchMap, take } from 'rxjs';
@@ -169,7 +176,9 @@ export class ReportsPage {
             body: data.body,
             metrics: data.metrics,
           };
-          // TODO: 保存ボタンを後で追加して、このドラフトを projects/{projectId}/reports に書き込む
+          // TODO: この草案はまだFirestoreに保存されていない一時データ。
+          //       「保存」ボタンで projects/{projectId}/reports に書き込む予定。
+          //       viewerロールは保存不可にする予定。
         })
         .catch(error => {
           console.warn('Failed to generate report draft', error);
@@ -188,31 +197,69 @@ export class ReportsPage {
     this.draftReport = { title: '', body: '' };
   }
 
-  saveManualReport(): void {
-    const title = this.draftReport.title.trim();
-    const body = this.draftReport.body.trim();
-    if (!title || !body) {
+  saveReport(target: 'manual' | 'active' = 'manual'): void {
+    const useManualDraft = target === 'manual';
+    const manualTitle = this.draftReport.title.trim();
+    const manualBody = this.draftReport.body.trim();
+    const manualMetrics: ReportMetrics = {
+      completedTasks: 0,
+      avgProgressPercent: 0,
+      notes: this.buildSummaryFromBody(manualBody),
+    };
+
+    const activeReport = this.activeReport;
+    const reportToSave = useManualDraft
+      ? manualTitle && manualBody
+        ? { title: manualTitle, body: manualBody, metrics: manualMetrics }
+        : null
+      : activeReport
+      ? {
+          title: activeReport.title,
+          body: activeReport.body,
+          metrics:
+            activeReport.metrics ?? {
+              completedTasks: 0,
+              avgProgressPercent: 0,
+              notes: this.buildSummaryFromBody(activeReport.body),
+            },
+        }
+      : null;
+
+    if (!reportToSave) {
       return;
     }
 
-    const createdAt = new Date();
-    const newReport: ReportEntry = {
-      id: `manual-${createdAt.toISOString()}`,
-      title,
-      createdAt: createdAt.toISOString(),
-      body,
-      metrics: {
-        completedTasks: 0,
-        avgProgressPercent: 0,
-        notes: this.buildSummaryFromBody(body),
-      },
-    };
+    this.projectId$.pipe(take(1)).subscribe(projectId => {
+      // TODO: roleチェック (admin/memberのみ保存可能、viewerは拒否)
+      if (!projectId) {
+        console.warn('saveReport: projectId is not available');
+        return;
+      }
 
-    const manualReports = this.manualReportsSubject.value;
-    this.manualReportsSubject.next([newReport, ...manualReports]);
-    this.activeReport = newReport;
-    this.manualFormOpen = false;
-    this.draftReport = { title: '', body: '' };
+      const reportsRef = collection(this.firestore, `projects/${projectId}/reports`);
+      addDoc(reportsRef, {
+        title: reportToSave.title,
+        body: reportToSave.body,
+        metrics: reportToSave.metrics,
+        createdAt: serverTimestamp(),
+      })
+        .then(docRef => {
+          console.log('saved!', docRef.id);
+          const createdAt = new Date();
+          this.activeReport = {
+            id: docRef.id,
+            title: reportToSave.title,
+            createdAt: createdAt.toISOString(),
+            body: reportToSave.body,
+            metrics: reportToSave.metrics,
+          };
+          this.manualFormOpen = false;
+          this.draftReport = { title: '', body: '' };
+        })
+        .catch(error => {
+          console.warn('saveReport failed', error);
+        });
+    });
   }
 
   setActiveReport(report: ReportEntry): void {
