@@ -10,8 +10,9 @@ import { MatInputModule } from '@angular/material/input';
 import { MatDividerModule } from '@angular/material/divider';
 import { TranslateModule } from '@ngx-translate/core';
 import { collection, collectionData, Firestore, Timestamp } from '@angular/fire/firestore';
+import { Functions, httpsCallable } from '@angular/fire/functions';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { BehaviorSubject, catchError, combineLatest, map, Observable, of, switchMap } from 'rxjs';
+import { BehaviorSubject, catchError, combineLatest, map, Observable, of, switchMap, take } from 'rxjs';
 
 import { CurrentProjectService } from '../services/current-project.service';
 
@@ -85,6 +86,7 @@ const MOCK_REPORTS: ReportEntry[] = [
 export class ReportsPage {
   private readonly currentProject = inject(CurrentProjectService);
   private readonly firestore = inject(Firestore);
+  private readonly functions = inject(Functions);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly projectId$: Observable<string | null> = this.currentProject.projectId$;
@@ -140,8 +142,39 @@ export class ReportsPage {
   }
 
   generateDraft(): void {
-    // TODO: call backend Function (Gemini) to generate draft for current projectId
-    console.log('Generating AI draft report...');
+    this.projectId$.pipe(take(1)).subscribe(projectId => {
+      // TODO: role check (viewerは不可)
+      if (!projectId) {
+        console.warn('generateDraft: projectId is not available');
+        return;
+      }
+
+      const callable = httpsCallable<
+        { projectId: string },
+        {
+          title: string;
+          body: string;
+          metrics: { completedTasks: number; avgProgressPercent: number; notes: string };
+        }
+      >(this.functions, 'generateProgressReportDraft');
+
+      callable({ projectId })
+        .then(result => {
+          const data = result.data;
+          const now = new Date();
+          this.activeReport = {
+            id: `draft-${now.getTime()}`,
+            title: data.title,
+            createdAt: now.toISOString(),
+            body: data.body,
+            metrics: data.metrics,
+          };
+          // TODO: 保存ボタンを後で追加して、このドラフトを projects/{projectId}/reports に書き込む
+        })
+        .catch(error => {
+          console.warn('Failed to generate report draft', error);
+        });
+    });
   }
 
   addManualReport(): void {

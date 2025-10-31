@@ -1,5 +1,6 @@
 // functions/src/ai.ts
 // Vertex AI (Gemini) 版: JSON 優先 + 行分割フェイルセーフ
+import { HttpsError, onCall } from "firebase-functions/v2/https";
 
 // ==== Vertex defaults（環境変数が無ければこれを使う）====
 const PROJECT =
@@ -151,6 +152,34 @@ export class AiClient {
     }
   }
 }
+
+export const generateProgressReportDraft = onCall<
+  { projectId: string },
+  {
+    title: string;
+    body: string;
+    metrics: { completedTasks: number; avgProgressPercent: number; notes: string };
+  }
+>(async (request) => {
+  // TODO: role check (viewerは不可)
+  const { projectId } = request.data ?? {};
+  if (!projectId) {
+    throw new HttpsError("invalid-argument", "projectId is required");
+  }
+
+  // TODO: 最終的にはGeminiを呼んで、projectIdの最近の進捗データを要約する
+  // TODO: 将来はeditor/adminロールのみ許可し、viewerは拒否する
+  return {
+    title: "今週の進捗サマリ (ダミー)",
+    body:
+      "今週はUI改善タスクを中心に進行し、ナビゲーションの微調整とアクセシビリティ改善を実施しました。バックエンドのパフォーマンス計測も継続しています。",
+    metrics: {
+      completedTasks: 6,
+      avgProgressPercent: 78,
+      notes: "UI改善と安定化を重点対応",
+    },
+  };
+});
 
   
 
