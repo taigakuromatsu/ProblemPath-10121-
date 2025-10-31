@@ -68,11 +68,11 @@ export class AnalyticsPage {
         `projects/${projectId}/analytics/currentSummary`,
       );
       // TODO: このドキュメントはCloud Functions側で集計して定期更新する予定（7日間完了数・30日平均リードタイム・今週の遅延率など）
-      return docData<AnalyticsSummary>(summaryRef).pipe(
+      return docData(summaryRef).pipe(
+        map((data): AnalyticsSummary => (data as AnalyticsSummary) ?? MOCK_SUMMARY),
         catchError(() => of(MOCK_SUMMARY)),
       );
     }),
-    map(summary => summary ?? MOCK_SUMMARY),
   );
 
   readonly statusEntries$ = this.summary$.pipe(

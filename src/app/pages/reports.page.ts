@@ -102,8 +102,8 @@ export class ReportsPage {
         `projects/${projectId}/reports`,
       );
       // TODO: Cloud Functions + Geminiで自動生成した週次サマリをここにaddDocする予定
-      return collectionData<ReportEntry>(reportsRef, { idField: 'id' }).pipe(
-        map(entries => (entries.length ? entries : MOCK_REPORTS)),
+      return collectionData(reportsRef, { idField: 'id' }).pipe(
+        map((entries): ReportEntry[] => (entries as ReportEntry[]).length ? (entries as ReportEntry[]) : MOCK_REPORTS),
         catchError(() => of(MOCK_REPORTS)),
       );
     }),
