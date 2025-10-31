@@ -27,7 +27,7 @@
       </mat-card-header>
       <mat-card-content>
         <div class="metric-card__value">
-          {{ summary.avgLeadTime30d | number: '1.0-1' }}
+          {{ summary.avgLeadTime30dDays | number: '1.0-1' }}
           <span class="metric-card__unit">{{ 'analytics.cards.avgLeadTime30dUnit' | translate }}</span>
         </div>
       </mat-card-content>
@@ -39,9 +39,7 @@
         <mat-card-title>{{ 'analytics.cards.lateRateThisWeek' | translate }}</mat-card-title>
       </mat-card-header>
       <mat-card-content>
-        <div class="metric-card__value">
-          {{ summary.lateRateThisWeek | percent: '1.0-1' }}
-        </div>
+        <div class="metric-card__value">{{ summary.lateRateThisWeekPercent | number: '1.0-1' }}%</div>
       </mat-card-content>
     </mat-card>
   </div>
@@ -53,7 +51,7 @@
     <mat-card-content>
       <div class="status-row" *ngFor="let entry of statusEntries">
         <div class="status-row__meta">
-          <span class="status-row__label">{{ entry.labelKey | translate }}</span>
+          <span class="status-row__label">{{ entry.label | translate }}</span>
           <span class="status-row__value">{{ entry.count }}</span>
         </div>
         <mat-progress-bar mode="determinate" [value]="entry.percent"></mat-progress-bar>
@@ -69,10 +67,10 @@
       <div *ngIf="problemProgress.length; else noProblems" class="problem-progress">
         <div class="problem-progress__item" *ngFor="let problem of problemProgress">
           <div class="problem-progress__meta">
-            <span class="problem-progress__title">{{ problem.problemTitle }}</span>
-            <span class="problem-progress__value">{{ problem.progressPercent | number: '1.0-0' }}%</span>
+            <span class="problem-progress__title">{{ problem.title }}</span>
+            <span class="problem-progress__value">{{ problem.percent | number: '1.0-0' }}%</span>
           </div>
-          <mat-progress-bar mode="determinate" [value]="problem.progressPercent"></mat-progress-bar>
+          <mat-progress-bar mode="determinate" [value]="problem.percent"></mat-progress-bar>
         </div>
       </div>
       <ng-template #noProblems>

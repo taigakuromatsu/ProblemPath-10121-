@@ -12,11 +12,11 @@
   <mat-card class="reports-page__actions">
     <mat-card-content>
       <div class="reports-page__action-buttons">
-        <button mat-raised-button color="primary" type="button" (click)="generateAiDraft()">
+        <button mat-raised-button color="primary" type="button" (click)="generateDraft()">
           <mat-icon>auto_awesome</mat-icon>
           {{ 'reports.actions.generateAi' | translate }}
         </button>
-        <button mat-stroked-button color="primary" type="button" (click)="openManualReportForm()">
+        <button mat-stroked-button color="primary" type="button" (click)="addManualReport()">
           <mat-icon>edit_note</mat-icon>
           {{ 'reports.actions.addManual' | translate }}
         </button>
@@ -72,8 +72,8 @@
           <a
             mat-list-item
             *ngFor="let report of reports"
-            (click)="selectReport(report.id)"
-            [class.active]="report.id === selectedReportId"
+            (click)="setActiveReport(report)"
+            [class.active]="report.id === activeReport?.id"
           >
             <div class="reports-page__list-item">
               <div class="reports-page__list-item-title">{{ report.title }}</div>

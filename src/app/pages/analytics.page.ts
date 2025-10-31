@@ -1,5 +1,5 @@
-import { Component } from '@angular/core';
-import { AsyncPipe, DecimalPipe, NgFor, NgIf, PercentPipe } from '@angular/common';
+import { Component, inject } from '@angular/core';
+import { AsyncPipe, DecimalPipe, NgFor, NgIf } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -9,43 +9,28 @@ import { Observable } from 'rxjs';
 
 import { CurrentProjectService } from '../services/current-project.service';
 
-interface ProblemProgressItem {
-  problemId: string;
-  problemTitle: string;
-  progressPercent: number;
-}
-
-type StatusKey = 'todo' | 'inProgress' | 'review' | 'done';
-
-interface AnalyticsSummary {
+export interface AnalyticsSummary {
   completedTasks7d: number;
-  avgLeadTime30d: number;
-  lateRateThisWeek: number;
-  statusBreakdown: Record<StatusKey, number>;
-  problemProgress: ProblemProgressItem[];
+  avgLeadTime30dDays: number;
+  lateRateThisWeekPercent: number;
+  statusBreakdown: { label: string; count: number }[];
+  problemProgress: { title: string; percent: number }[];
 }
 
-interface StatusEntry {
-  key: StatusKey;
-  labelKey: string;
-  count: number;
-  percent: number;
-}
-
-const MOCK_ANALYTICS_SUMMARY: AnalyticsSummary = {
+const MOCK_SUMMARY: AnalyticsSummary = {
   completedTasks7d: 42,
-  avgLeadTime30d: 3.6,
-  lateRateThisWeek: 0.18,
-  statusBreakdown: {
-    todo: 18,
-    inProgress: 12,
-    review: 6,
-    done: 64,
-  },
+  avgLeadTime30dDays: 3.6,
+  lateRateThisWeekPercent: 18.2,
+  statusBreakdown: [
+    { label: 'analytics.statusBreakdown.todo', count: 18 },
+    { label: 'analytics.statusBreakdown.inProgress', count: 12 },
+    { label: 'analytics.statusBreakdown.review', count: 6 },
+    { label: 'analytics.statusBreakdown.done', count: 64 },
+  ],
   problemProgress: [
-    { problemId: 'prob-1', problemTitle: 'オンボーディング改善', progressPercent: 72 },
-    { problemId: 'prob-2', problemTitle: 'モバイルUIリファイン', progressPercent: 55 },
-    { problemId: 'prob-3', problemTitle: '決済フロー安定化', progressPercent: 88 },
+    { title: 'オンボーディング改善', percent: 72 },
+    { title: 'モバイルUIリファイン', percent: 55 },
+    { title: '決済フロー安定化', percent: 88 },
   ],
 };
 
@@ -59,7 +44,6 @@ const MOCK_ANALYTICS_SUMMARY: AnalyticsSummary = {
     NgFor,
     NgIf,
     DecimalPipe,
-    PercentPipe,
     MatCardModule,
     MatIconModule,
     MatDividerModule,
@@ -68,32 +52,17 @@ const MOCK_ANALYTICS_SUMMARY: AnalyticsSummary = {
   ],
 })
 export class AnalyticsPage {
-  readonly projectId$: Observable<string | null>;
-  // TODO: Replace mock summary with Firestore aggregation stream when available.
-  readonly summary = MOCK_ANALYTICS_SUMMARY;
-  readonly statusEntries: StatusEntry[] = this.buildStatusEntries(this.summary.statusBreakdown);
+  private readonly currentProject = inject(CurrentProjectService);
+  readonly projectId$: Observable<string | null> = this.currentProject.projectId$;
+  // TODO: Firestore projects/{projectId}/analytics/currentSummary を購読して置き換える予定
+  readonly summary = MOCK_SUMMARY;
+  private readonly statusTotal = this.summary.statusBreakdown.reduce(
+    (acc, entry) => acc + entry.count,
+    0,
+  ) || 1;
+  readonly statusEntries: Array<{ label: string; count: number; percent: number }> = this.summary.statusBreakdown.map(entry => ({
+    ...entry,
+    percent: (entry.count / this.statusTotal) * 100,
+  }));
   readonly problemProgress = this.summary.problemProgress;
-
-  constructor(private readonly currentProject: CurrentProjectService) {
-    this.projectId$ = this.currentProject.projectId$;
-  }
-
-  private buildStatusEntries(status: AnalyticsSummary['statusBreakdown']): StatusEntry[] {
-    const base: Array<{ key: StatusKey; labelKey: string }> = [
-      { key: 'todo', labelKey: 'analytics.statusBreakdown.todo' },
-      { key: 'inProgress', labelKey: 'analytics.statusBreakdown.inProgress' },
-      { key: 'review', labelKey: 'analytics.statusBreakdown.review' },
-      { key: 'done', labelKey: 'analytics.statusBreakdown.done' },
-    ];
-    const total = base.reduce((acc, item) => acc + (status[item.key] || 0), 0) || 1;
-    return base.map(item => {
-      const count = status[item.key] || 0;
-      return {
-        key: item.key,
-        labelKey: item.labelKey,
-        count,
-        percent: (count / total) * 100,
-      } satisfies StatusEntry;
-    });
-  }
 }
