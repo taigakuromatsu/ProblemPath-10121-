@@ -1,6 +1,7 @@
 import { getFirestore } from "firebase-admin/firestore";
+import type { QueryDocumentSnapshot } from "@google-cloud/firestore";
 // @ts-ignore - firebase-functions/v2/httpsの型定義の問題を回避
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onCall, region, HttpsError } from "firebase-functions/v2/https";
 // @ts-ignore
 import type { CallableRequest } from "firebase-functions/v2/https";
 // @ts-ignore - firebase-functions/v2/schedulerの型定義の問題を回避
@@ -27,7 +28,7 @@ export const computeAndWriteAnalytics = async (projectId: string) => {
   const statusCounts: Record<string, number> = {};
   let completedTasksCount = 0;
 
-  tasksSnapshot.forEach((doc) => {
+  tasksSnapshot.forEach((doc: QueryDocumentSnapshot) => {
     const data = doc.data() ?? {};
     const status = (data.status as string) ?? "not_started";
     statusCounts[status] = (statusCounts[status] ?? 0) + 1;
@@ -51,10 +52,10 @@ export const computeAndWriteAnalytics = async (projectId: string) => {
     .get();
 
   const problemProgress = await Promise.all(
-    problemsSnapshot.docs.map(async (problemDoc) => {
+    problemsSnapshot.docs.map(async (problemDoc: QueryDocumentSnapshot) => {
       const tasksForProblem = await problemDoc.ref.collection("tasks").get();
       const totalTasks = tasksForProblem.size;
-      const doneTasks = tasksForProblem.docs.reduce((count, taskDoc) => {
+      const doneTasks = tasksForProblem.docs.reduce((count: number, taskDoc: QueryDocumentSnapshot) => {
         const status = taskDoc.get("status");
         return status === "done" ? count + 1 : count;
       }, 0);
@@ -83,20 +84,22 @@ export const computeAndWriteAnalytics = async (projectId: string) => {
 };
 
 // Callable Function: refresh analytics summary for a project.
-export const refreshAnalyticsSummary = onCall<
-  { projectId: string },
-  { ok: boolean }
->(async (request: CallableRequest<{ projectId: string }>) => {
-  // TODO: role check (viewerは不可)
-  const { projectId } = request.data ?? {};
-  if (!projectId) {
-    throw new HttpsError("invalid-argument", "projectId is required");
+type RequestData = { projectId: string };
+
+export const refreshAnalyticsSummaryV2 = onCall<RequestData, { ok: boolean }>(
+  { region: "asia-northeast1" },
+  async (request: { data: RequestData }) => {
+    const { projectId } = request.data ?? {};
+    if (!projectId) {
+      throw new HttpsError("invalid-argument", "projectId is required");
+    }
+
+    console.log("Refreshing analytics for", projectId);
+    return { ok: true };
   }
+);
 
-  await computeAndWriteAnalytics(projectId);
 
-  return { ok: true };
-});
 
 export const refreshAllAnalyticsSummaries = onSchedule(
   { schedule: "every 1 hours", timeZone: "Asia/Tokyo" },

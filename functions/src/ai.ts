@@ -190,11 +190,11 @@ export const generateProgressReportDraft = onCall<
       title: typeof item?.title === "string" ? item.title : "",
       percent: typeof item?.percent === "number" ? item.percent : 0,
     }))
-    .filter((item) => item.title || item.percent);
+    .filter((item: { title: string; percent: number }) => item.title || item.percent);
 
   const avgProgressPercent = normalizedProgress.length
     ? Math.round(
-        normalizedProgress.reduce((total, current) => total + current.percent, 0) /
+        normalizedProgress.reduce((total: number, current: { title: string; percent: number }) => total + current.percent, 0) /
           normalizedProgress.length,
       )
     : 0;
