@@ -8,6 +8,8 @@ import { MatListModule } from '@angular/material/list';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatDividerModule } from '@angular/material/divider';
+import { TranslateModule } from '@ngx-translate/core';
+import { Observable } from 'rxjs';
 
 import { CurrentProjectService } from '../services/current-project.service';
 
@@ -50,10 +52,11 @@ interface DraftReport {
     MatFormFieldModule,
     MatInputModule,
     MatDividerModule,
+    TranslateModule,
   ],
 })
 export class ReportsPage {
-  readonly projectId$ = this.currentProject.projectId$;
+  readonly projectId$: Observable<string | null>;
   // TODO: Replace mock reports with Firestore-backed collection once API is ready.
   reports: ReportItem[] = [
     {
@@ -89,7 +92,9 @@ export class ReportsPage {
   manualFormOpen = false;
   draftReport: DraftReport = { title: '', body: '' };
 
-  constructor(private readonly currentProject: CurrentProjectService) {}
+  constructor(private readonly currentProject: CurrentProjectService) {
+    this.projectId$ = this.currentProject.projectId$;
+  }
 
   get activeReport(): ReportItem | undefined {
     return this.reports.find(report => report.id === this.selectedReportId);

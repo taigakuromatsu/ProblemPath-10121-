@@ -4,6 +4,8 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatDividerModule } from '@angular/material/divider';
+import { TranslateModule } from '@ngx-translate/core';
+import { Observable } from 'rxjs';
 
 import { CurrentProjectService } from '../services/current-project.service';
 
@@ -62,16 +64,19 @@ const MOCK_ANALYTICS_SUMMARY: AnalyticsSummary = {
     MatIconModule,
     MatDividerModule,
     MatProgressBarModule,
+    TranslateModule,
   ],
 })
 export class AnalyticsPage {
-  readonly projectId$ = this.currentProject.projectId$;
+  readonly projectId$: Observable<string | null>;
   // TODO: Replace mock summary with Firestore aggregation stream when available.
   readonly summary = MOCK_ANALYTICS_SUMMARY;
   readonly statusEntries: StatusEntry[] = this.buildStatusEntries(this.summary.statusBreakdown);
   readonly problemProgress = this.summary.problemProgress;
 
-  constructor(private readonly currentProject: CurrentProjectService) {}
+  constructor(private readonly currentProject: CurrentProjectService) {
+    this.projectId$ = this.currentProject.projectId$;
+  }
 
   private buildStatusEntries(status: AnalyticsSummary['statusBreakdown']): StatusEntry[] {
     const base: Array<{ key: StatusKey; labelKey: string }> = [
