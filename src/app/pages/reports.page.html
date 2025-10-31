@@ -25,7 +25,7 @@
       <form
         *ngIf="manualFormOpen"
         class="reports-page__manual-form"
-        (ngSubmit)="saveManualReport()"
+        (ngSubmit)="saveReport('manual')"
       >
         <mat-form-field appearance="outline">
           <mat-label>{{ 'reports.form.titleLabel' | translate }}</mat-label>
@@ -95,6 +95,11 @@
           {{ createdAtToDate(report.createdAt) | date: 'yyyy/MM/dd (EEE)' }}
         </mat-card-subtitle>
       </mat-card-header>
+      <mat-card-actions *ngIf="report.id?.startsWith('draft-')">
+        <button mat-flat-button color="primary" type="button" (click)="saveReport('active')">
+          {{ 'reports.form.save' | translate }}
+        </button>
+      </mat-card-actions>
       <mat-divider></mat-divider>
       <mat-card-content>
         <p class="reports-page__preview-body">{{ report.body }}</p>

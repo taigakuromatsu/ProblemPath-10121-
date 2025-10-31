@@ -4,6 +4,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 // @ts-ignore
 import type { CallableRequest } from "firebase-functions/v2/https";
+import { getFirestore } from "firebase-admin/firestore";
 
 // ==== Vertex defaults（環境変数が無ければこれを使う）====
 const PROJECT =
@@ -164,22 +165,62 @@ export const generateProgressReportDraft = onCall<
     metrics: { completedTasks: number; avgProgressPercent: number; notes: string };
   }
 >(async (request: CallableRequest<{ projectId: string }>) => {
-  // TODO: role check (viewerは不可)
+  // TODO: viewerロールは拒否したい（admin/memberだけ許可する）
   const { projectId } = request.data ?? {};
   if (!projectId) {
     throw new HttpsError("invalid-argument", "projectId is required");
   }
 
-  // TODO: 最終的にはGeminiを呼んで、projectIdの最近の進捗データを要約する
-  // TODO: 将来はeditor/adminロールのみ許可し、viewerは拒否する
+  const firestore = getFirestore();
+  const summaryRef = firestore.doc(`projects/${projectId}/analytics/currentSummary`);
+  const summarySnap = await summaryRef.get();
+
+  if (!summarySnap.exists) {
+    throw new HttpsError("not-found", "Analytics summary not found");
+  }
+
+  const summary = summarySnap.data() ?? {};
+  const completedTasks7d = typeof summary.completedTasks7d === "number" ? summary.completedTasks7d : 0;
+  const avgLeadTime30dDays = typeof summary.avgLeadTime30dDays === "number" ? summary.avgLeadTime30dDays : 0;
+  const lateRateThisWeekPercent = typeof summary.lateRateThisWeekPercent === "number" ? summary.lateRateThisWeekPercent : 0;
+  const problemProgress = Array.isArray(summary.problemProgress) ? summary.problemProgress : [];
+
+  const normalizedProgress = problemProgress
+    .map((item: any) => ({
+      title: typeof item?.title === "string" ? item.title : "",
+      percent: typeof item?.percent === "number" ? item.percent : 0,
+    }))
+    .filter((item) => item.title || item.percent);
+
+  const avgProgressPercent = normalizedProgress.length
+    ? Math.round(
+        normalizedProgress.reduce((total, current) => total + current.percent, 0) /
+          normalizedProgress.length,
+      )
+    : 0;
+
+  const topProblem = normalizedProgress[0];
+  const topProblemTitle = topProblem?.title || "重点課題";
+  const topProblemPercent = topProblem?.percent ?? 0;
+
+  const title = "Weekly Progress Summary";
+  const bodyParts = [
+    `完了タスクは ${completedTasks7d} 件。`,
+    `平均対応日数は ${avgLeadTime30dDays} 日程度。`,
+    `遅延率は ${lateRateThisWeekPercent}% に留まっています。`,
+    `特に ${topProblemTitle} は進捗 ${topProblemPercent}% まで進み、引き続き優先テーマです。`,
+  ];
+
+  const notes = `優先テーマは ${topProblemTitle}`;
+
+  // TODO: 最終的にはGeminiを使って自然な文章にする
   return {
-    title: "今週の進捗サマリ (ダミー)",
-    body:
-      "今週はUI改善タスクを中心に進行し、ナビゲーションの微調整とアクセシビリティ改善を実施しました。バックエンドのパフォーマンス計測も継続しています。",
+    title,
+    body: bodyParts.join(" "),
     metrics: {
-      completedTasks: 6,
-      avgProgressPercent: 78,
-      notes: "UI改善と安定化を重点対応",
+      completedTasks: completedTasks7d,
+      avgProgressPercent,
+      notes,
     },
   };
 });
