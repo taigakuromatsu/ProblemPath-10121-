@@ -1,0 +1,118 @@
+<section class="page reports-page">
+  <header class="page__header">
+    <h1 class="section-title section-title--info no-truncate">
+      {{ 'reports.title' | translate }}
+    </h1>
+    <p class="page__subtitle">{{ 'reports.subtitle' | translate }}</p>
+    <p class="page__project" *ngIf="projectId$ | async as projectId">
+      {{ 'reports.projectContext' | translate: { id: projectId } }}
+    </p>
+  </header>
+
+  <mat-card class="reports-page__actions">
+    <mat-card-content>
+      <div class="reports-page__action-buttons">
+        <button mat-raised-button color="primary" type="button" (click)="generateAiDraft()">
+          <mat-icon>auto_awesome</mat-icon>
+          {{ 'reports.actions.generateAi' | translate }}
+        </button>
+        <button mat-stroked-button color="primary" type="button" (click)="openManualReportForm()">
+          <mat-icon>edit_note</mat-icon>
+          {{ 'reports.actions.addManual' | translate }}
+        </button>
+      </div>
+
+      <form
+        *ngIf="manualFormOpen"
+        class="reports-page__manual-form"
+        (ngSubmit)="saveManualReport()"
+      >
+        <mat-form-field appearance="outline">
+          <mat-label>{{ 'reports.form.titleLabel' | translate }}</mat-label>
+          <input
+            matInput
+            name="title"
+            [(ngModel)]="draftReport.title"
+            required
+            placeholder="{{ 'reports.form.titlePlaceholder' | translate }}"
+          />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>{{ 'reports.form.bodyLabel' | translate }}</mat-label>
+          <textarea
+            matInput
+            name="body"
+            rows="5"
+            [(ngModel)]="draftReport.body"
+            required
+            placeholder="{{ 'reports.form.bodyPlaceholder' | translate }}"
+          ></textarea>
+        </mat-form-field>
+
+        <div class="reports-page__manual-form-actions">
+          <button mat-stroked-button type="button" (click)="cancelManualReport()">
+            {{ 'reports.form.cancel' | translate }}
+          </button>
+          <button mat-flat-button color="primary" type="submit">
+            {{ 'reports.form.save' | translate }}
+          </button>
+        </div>
+      </form>
+    </mat-card-content>
+  </mat-card>
+
+  <div class="reports-page__content">
+    <mat-card class="reports-page__list">
+      <mat-card-header>
+        <mat-card-title>{{ 'reports.list.title' | translate }}</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <mat-nav-list>
+          <a
+            mat-list-item
+            *ngFor="let report of reports"
+            (click)="selectReport(report.id)"
+            [class.active]="report.id === selectedReportId"
+          >
+            <div class="reports-page__list-item">
+              <div class="reports-page__list-item-title">{{ report.title }}</div>
+              <div class="reports-page__list-item-meta">
+                <span>{{ report.createdAt | date: 'yyyy/MM/dd' }}</span>
+                <span class="reports-page__list-item-summary">{{ report.summary }}</span>
+              </div>
+            </div>
+          </a>
+        </mat-nav-list>
+        <p *ngIf="!reports.length" class="muted">{{ 'reports.list.empty' | translate }}</p>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="reports-page__preview" *ngIf="activeReport as report">
+      <mat-card-header>
+        <mat-card-title>{{ report.title }}</mat-card-title>
+        <mat-card-subtitle>
+          {{ report.createdAt | date: 'yyyy/MM/dd (EEE)' }}
+        </mat-card-subtitle>
+      </mat-card-header>
+      <mat-divider></mat-divider>
+      <mat-card-content>
+        <p class="reports-page__preview-body">{{ report.body }}</p>
+        <div class="reports-page__preview-meta" *ngIf="report.metrics as metrics">
+          <h3>{{ 'reports.preview.metricsTitle' | translate }}</h3>
+          <ul>
+            <li *ngIf="metrics.completedTasks !== undefined">
+              {{ 'reports.preview.completedTasks' | translate }}: {{ metrics.completedTasks }}
+            </li>
+            <li *ngIf="metrics.avgProgressPercent !== undefined">
+              {{ 'reports.preview.avgProgress' | translate }}: {{ metrics.avgProgressPercent }}%
+            </li>
+            <li *ngIf="metrics.notes">
+              {{ 'reports.preview.notes' | translate }}: {{ metrics.notes }}
+            </li>
+          </ul>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+</section>
