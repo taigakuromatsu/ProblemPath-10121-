@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { AsyncPipe, DatePipe, NgFor, NgIf } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -13,13 +13,13 @@ import { Observable } from 'rxjs';
 
 import { CurrentProjectService } from '../services/current-project.service';
 
-interface ReportMetrics {
+export interface ReportMetrics {
   completedTasks?: number;
   avgProgressPercent?: number;
   notes?: string;
 }
 
-interface ReportItem {
+export interface ReportEntry {
   id: string;
   title: string;
   createdAt: Date;
@@ -56,9 +56,10 @@ interface DraftReport {
   ],
 })
 export class ReportsPage {
-  readonly projectId$: Observable<string | null>;
-  // TODO: Replace mock reports with Firestore-backed collection once API is ready.
-  reports: ReportItem[] = [
+  private readonly currentProject = inject(CurrentProjectService);
+  readonly projectId$: Observable<string | null> = this.currentProject.projectId$;
+  // TODO: Firestore projects/{projectId}/reports/{reportId} の形で保存予定
+  reports: ReportEntry[] = [
     {
       id: 'rpt-20240407',
       title: '2024-W14 Progress',
@@ -88,25 +89,17 @@ export class ReportsPage {
     },
   ];
 
-  selectedReportId = this.reports[0]?.id;
+  activeReport: ReportEntry | null = this.reports[0] ?? null;
   manualFormOpen = false;
   draftReport: DraftReport = { title: '', body: '' };
 
-  constructor(private readonly currentProject: CurrentProjectService) {
-    this.projectId$ = this.currentProject.projectId$;
+  generateDraft(): void {
+    // TODO: Cloud Functions 経由で Gemini を呼び出してドラフトを生成する
+    console.log('Generating AI draft report...');
   }
 
-  get activeReport(): ReportItem | undefined {
-    return this.reports.find(report => report.id === this.selectedReportId);
-  }
-
-  generateAiDraft(): void {
-    // TODO: Connect with Cloud Functions (functions/src/ai.ts) to request Gemini-generated drafts.
-    // TODO: Restrict this button to editors/admin roles once role checks are wired.
-    console.log('generate via AI');
-  }
-
-  openManualReportForm(): void {
+  addManualReport(): void {
+    // TODO: 手動レポート追加時に Firestore 下書きドキュメントを生成する
     this.manualFormOpen = true;
     this.draftReport = { title: '', body: '' };
   }
@@ -124,7 +117,7 @@ export class ReportsPage {
     }
 
     const createdAt = new Date();
-    const newReport: ReportItem = {
+    const newReport: ReportEntry = {
       id: `manual-${createdAt.toISOString()}`,
       title,
       createdAt,
@@ -134,13 +127,13 @@ export class ReportsPage {
     };
 
     this.reports = [newReport, ...this.reports];
-    this.selectedReportId = newReport.id;
+    this.activeReport = newReport;
     this.manualFormOpen = false;
     this.draftReport = { title: '', body: '' };
   }
 
-  selectReport(reportId: string): void {
-    this.selectedReportId = reportId;
+  setActiveReport(report: ReportEntry): void {
+    this.activeReport = report;
   }
 
   private buildSummaryFromBody(body: string): string {
