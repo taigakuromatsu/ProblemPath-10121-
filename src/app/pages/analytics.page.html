@@ -1,8 +1,18 @@
 <section class="page analytics-page">
   <header class="page__header">
-    <h1 class="section-title section-title--info no-truncate">
-      {{ 'analytics.title' | translate }}
-    </h1>
+    <div class="page__title-row">
+      <h1 class="section-title section-title--info no-truncate">
+        {{ 'analytics.title' | translate }}
+      </h1>
+      <button
+        type="button"
+        mat-stroked-button
+        class="analytics-page__refresh-button"
+        (click)="onRefreshAnalytics()"
+      >
+        再集計
+      </button>
+    </div>
     <p class="page__subtitle">{{ 'analytics.subtitle' | translate }}</p>
     <p class="page__project" *ngIf="projectId$ | async as projectId">
       {{ 'analytics.projectContext' | translate: { id: projectId } }}

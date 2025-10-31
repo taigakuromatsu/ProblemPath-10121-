@@ -87,7 +87,10 @@ export class TasksService {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       recurrenceRule: t.recurrenceRule ?? null,
-      problemId, issueId, projectId: pid,
+      // TODO: このメタ情報はCloud Functionsの集計(refreshAnalyticsSummary)で使うので必須
+      projectId: pid,
+      problemId,
+      issueId,
       softDeleted: false,
     });
   }
@@ -150,7 +153,13 @@ export class TasksService {
     const id = legacy ? (arg3 as string) : (arg4 as string);
     const patch = legacy ? (arg4 as Partial<Task>) : (arg5 ?? {});
     const ref = nativeDoc(this.fs as any, `${this.base(pid)}/${problemId}/issues/${issueId}/tasks/${id}`);
-    return nativeUpdateDoc(ref, { ...patch, updatedAt: serverTimestamp() }) as any;
+    return nativeUpdateDoc(ref, {
+      ...patch,
+      // TODO: このメタ情報はCloud Functionsの集計(refreshAnalyticsSummary)で使うので必須
+      projectId: pid,
+      problemId,
+      updatedAt: serverTimestamp(),
+    }) as any;
   }
 
   async remove(problemId: string, issueId: string, id: string): Promise<void>;

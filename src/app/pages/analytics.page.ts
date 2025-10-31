@@ -4,9 +4,11 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatButtonModule } from '@angular/material/button';
 import { TranslateModule } from '@ngx-translate/core';
 import { doc, docData, Firestore } from '@angular/fire/firestore';
-import { catchError, map, Observable, of, switchMap } from 'rxjs';
+import { Functions, httpsCallable } from '@angular/fire/functions';
+import { catchError, firstValueFrom, map, Observable, of, switchMap } from 'rxjs';
 
 import { CurrentProjectService } from '../services/current-project.service';
 
@@ -49,12 +51,14 @@ const MOCK_SUMMARY: AnalyticsSummary = {
     MatIconModule,
     MatDividerModule,
     MatProgressBarModule,
+    MatButtonModule,
     TranslateModule,
   ],
 })
 export class AnalyticsPage {
   private readonly currentProject = inject(CurrentProjectService);
   private readonly firestore = inject(Firestore);
+  private readonly functions = inject(Functions);
 
   readonly projectId$: Observable<string | null> = this.currentProject.projectId$;
 
@@ -84,4 +88,24 @@ export class AnalyticsPage {
       }));
     }),
   );
+
+  async onRefreshAnalytics(): Promise<void> {
+    const projectId = await firstValueFrom(this.projectId$);
+    if (!projectId) {
+      console.warn('Cannot refresh analytics summary without a projectId');
+      return;
+    }
+    // TODO: 将来的にはこの操作はAdminユーザーのみ許可予定
+    // TODO: 最終的にはSchedulerで自動実行予定
+    const callable = httpsCallable<{ projectId: string }, unknown>(
+      this.functions,
+      'refreshAnalyticsSummary',
+    );
+    try {
+      const result = await callable({ projectId });
+      console.log('refreshAnalyticsSummary invoked', result);
+    } catch (error) {
+      console.warn('Failed to invoke refreshAnalyticsSummary', error);
+    }
+  }
 }
