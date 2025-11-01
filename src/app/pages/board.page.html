@@ -20,7 +20,17 @@
       </div>
     </div>
 
-    <div class="header-right"></div>
+    <div class="header-right">
+      <button
+        mat-stroked-button
+        type="button"
+        (click)="onAddColumn()"
+        [disabled]="!(canEdit$ | async)"
+      >
+        <mat-icon>add</mat-icon>
+        列を追加
+      </button>
+    </div>
   </header>
 
   <div class="status-banner" *ngIf="!(isOnline$ | async)">
@@ -28,22 +38,53 @@
     <span>{{ 'board.offlineNotice' | translate }}</span>
   </div>
 
+  <mat-card class="board-hint">
+    <mat-icon>info</mat-icon>
+    <span>
+      特に指定がない場合、タスクカードを置いた列の設定（ステータス / 進捗率）に従って、そのタスクの状態と進捗が自動的に決まります。
+    </span>
+  </mat-card>
+
   <ng-container *ngIf="selectedProblemId as pid">
     <div class="loading" *ngIf="(issues$ | async) === null">{{ 'issue.loading' | translate }}</div>
 
     <ng-container *ngIf="(issues$ | async) as issues">
       <div class="empty" *ngIf="!issues.length">{{ 'issue.noneYet' | translate }}</div>
 
-      <div class="board-grid" *ngIf="issues.length">
+      <div
+        class="board-grid"
+        *ngIf="issues.length"
+        cdkDropList
+        cdkDropListOrientation="horizontal"
+        [cdkDropListData]="columns"
+        (cdkDropListDropped)="onColumnDrop($event)"
+        [cdkDropListDisabled]="!(canEdit$ | async)"
+      >
         <section
           class="board-column"
           [ngClass]="col.columnId"
           *ngFor="let col of columns; trackBy: trackColumn"
           [style.--col-accent]="accentFor(col)"
+          cdkDrag
+          [cdkDragData]="col"
+          [cdkDragDisabled]="!(canEdit$ | async)"
         >
           <header class="column-header" [ngClass]="col.columnId">
             <div class="column-header__main">
+              <button
+                mat-icon-button
+                type="button"
+                class="column-header__drag"
+                cdkDragHandle
+                [disabled]="!(canEdit$ | async)"
+                aria-label="列を並べ替え"
+              >
+                <mat-icon>drag_indicator</mat-icon>
+              </button>
               <div class="column-title text-1line no-truncate">{{ columnTitle(col) }}</div>
+            </div>
+            <div class="column-header__actions">
+              <span class="column-count count-badge">{{ totalFor(col.columnId) }}</span>
               <button
                 mat-icon-button
                 type="button"
@@ -53,8 +94,16 @@
               >
                 <mat-icon>edit</mat-icon>
               </button>
+              <button
+                mat-icon-button
+                type="button"
+                (click)="onDeleteColumn(col)"
+                [disabled]="!(canEdit$ | async)"
+                aria-label="列を削除"
+              >
+                <mat-icon>delete</mat-icon>
+              </button>
             </div>
-            <span class="column-count count-badge">{{ totalFor(col.columnId) }}</span>
           </header>
 
           <div class="column-body">

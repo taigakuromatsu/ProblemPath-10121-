@@ -142,8 +142,8 @@ export function normalizeColumns(rawCols: any[] | null | undefined): BoardColumn
 
 export const DEFAULT_BOARD_COLUMNS: BoardColumn[] = normalizeColumns([
   { columnId: 'not_started', title: 'Not started', order: 0 },
-  { columnId: 'in_progress', title: 'In progress', order: 1 },
-  { columnId: 'done', title: 'Done', order: 2 },
+  { columnId: 'in_progress', title: 'In progress', order: 10 },
+  { columnId: 'done', title: 'Done', order: 20 },
 ]);
 
 // --- Settings scaffolding (add below your existing types) ---
