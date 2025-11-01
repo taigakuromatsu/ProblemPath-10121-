@@ -10,6 +10,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 
 import { ProblemsService } from '../services/problems.service';
 import { IssuesService } from '../services/issues.service';
@@ -17,6 +18,7 @@ import { TasksService } from '../services/tasks.service';
 import { CurrentProjectService } from '../services/current-project.service';
 import { Problem, Issue, Task, BoardColumn, DEFAULT_BOARD_COLUMNS } from '../models/types';
 import { BoardColumnsService } from '../services/board-columns.service';
+import { BoardColumnEditDialogComponent, BoardColumnEditDialogResult } from '../components/board-column-edit-dialog.component';
 
 import { DragDropModule, CdkDragDrop, moveItemInArray, transferArrayItem, CdkDrag, CdkDropList } from '@angular/cdk/drag-drop';
 import { Router, ActivatedRoute, RouterLink } from '@angular/router';
@@ -34,7 +36,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
     AsyncPipe, NgFor, NgIf, NgClass, DatePipe,
     FormsModule,
     MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule, MatCardModule, MatChipsModule,
-    DragDropModule, MatSnackBarModule, TranslateModule
+    DragDropModule, MatSnackBarModule, TranslateModule, MatDialogModule
   ],
   templateUrl: './board.page.html',
   styleUrls: ['./board.page.scss']
@@ -83,13 +85,56 @@ export class BoardPage {
     public members: MembersService,
     private network: NetworkService,
     private snack: MatSnackBar,
-    private tr: TranslateService, // ★ 追加
+    private tr: TranslateService,
+    private dialog: MatDialog,
   ) {
     this.isEditor$ = this.members.isEditor$;
     this.isOnline$ = this.network.isOnline$;
     this.canEdit$ = combineLatest([this.members.isEditor$, this.network.isOnline$]).pipe(
       map(([isEditor, online]) => !!isEditor && !!online)
     );
+  }
+
+  columnTitle(column: BoardColumn): string {
+    const trimmed = (column.title ?? '').trim();
+    if (trimmed) {
+      return trimmed;
+    }
+    return this.tr.instant(`board.col.${column.columnId}`);
+  }
+
+  columnTitleByCategory(category: BoardColumn['categoryHint']): string {
+    const columnId = this.resolveColumnIdForCategory(category);
+    const column = this.columnById(columnId);
+    if (column) {
+      return this.columnTitle(column);
+    }
+    return this.tr.instant(`board.col.${category}`);
+  }
+
+  async onEditColumn(column: BoardColumn) {
+    const ref = this.dialog.open(BoardColumnEditDialogComponent, {
+      width: '420px',
+      data: { column },
+    });
+    const result = await firstValueFrom(ref.afterClosed());
+    if (!result) return;
+
+    const patch: BoardColumnEditDialogResult = {
+      title: result.title,
+      categoryHint: result.categoryHint,
+      progressHint: Math.min(100, Math.max(0, Number(result.progressHint ?? 0))),
+    };
+
+    this.withPid(async (pid) => {
+      try {
+        await this.boardColumns.updateColumn(pid, column.columnId, patch);
+        this.snack.open('保存しました', 'OK', { duration: 2500 });
+      } catch (err) {
+        console.error('[BoardPage] Failed to update column', err);
+        this.snack.open('保存に失敗しました', 'OK', { duration: 3000 });
+      }
+    });
   }
 
   allowDnD = false;

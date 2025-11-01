@@ -130,6 +130,16 @@
   background: color-mix(in srgb, var(--surface) 92%, var(--col-accent) 8%);
 }
 
+.column-header__main {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-2);
+}
+
+.column-header__main button[mat-icon-button] {
+  color: var(--col-accent, var(--accent-blue));
+}
+
 .column-header::before {
   content: '';
   position: absolute;
