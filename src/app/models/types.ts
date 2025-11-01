@@ -59,6 +59,54 @@ export interface Task extends BaseNode {
   projectId?: string;
 }
 
+export type BoardColumnCategoryHint = 'not_started' | 'in_progress' | 'done';
+
+export type BoardColumn = {
+  columnId: string;
+  title: string;
+  order: number;
+  categoryHint: BoardColumnCategoryHint;
+  progressHint: number;
+};
+
+export function normalizeColumns(rawCols: any[] | null | undefined): BoardColumn[] {
+  const arr = Array.isArray(rawCols) ? rawCols : [];
+  const sorted = [...arr].sort((a, b) => {
+    const aOrder = Number(a?.order ?? 0);
+    const bOrder = Number(b?.order ?? 0);
+    return aOrder - bOrder;
+  });
+  const lastIndex = sorted.length - 1;
+
+  return sorted.map((raw, i) => {
+    const defaultCategory: BoardColumnCategoryHint =
+      i === 0
+        ? 'not_started'
+        : i === lastIndex
+          ? 'done'
+          : 'in_progress';
+
+    const defaultProgress =
+      lastIndex > 0
+        ? Math.round((i / lastIndex) * 100)
+        : 0;
+
+    return {
+      columnId: (raw?.columnId ?? raw?.id ?? `col-${i}`) as string,
+      title: (raw?.title ?? '') as string,
+      order: Number(raw?.order ?? i),
+      categoryHint: (raw?.categoryHint ?? defaultCategory) as BoardColumnCategoryHint,
+      progressHint: Number(raw?.progressHint ?? defaultProgress),
+    };
+  });
+}
+
+export const DEFAULT_BOARD_COLUMNS: BoardColumn[] = normalizeColumns([
+  { columnId: 'not_started', title: 'Not started', order: 0 },
+  { columnId: 'in_progress', title: 'In progress', order: 1 },
+  { columnId: 'done', title: 'Done', order: 2 },
+]);
+
 // --- Settings scaffolding (add below your existing types) ---
 export type Personality = 'analytical' | 'pragmatic' | 'creative';
 export type AppLang = 'ja' | 'en';

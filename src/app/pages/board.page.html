@@ -37,19 +37,19 @@
       <div class="board-grid" *ngIf="issues.length">
         <section
           class="board-column"
-          [ngClass]="col"
-          *ngFor="let col of statusCols"
-          [style.--col-accent]="colAccent[col]"
+          [ngClass]="col.columnId"
+          *ngFor="let col of columns; trackBy: trackColumn"
+          [style.--col-accent]="accentFor(col)"
         >
-          <header class="column-header" [ngClass]="col">
-            <div class="column-title text-1line no-truncate">{{ ('board.col.' + col) | translate }}</div>
-            <span class="column-count count-badge">{{ totals[col] }}</span>
+          <header class="column-header" [ngClass]="col.columnId">
+            <div class="column-title text-1line no-truncate">{{ ('board.col.' + col.columnId) | translate }}</div>
+            <span class="column-count count-badge">{{ totalFor(col.columnId) }}</span>
           </header>
 
           <div class="column-body">
             <ng-container *ngFor="let issue of issues">
               <ng-container *ngIf="tasksMap[key(pid, issue.id!)] | async as tasks">
-                <ng-container *ngIf="tasksByStatus(tasks, col) as ts">
+                <ng-container *ngIf="tasksForColumn(tasks, col) as ts">
                   <section
                     class="issue-stack"
                     cdkDropList
@@ -117,11 +117,11 @@
                       <div class="task-card__actions" *ngIf="isEditor$ | async">
                         <button
                           mat-stroked-button
-                          *ngFor="let next of statusCols"
-                          [disabled]="next === t.status || isBusy(t.id!) || !(canEdit$ | async)"
-                          (click)="setTaskStatus(pid, issue.id!, t, next)"
+                          *ngFor="let next of columns; trackBy: trackColumn"
+                          [disabled]="isTaskInColumn(t, next) || isBusy(t.id!) || !(canEdit$ | async)"
+                          (click)="setTaskStatus(pid, issue.id!, t, next.columnId)"
                         >
-                          {{ ('board.col.' + next) | translate }}
+                          {{ ('board.col.' + next.columnId) | translate }}
                         </button>
                       </div>
 
