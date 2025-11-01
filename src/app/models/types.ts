@@ -57,6 +57,7 @@ export interface Task extends BaseNode {
   problemId?: string;
   issueId?: string;
   projectId?: string;
+  boardColumnId?: string;
 }
 
 export type BoardColumnCategoryHint = 'not_started' | 'in_progress' | 'done';

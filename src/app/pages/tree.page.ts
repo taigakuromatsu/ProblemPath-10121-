@@ -79,17 +79,23 @@ export class TreePage {
   }
 
   resolveColumnIdForCategory(categoryHint: BoardColumn['categoryHint']): string {
-    const exact = this.columns.find(col => col.columnId === categoryHint);
-    if (exact) return exact.columnId;
-
     const matched = this.columns.find(col => col.categoryHint === categoryHint);
     if (matched) return matched.columnId;
+
+    const exact = this.columns.find(col => col.columnId === categoryHint);
+    if (exact) return exact.columnId;
 
     return this.columns[0]?.columnId ?? categoryHint;
   }
 
   findColumnForTask(t?: Task | null): BoardColumn | undefined {
     if (!t) return undefined;
+    if (t.boardColumnId) {
+      const direct = this.columns.find(c => c.columnId === t.boardColumnId);
+      if (direct) {
+        return direct;
+      }
+    }
     const cat = this.bucket(t.status);
     const colId = this.resolveColumnIdForCategory(cat);
     return this.columns.find(c => c.columnId === colId);
