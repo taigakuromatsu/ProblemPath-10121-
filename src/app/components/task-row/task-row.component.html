@@ -1,42 +1,90 @@
 <div class="task-row" [class.dense]="dense" [class.done]="task.status === 'done'">
+  <!-- 左のステータス丸 -->
   <div class="status-dot" [style.background]="statusColor(task.status)"></div>
+
+  <!-- 中央コンテンツ -->
   <div class="task-content">
+    <!-- タイトル行 -->
     <div class="task-title">
       <span class="title-text">{{ task.title }}</span>
       <span *ngIf="task.priority" class="priority">[{{ task.priority }}]</span>
     </div>
+
+    <!-- メタ情報行 -->
     <div class="task-meta">
-      <span class="due" [ngClass]="['badge', dueBadge(task)]">{{ dueLabel(task) }}</span>
+      <!-- 期日バッジ -->
+      <span class="due" [ngClass]="['badge', dueBadge(task)]">
+        {{ dueLabel(task) }}
+      </span>
+
+      <!-- 担当者 -->
       <span class="assignees" matTooltip="{{ assignees(task) }}">
-        <mat-icon fontSet="material-icons-outlined">group</mat-icon>
+        <mat-icon>group</mat-icon>
         <span>{{ assignees(task) }}</span>
       </span>
+
+      <!-- タグ数（0のときは非表示） -->
       <span class="metric" *ngIf="tagsCount(task) > 0">
-        <mat-icon fontSet="material-icons-outlined">sell</mat-icon>
+        <mat-icon>sell</mat-icon>
         <span>{{ tagsCount(task) }}</span>
       </span>
+
+      <!-- コメント数 -->
       <span class="metric">
-        <mat-icon fontSet="material-icons-outlined">forum</mat-icon>
+        <mat-icon>forum</mat-icon>
         <span>{{ commentCount(task) }}</span>
       </span>
+
+      <!-- 添付ファイル数 -->
       <span class="metric">
-        <mat-icon fontSet="material-icons-outlined">attach_file</mat-icon>
+        <mat-icon>attach_file</mat-icon>
         <span>{{ attachmentCount(task) }}</span>
       </span>
     </div>
   </div>
+
+  <!-- 右端アクション -->
   <div class="actions" *ngIf="actionConfig">
-    <button mat-icon-button *ngIf="actionConfig.showComplete" (click)="onComplete()" matTooltip="{{ 'schedule.actions.complete' | translate }}">
-      <mat-icon fontSet="material-icons-outlined">task_alt</mat-icon>
+    <!-- 完了にする -->
+    <button
+      mat-icon-button
+      *ngIf="actionConfig.showComplete"
+      (click)="onComplete()"
+      matTooltip="{{ 'schedule.actions.complete' | translate }}"
+    >
+      <mat-icon>task_alt</mat-icon>
     </button>
-    <button mat-icon-button *ngIf="actionConfig.showShiftTomorrow" (click)="onShift(1)" matTooltip="{{ 'schedule.actions.plusOne' | translate }}">
-      <mat-icon fontSet="material-icons-outlined">event</mat-icon>
+
+    <!-- 期日+1日 -->
+    <button
+      mat-icon-button
+      *ngIf="actionConfig.showShiftTomorrow"
+      (click)="onShift(1)"
+      matTooltip="{{ 'schedule.actions.plusOne' | translate }}"
+    >
+      <mat-icon>event</mat-icon>
     </button>
-    <button mat-icon-button *ngIf="actionConfig.showSetToday" (click)="onSetToday()" matTooltip="{{ 'schedule.actions.today' | translate }}">
-      <mat-icon fontSet="material-icons-outlined">event_available</mat-icon>
+
+    <!-- 期日を今日にする -->
+    <button
+      mat-icon-button
+      *ngIf="actionConfig.showSetToday"
+      (click)="onSetToday()"
+      matTooltip="{{ 'schedule.actions.today' | translate }}"
+    >
+      <mat-icon>event_available</mat-icon>
     </button>
-    <a *ngIf="task.problemId && task.issueId" mat-icon-button [routerLink]="['/board']" [queryParams]="{ pid: task.problemId }" matTooltip="{{ 'schedule.openInBoard' | translate }}">
-      <mat-icon fontSet="material-icons-outlined">open_in_new</mat-icon>
+
+    <!-- ボードを開く -->
+    <a
+      *ngIf="task.problemId && task.issueId"
+      mat-icon-button
+      [routerLink]="['/board']"
+      [queryParams]="{ pid: task.problemId }"
+      matTooltip="{{ 'schedule.openInBoard' | translate }}"
+    >
+      <mat-icon>open_in_new</mat-icon>
     </a>
   </div>
 </div>
+

@@ -319,6 +319,50 @@ export class TasksService {
     .pipe(map((xs: any[]) => xs.filter((t: any) => !t?.softDeleted)));  
   }
 
+    listAllInProject(
+      projectId: string,
+      openOnly: boolean = false,
+      tags: string[] = []
+    ): Observable<Task[]> {
+  
+      const base = nativeCollectionGroup(this.fs as any, 'tasks');
+  
+      // Firestore制約的に、tags はここではクエリ結合しづらいので
+      // （array-contains-any等と他条件の複合制約が厳しいケースがある）
+      // 一旦サーバーから全部取り、あとでクライアント側でフィルタする。
+      const q = nativeQuery(
+        base,
+        nativeWhere('projectId', '==', projectId),
+        nativeWhere('softDeleted', '==', false),
+        ...(openOnly ? [nativeWhere('status', 'in', OPEN_STATUSES)] : []),
+        nativeOrderBy('createdAt', 'asc')
+      );
+  
+      const stream = rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>;
+  
+      return stream.pipe(
+        map(items => {
+          // 念のためsoftDeleted二重フィルタ
+          let ys = items.filter(t => !(t as any)?.softDeleted);
+  
+          // openOnly が true の場合は done を除外
+          if (openOnly) {
+            const openSet = new Set(OPEN_STATUSES);
+            ys = ys.filter(t => openSet.has(t.status as Status));
+          }
+  
+          // tags指定がある場合はクライアント側でタグ絞り込み
+          if (tags.length) {
+            const tagSet = new Set(tags.slice(0, 10).map(s => s.trim()));
+            ys = ys.filter(t => (t.tags ?? []).some(tag => tagSet.has(tag)));
+          }
+  
+          return ys;
+        })
+      );
+    }
+  
+
 
     // --- 自分をアサイン / 解除 ---
     async assignMe(projectId: string, problemId: string, issueId: string, taskId: string, uid: string): Promise<void> {

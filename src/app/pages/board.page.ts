@@ -11,6 +11,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatMenuModule } from '@angular/material/menu'; // ← 追加
 
 import { ProblemsService } from '../services/problems.service';
 import { IssuesService } from '../services/issues.service';
@@ -21,7 +22,7 @@ import { BoardColumnsService } from '../services/board-columns.service';
 import { BoardColumnEditDialogComponent, BoardColumnEditDialogResult } from '../components/board-column-edit-dialog.component';
 
 import { DragDropModule, CdkDragDrop, moveItemInArray, transferArrayItem, CdkDrag, CdkDropList } from '@angular/cdk/drag-drop';
-import { Router, ActivatedRoute, RouterLink } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AuthService } from '../services/auth.service';
 import { MembersService } from '../services/members.service';
@@ -36,7 +37,8 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
     AsyncPipe, NgFor, NgIf, NgClass, DatePipe,
     FormsModule,
     MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule, MatCardModule, MatChipsModule,
-    DragDropModule, MatSnackBarModule, TranslateModule, MatDialogModule
+    DragDropModule, MatSnackBarModule, TranslateModule, MatDialogModule,
+    MatMenuModule, // ← 追加
   ],
   templateUrl: './board.page.html',
   styleUrls: ['./board.page.scss']
@@ -237,7 +239,7 @@ export class BoardPage {
       .subscribe(cols => {
         console.log('[BoardPage] received columns =', cols);
 
-        // いま使ってるプロジェクトIDも一緒に確認したいので、直近の pid をもう一回覗く:
+        // デバッグ用ログ（直近のpid確認）
         this.currentProject.projectId$.pipe(take(1)).subscribe(latestPid => {
           console.log('[BoardPage] latestPid =', latestPid);
         });
@@ -247,8 +249,9 @@ export class BoardPage {
         this.recalcTotals();
       });
 
-
-    this.canEdit$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(v => this.allowDnD = !!v);
+    this.canEdit$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(v => this.allowDnD = !!v);
 
     this.issues$ = this.selectedProblem$.pipe(
       distinctUntilChanged(),
@@ -437,6 +440,36 @@ export class BoardPage {
     });
   }
 
+  // 優先度更新ボタン（low/mid/high 選択用）
+  async setTaskPriority(
+    problemId: string,
+    issueId: string,
+    t: Task,
+    newPriority: 'low' | 'mid' | 'high'
+  ) {
+    if (!(await this.requireCanEdit())) return;
+    if (!t.id || this.isBusy(t.id)) return;
+
+    const prevPriority = t.priority;
+    t.priority = newPriority; // 楽観的にUIを先に更新
+
+    this.busyTaskIds.add(t.id);
+    this.withPid(async pid => {
+      try {
+        await this.tasks.update(pid, problemId, issueId, t.id!, {
+          priority: newPriority,
+        });
+      } catch (e) {
+        console.error(e);
+        // 失敗したらロールバック
+        t.priority = prevPriority;
+        this.snack.open(this.tr.instant('board.err.update'), 'OK', { duration: 3000 });
+      } finally {
+        this.busyTaskIds.delete(t.id!);
+      }
+    });
+  }
+
   trackTask = (_: number, t: Task) => t.id;
   key(problemId: string, issueId: string) { return `${problemId}_${issueId}`; }
 
@@ -603,5 +636,32 @@ export class BoardPage {
     }
     return true;
   }
+
+  currentColumnTitle(t: Task): string {
+    // 1) タスクが覚えている boardColumnId 優先
+    const colId = this.columnIdForTask(t); // 既存のヘルパーで安全に列IDを求める
+    const col = this.columnById(colId);
+    if (col) {
+      return this.columnTitle(col); // ユーザーが付けた列名 (review / waiting 等)
+    }
+    // 2) 見つからなければカテゴリからフォールバック
+    return this.tr.instant(`board.col.${this.bucket(t.status)}`);
+  }
+
+  async moveTaskToColumn(
+    problemId: string,
+    issueId: string,
+    t: Task,
+    col: BoardColumn
+  ) {
+    // 編集権限とオンラインチェック
+    if (!(await this.requireCanEdit())) return;
+    if (!t.id || this.isBusy(t.id)) return;
+
+    // その列の columnId をそのまま渡して、既存ロジックで更新
+    await this.setTaskStatus(problemId, issueId, t, col.columnId);
+  }
+
 }
+
 

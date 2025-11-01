@@ -380,4 +380,33 @@ textarea {
   box-sizing: border-box;
 }
 
+/* ===== Material Symbols (Outlined) 共通設定 ===== */
+/* すべての mat-icon を Material Symbols Outlined に統一 */
+.mat-icon {
+  font-family: 'Material Symbols Outlined' !important;
+  font-style: normal;
+  font-weight: normal;
+  font-size: 24px;          /* 基準サイズ */
+  line-height: 1;           /* 縦ズレ防止 */
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+
+  /* 可変フォント軸（細すぎ問題の潰し込み） */
+  font-variation-settings: 'FILL' 0, 'wght' 450, 'GRAD' 0, 'opsz' 24;
+}
+
+/* トグルや見出し内のアイコンはやや太めに */
+.view-toggle .mat-icon,
+.icon .mat-icon {
+  font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+}
+
+/* トグルのラベルとアイコンを水平センタリング＆詰める（見切れ対策） */
+.view-toggle .mat-button-toggle-label-content {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+}
+
 

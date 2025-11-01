@@ -85,14 +85,15 @@ export class SchedulePage implements OnInit, OnDestroy {
   calendarMonth = new Date();
 
   readonly sections: SectionDef[] = [
-    { key: 'overdue', icon: 'warning', label: 'schedule.section.overdue', accent: 'danger' },
-    { key: 'today', icon: 'event', label: 'schedule.section.today', accent: 'info' },
-    { key: 'tomorrow', icon: 'event_available', label: 'schedule.section.tomorrow', accent: 'info' },
-    { key: 'thisWeekRest', icon: 'date_range', label: 'schedule.section.thisWeekRest', accent: 'muted' },
-    { key: 'nextWeek', icon: 'calendar_view_week', label: 'schedule.section.nextWeek', accent: 'muted' },
-    { key: 'later', icon: 'calendar_month', label: 'schedule.section.later', accent: 'muted' },
-    { key: 'nodue', icon: 'more_horiz', label: 'schedule.section.noDue', accent: 'muted' },
+    { key: 'overdue',      icon: 'warning_amber',      label: 'schedule.section.overdue',     accent: 'danger' },
+    { key: 'today',        icon: 'today',              label: 'schedule.section.today',       accent: 'info' },
+    { key: 'tomorrow',     icon: 'event_available',    label: 'schedule.section.tomorrow',    accent: 'info' },
+    { key: 'thisWeekRest', icon: 'date_range',         label: 'schedule.section.thisWeekRest',accent: 'muted' },
+    { key: 'nextWeek',     icon: 'calendar_view_week', label: 'schedule.section.nextWeek',    accent: 'muted' },
+    { key: 'later',        icon: 'calendar_month',     label: 'schedule.section.later',       accent: 'muted' },
+    { key: 'nodue',        icon: 'more_time',          label: 'schedule.section.noDue',       accent: 'muted' },
   ];
+  
 
   private readonly midnightTick$ = interval(60_000).pipe(
     startWith(0),

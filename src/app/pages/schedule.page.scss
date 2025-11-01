@@ -8,6 +8,7 @@
   min-width: 0;
 }
 
+/* ヘッダーまわり */
 .page-header {
   display: flex;
   flex-direction: column;
@@ -43,6 +44,7 @@
   min-width: 0;
 }
 
+/* フィルター／エクスポート行 */
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -78,6 +80,7 @@
 
 .filter-group label {
   font-weight: 600;
+  font-size: var(--fs-b);
 }
 
 .filter-group input {
@@ -87,6 +90,8 @@
   background: var(--surface);
   color: inherit;
   min-width: 0;
+  font-size: var(--fs-b);
+  line-height: 1.4;
 }
 
 .filter-group mat-select {
@@ -98,15 +103,33 @@
   min-width: 0;
 }
 
+/* セクション（期限切れ / 今日 / …） の並び */
 .list-grid {
   display: grid;
   gap: var(--gap-4);
   grid-template-columns: repeat(auto-fit, minmax(calc(320px * var(--m)), 1fr));
+  min-width: 0;
 }
 
+/* 各セクションカード */
+mat-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-2);
+  padding: var(--pad-2);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow, 0 2px 8px rgba(0,0,0,0.03));
+}
+
+mat-card.empty {
+  opacity: 0.65;
+}
+
+/* セクションのヘッダー（⚠ 今日 など） */
 mat-card header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--gap-2);
 }
 
@@ -118,6 +141,7 @@ mat-card header h2 {
   margin: 0;
   font-size: var(--fs-t);
   line-height: 1.3;
+  font-weight: 600;
 }
 
 .icon {
@@ -129,6 +153,9 @@ mat-card header h2 {
   justify-content: center;
   background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
   flex-shrink: 0;
+  font-size: var(--fs-t);
+  line-height: 1;
+  color: var(--accent-blue);
 }
 
 .icon.danger {
@@ -143,8 +170,12 @@ mat-card header h2 {
 
 .count-badge {
   margin-top: var(--gap-1);
+  font-size: var(--fs-b);
+  font-weight: 600;
+  color: var(--muted);
 }
 
+/* タスク行たち */
 .section-body {
   display: flex;
   flex-direction: column;
@@ -152,18 +183,18 @@ mat-card header h2 {
   min-width: 0;
 }
 
+/* 「なし」表示 */
 .empty {
   padding: var(--pad-1);
   border-radius: var(--radius);
   border: 1px dashed var(--divider);
   color: var(--muted);
   text-align: center;
+  font-size: var(--fs-b);
+  line-height: 1.4;
 }
 
-mat-card.empty {
-  opacity: 0.65;
-}
-
+/* モバイル(幅狭)時の並べ方 */
 @media (max-width: 960px) {
   .toolbar {
     flex-direction: column;
@@ -187,3 +218,4 @@ mat-card.empty {
     grid-template-columns: 1fr;
   }
 }
+

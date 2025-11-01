@@ -236,7 +236,7 @@
     }
   },
   "schedule": {
-    "subtitle": "Review deadlines and adjust them with drag & drop.",
+    "subtitle": "Review all tasks and deadlines for the project.",
     "export": {
       "csv": "CSV",
       "json": "JSON"

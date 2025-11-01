@@ -44,6 +44,7 @@ interface SectionDef {
   key: keyof Vm;
   icon: string;
   label: string;
+  accent: 'danger' | 'info' | 'muted';
 }
 
 interface MemberOption {
@@ -87,13 +88,13 @@ export class MyTasksPage implements OnInit, OnDestroy {
   calendarMonth = new Date();
 
   readonly sections: SectionDef[] = [
-    { key: 'overdue', icon: 'warning', label: 'myTasks.overdue' },
-    { key: 'today', icon: 'event', label: 'myTasks.today' },
-    { key: 'tomorrow', icon: 'event_available', label: 'myTasks.tomorrow' },
-    { key: 'thisWeekRest', icon: 'calendar_view_week', label: 'myTasks.thisWeekRest' },
-    { key: 'nextWeek', icon: 'calendar_month', label: 'myTasks.nextWeek' },
-    { key: 'later', icon: 'schedule', label: 'myTasks.later' },
-    { key: 'nodue', icon: 'more_horiz', label: 'myTasks.nodue' },
+    { key: 'overdue',      icon: 'warning_amber',      label: 'myTasks.overdue',     accent: 'danger' },
+    { key: 'today',        icon: 'today',              label: 'myTasks.today',       accent: 'info' },
+    { key: 'tomorrow',     icon: 'event_available',    label: 'myTasks.tomorrow',    accent: 'info' },
+    { key: 'thisWeekRest', icon: 'date_range',         label: 'myTasks.thisWeekRest',accent: 'muted' },
+    { key: 'nextWeek',     icon: 'calendar_view_week', label: 'myTasks.nextWeek',    accent: 'muted' },
+    { key: 'later',        icon: 'calendar_month',     label: 'myTasks.later',       accent: 'muted' },
+    { key: 'nodue',        icon: 'more_time',          label: 'myTasks.nodue',       accent: 'muted' },
   ];
 
   private readonly midnightTick$ = interval(60_000).pipe(

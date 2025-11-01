@@ -159,8 +159,8 @@ export class TreePage {
   loadError: string | null = null;
 
   isEditor$!: Observable<boolean>;
-  isOnline$!: Observable<boolean>;              // ★ 追加
-  canEdit$!: Observable<boolean>;               // ★ 追加
+  isOnline$!: Observable<boolean>;              
+  canEdit$!: Observable<boolean>;               
 
   selectedNode: TreeNode | null = null;
   comments$?: Observable<CommentDoc[]>;
@@ -596,36 +596,40 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
   }> {
     const today = new Date(); today.setHours(0,0,0,0);
     const tomorrow = this.addDays(today, 1);
-  
+
     // 今週（月曜始まり）
     const dow = today.getDay();
     const diffToMon = (dow === 0 ? -6 : 1 - dow);
     const startOfWeek = this.addDays(today, diffToMon);
     const endOfWeek   = this.addDays(startOfWeek, 6);
-  
-    // 来週
+
+    // 来週（翌週の月〜日）
     const startOfNextWeek = this.addDays(endOfWeek, 1);
     const endOfNextWeek   = this.addDays(startOfNextWeek, 6);
-  
+
     const FAR = '9999-12-31';
-  
+
     return this.currentProject.projectId$.pipe(
       switchMap(pid => {
         if (!pid) {
+          // プロジェクト未選択時は全部0
           return of({
             overdue: 0, today: 0, thisWeek: 0, nextWeek: 0, later: 0, nodue: 0,
             openTotal: 0, doneTotal: 0, progressPct: 0
           });
         }
-  
+
+        // 期限関連バケット（= 期限つきタスクを区間ごとに集計）
         const overdue$   = this.tasks.listAllOverdue(pid, this.ymd(today), true);
         const today$     = this.tasks.listAllByDueRange(pid, this.ymd(today), this.ymd(today), true);
         const thisWeek$  = this.tasks.listAllByDueRange(pid, this.ymd(tomorrow), this.ymd(endOfWeek), true);
         const nextWeek$  = this.tasks.listAllByDueRange(pid, this.ymd(startOfNextWeek), this.ymd(endOfNextWeek), true);
         const later$     = this.tasks.listAllByDueRange(pid, this.ymd(this.addDays(endOfNextWeek,1)), FAR, true);
         const nodue$     = this.tasks.listAllNoDue(pid, true);
-        const all$       = this.tasks.listAllByDueRange(pid, '0000-01-01', FAR, false);
-  
+
+        // "全タスク" 集計用（期限なしも含む・softDeleted除外済み）
+        const all$       = this.tasks.listAllInProject(pid, /*openOnly=*/false);
+
         return combineLatest([overdue$, today$, thisWeek$, nextWeek$, later$, nodue$, all$]).pipe(
           map(([ov, td, wk, nw, lt, nd, all]) => {
             const overdue   = ov?.length ?? 0;
@@ -634,18 +638,33 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
             const nextWeek  = nw?.length ?? 0;
             const later     = lt?.length ?? 0;
             const nodue     = nd?.length ?? 0;
-  
+
+            // 全タスクの完了率計算
             const total     = all?.length ?? 0;
             const doneTotal = (all ?? []).filter(t => t.status === 'done').length;
             const openTotal = total - doneTotal;
-            const progressPct = total > 0 ? Math.round((doneTotal / total) * 100) : 0;
-  
-            return { overdue, today, thisWeek, nextWeek, later, nodue, openTotal, doneTotal, progressPct };
+
+            const progressPct = total > 0
+              ? Math.round((doneTotal / total) * 100)
+              : 0;
+
+            return {
+              overdue,
+              today,
+              thisWeek,
+              nextWeek,
+              later,
+              nodue,
+              openTotal,
+              doneTotal,
+              progressPct,
+            };
           })
         );
       })
     );
-  }  
+  }
+
 
   // ---- ヘルパー ----
   // 共通パターン（TreePage / HomePage 両方）

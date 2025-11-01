@@ -1,10 +1,14 @@
+<!-- my-tasks.page.html (full replace) -->
 <div class="my-page">
   <section class="page-header card">
     <div class="headline">
       <div>
-        <h1 class="section-title section-title--success no-truncate">{{ 'nav.my' | translate }}</h1>
+        <h1 class="section-title section-title--success no-truncate">
+          {{ 'nav.my' | translate }}
+        </h1>
         <p class="muted text-2line">{{ 'myTasks.subtitle' | translate }}</p>
       </div>
+
       <mat-button-toggle-group class="view-toggle" [(ngModel)]="viewMode" (change)="onViewModeChange($event.value)">
         <mat-button-toggle value="list">
           <mat-icon fontSet="material-icons-outlined">view_list</mat-icon>
@@ -16,11 +20,13 @@
         </mat-button-toggle>
       </mat-button-toggle-group>
     </div>
+
     <div class="toolbar">
       <div class="export">
         <button mat-stroked-button (click)="exportCurrent('csv')">{{ 'export.csv' | translate }}</button>
         <button mat-stroked-button (click)="exportCurrent('json')">{{ 'export.json' | translate }}</button>
       </div>
+
       <div class="filters">
         <div class="filter-group">
           <label>{{ 'filter.show' | translate }}</label>
@@ -29,10 +35,17 @@
             <mat-button-toggle [value]="false">{{ 'filter.all' | translate }}</mat-button-toggle>
           </mat-button-toggle-group>
         </div>
+
         <div class="filter-group">
           <label>{{ 'filter.tags' | translate }}</label>
-          <input type="text" [(ngModel)]="tagQuery" (ngModelChange)="onTagQueryChange()" [placeholder]="'filter.tagsPlaceholder' | translate" />
+          <input
+            type="text"
+            [(ngModel)]="tagQuery"
+            (ngModelChange)="onTagQueryChange()"
+            [placeholder]="'filter.tagsPlaceholder' | translate"
+          />
         </div>
+
         <div class="filter-group range">
           <label>{{ 'myTasks.range.start' | translate }}</label>
           <input type="date" [(ngModel)]="startRange" (change)="onDateRangeChange()" />
@@ -75,6 +88,7 @@
         <ng-container *ngTemplateOutlet="listView; context: { vm: vm, directory: memberDirectory$ | async }"></ng-container>
       </ng-container>
     </ng-container>
+
     <ng-container *ngSwitchCase="'calendar'">
       <ng-container *ngIf="vm$ | async as vm">
         <pp-task-calendar
@@ -94,15 +108,15 @@
   <div class="list-grid">
     <mat-card *ngFor="let section of sections" [class.empty]="!(vm[section.key]?.length)">
       <header>
-        <div class="icon">
+        <div class="icon" [class.danger]="section.accent === 'danger'" [class.info]="section.accent === 'info'">
           <mat-icon fontSet="material-icons-outlined">{{ section.icon }}</mat-icon>
         </div>
         <div>
           <h2
             class="section-title no-truncate"
             [ngClass]="{
-              'section-title--danger': section.key === 'overdue',
-              'section-title--success': section.key === 'today' || section.key === 'tomorrow'
+              'section-title--danger': section.accent === 'danger',
+              'section-title--success': section.accent === 'muted'
             }"
           >
             {{ section.label | translate }}
@@ -110,6 +124,7 @@
           <span class="count-badge">{{ vm[section.key]?.length || 0 }}</span>
         </div>
       </header>
+
       <div class="section-body" *ngIf="vm[section.key]?.length; else emptySection">
         <pp-task-row
           *ngFor="let task of vm[section.key]; trackBy: trackTask"

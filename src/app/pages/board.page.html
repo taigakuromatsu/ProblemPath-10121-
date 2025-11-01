@@ -143,27 +143,94 @@
                         <div class="task-card task-card--placeholder"></div>
                       </ng-template>
 
+                      <!-- 上: ID / 担当者数 -->
                       <div class="task-card__meta">
-                        <span class="task-id" *ngIf="t.id">#{{ t.id.slice(0, 6) }}</span>
                         <span class="task-assignees" *ngIf="(t.assignees?.length || 0) > 0">
                           <mat-icon>group</mat-icon>
                           {{ t.assignees?.length || 0 }}
                         </span>
                       </div>
 
+                      <!-- タイトル・説明 -->
                       <div class="task-card__title text-1line no-truncate">{{ t.title }}</div>
                       <p class="task-card__description text-2line" *ngIf="t.description">{{ t.description }}</p>
 
+                      <!-- チップ列 -->
                       <div class="task-card__chips">
                         <mat-chip-set>
-                          <mat-chip appearance="outlined" class="chip chip-priority">
+
+                          <!-- 優先度 (既に導入済みのやつ) -->
+                          <mat-chip
+                            appearance="outlined"
+                            class="chip chip-priority"
+                            [matMenuTriggerFor]="priorityMenu"
+                            [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
+                          >
                             <mat-icon matChipAvatar>flag</mat-icon>
                             <span>{{ t.priority || ('common.none' | translate) }}</span>
+                            <mat-icon>arrow_drop_down</mat-icon>
                           </mat-chip>
-                          <mat-chip appearance="outlined" class="chip chip-status">
-                            <mat-icon matChipAvatar>timeline</mat-icon>
-                            <span>{{ columnTitleByCategory(bucket(t.status)) }}</span>
+
+                          <mat-menu #priorityMenu="matMenu">
+                            <button
+                              mat-menu-item
+                              (click)="setTaskPriority(pid, issue.id!, t, 'high')"
+                              [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
+                            >
+                              <mat-icon>priority_high</mat-icon>
+                              <span>high</span>
+                            </button>
+                            <button
+                              mat-menu-item
+                              (click)="setTaskPriority(pid, issue.id!, t, 'mid')"
+                              [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
+                            >
+                              <mat-icon>flag</mat-icon>
+                              <span>mid</span>
+                            </button>
+                            <button
+                              mat-menu-item
+                              (click)="setTaskPriority(pid, issue.id!, t, 'low')"
+                              [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
+                            >
+                              <mat-icon>south</mat-icon>
+                              <span>low</span>
+                            </button>
+                          </mat-menu>
+
+                          <!-- ステータス (列を直接選べるようにする) -->
+                          <mat-chip
+                          appearance="outlined"
+                          class="chip chip-status"
+                          [matMenuTriggerFor]="statusMenu"
+                          [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
+                          >
+                          <mat-icon matChipAvatar>timeline</mat-icon>
+                          <!-- いま属してる列の名前を表示 -->
+                          <span>{{ currentColumnTitle(t) }}</span>
+                          <mat-icon>arrow_drop_down</mat-icon>
                           </mat-chip>
+
+                          <mat-menu #statusMenu="matMenu">
+                          <button
+                            mat-menu-item
+                            *ngFor="let colOpt of columns; trackBy: trackColumn"
+                            (click)="moveTaskToColumn(pid, issue.id!, t, colOpt)"
+                            [disabled]="isBusy(t.id!) || !(canEdit$ | async) || isTaskInColumn(t, colOpt)"
+                          >
+                            <!-- アイコンは列のカテゴリヒントで軽く出し分けてもいい -->
+                            <mat-icon *ngIf="colOpt.categoryHint === 'done'">check_circle</mat-icon>
+                            <mat-icon *ngIf="colOpt.categoryHint === 'in_progress'">sync</mat-icon>
+                            <mat-icon *ngIf="colOpt.categoryHint === 'not_started'">play_disabled</mat-icon>
+                            <mat-icon *ngIf="colOpt.categoryHint !== 'done'
+                                          && colOpt.categoryHint !== 'in_progress'
+                                          && colOpt.categoryHint !== 'not_started'">more_horiz</mat-icon>
+
+                            <span>{{ columnTitle(colOpt) }}</span>
+                          </button>
+                          </mat-menu>
+
+                          <!-- 期限 -->
                           <mat-chip appearance="outlined" class="chip chip-due">
                             <mat-icon matChipAvatar>event</mat-icon>
                             <ng-container *ngIf="t.dueDate; else noDue">
@@ -171,18 +238,8 @@
                             </ng-container>
                             <ng-template #noDue>{{ 'common.none' | translate }}</ng-template>
                           </mat-chip>
-                        </mat-chip-set>
-                      </div>
 
-                      <div class="task-card__actions" *ngIf="isEditor$ | async">
-                        <button
-                          mat-stroked-button
-                          *ngFor="let next of columns; trackBy: trackColumn"
-                          [disabled]="isTaskInColumn(t, next) || isBusy(t.id!) || !(canEdit$ | async)"
-                          (click)="setTaskStatus(pid, issue.id!, t, next.columnId)"
-                        >
-                          {{ columnTitle(next) }}
-                        </button>
+                        </mat-chip-set>
                       </div>
 
                       <div class="task-card__assign" *ngIf="auth.loggedIn$ | async">
