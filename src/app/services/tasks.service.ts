@@ -79,6 +79,7 @@ export class TasksService {
       description: t.description ?? '',
       status: t.status ?? 'not_started',
       progress: t.progress ?? 0,
+      boardColumnId: t.boardColumnId ?? null,
       tags: t.tags ?? [],
       assignees: t.assignees ?? [],
       order,

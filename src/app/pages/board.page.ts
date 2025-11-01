@@ -317,7 +317,7 @@ export class BoardPage {
     }
     for (const list of Object.values(this.tasksSnapshot)) {
       for (const x of list) {
-        const columnId = this.resolveColumnIdForCategory(this.bucket(x.status));
+        const columnId = this.columnIdForTask(x);
         totals.set(columnId, (totals.get(columnId) ?? 0) + 1);
       }
     }
@@ -335,10 +335,32 @@ export class BoardPage {
     const status = this.statusForColumn(columnId);
     const progress = this.progressForColumn(columnId);
 
+    const prevStatus = t.status;
+    const prevProgress = t.progress;
+    const prevColumnId = t.boardColumnId;
+
+    t.status = status;
+    t.progress = progress;
+    t.boardColumnId = columnId;
+    this.recalcTotals();
+
     this.busyTaskIds.add(t.id);
     this.withPid(async pid => {
-      try { await this.tasks.update(pid, problemId, issueId, t.id!, { status, progress }); }
-      catch (e) { console.error(e); this.snack.open(this.tr.instant('board.err.update'), 'OK', { duration: 3000 }); }
+      try {
+        await this.tasks.update(pid, problemId, issueId, t.id!, {
+          status,
+          progress,
+          boardColumnId: columnId,
+        });
+      }
+      catch (e) {
+        console.error(e);
+        t.status = prevStatus;
+        t.progress = prevProgress;
+        t.boardColumnId = prevColumnId;
+        this.recalcTotals();
+        this.snack.open(this.tr.instant('board.err.update'), 'OK', { duration: 3000 });
+      }
       finally { this.busyTaskIds.delete(t.id!); }
     });
   }
@@ -366,10 +388,32 @@ export class BoardPage {
     const id = moved.id!;
     const progress = this.progressForColumn(destColumnId);
 
+    const prevStatus = moved.status;
+    const prevProgress = moved.progress;
+    const prevColumnId = moved.boardColumnId;
+
+    moved.status = destStatus;
+    moved.progress = progress;
+    moved.boardColumnId = destColumnId;
+    this.recalcTotals();
+
     this.busyTaskIds.add(moved.id);
     this.withPid(async pid => {
-      try { await this.tasks.update(pid, problemId, issueId, id, { status: destStatus, progress }); }
-      catch (e) { console.error(e); this.snack.open(this.tr.instant('board.err.statusUpdate'), 'OK', { duration: 3000 }); }
+      try {
+        await this.tasks.update(pid, problemId, issueId, id, {
+          status: destStatus,
+          progress,
+          boardColumnId: destColumnId,
+        });
+      }
+      catch (e) {
+        console.error(e);
+        moved.status = prevStatus;
+        moved.progress = prevProgress;
+        moved.boardColumnId = prevColumnId;
+        this.recalcTotals();
+        this.snack.open(this.tr.instant('board.err.statusUpdate'), 'OK', { duration: 3000 });
+      }
       finally { this.busyTaskIds.delete(id); }
     });
 
@@ -419,11 +463,11 @@ export class BoardPage {
 
   tasksForColumn(tasks: Task[] | null | undefined, column: BoardColumn): Task[] {
     const targetColumnId = column.columnId;
-    return (tasks ?? []).filter(t => this.resolveColumnIdForCategory(this.bucket(t.status)) === targetColumnId);
+    return (tasks ?? []).filter(t => this.columnIdForTask(t) === targetColumnId);
   }
 
   isTaskInColumn(task: Task, column: BoardColumn): boolean {
-    return this.resolveColumnIdForCategory(this.bucket(task.status)) === column.columnId;
+    return this.columnIdForTask(task) === column.columnId;
   }
 
   private resetColumnTotals() {
@@ -463,11 +507,22 @@ export class BoardPage {
   }
 
   private resolveColumnIdForCategory(category: BoardColumn['categoryHint']): string {
-    const exact = this.columns.find(col => col.columnId === category);
-    if (exact) return exact.columnId;
     const match = this.columns.find(col => col.categoryHint === category);
     if (match) return match.columnId;
+    const exact = this.columns.find(col => col.columnId === category);
+    if (exact) return exact.columnId;
     return this.columns[0]?.columnId ?? category;
+  }
+
+  private columnIdForTask(task: Task): string {
+    if (task?.boardColumnId) {
+      const column = this.columnById(task.boardColumnId);
+      if (column) {
+        return column.columnId;
+      }
+    }
+    const bucket = this.bucket(task?.status);
+    return this.resolveColumnIdForCategory(bucket);
   }
 
   private progressFallbackForCategory(category: BoardColumn['categoryHint']): number {
