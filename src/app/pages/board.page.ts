@@ -137,6 +137,87 @@ export class BoardPage {
     });
   }
 
+  async onAddColumn() {
+    if (!(await this.requireCanEdit())) return;
+
+    const dialogColumn: BoardColumn = {
+      columnId: 'new',
+      title: '',
+      order: this.nextColumnOrder(),
+      categoryHint: 'in_progress',
+      progressHint: 50,
+    };
+
+    const ref = this.dialog.open(BoardColumnEditDialogComponent, {
+      width: '420px',
+      data: { column: dialogColumn },
+    });
+
+    const result = await firstValueFrom(ref.afterClosed());
+    if (!result) return;
+
+    const nextOrder = this.nextColumnOrder();
+
+    this.withPid(async (pid) => {
+      try {
+        const columnId = `col_${Date.now()}`;
+        await this.boardColumns.createColumn(pid, {
+          columnId,
+          title: result.title,
+          order: nextOrder,
+          categoryHint: result.categoryHint,
+          progressHint: Math.min(100, Math.max(0, Number(result.progressHint ?? 0))),
+        });
+        this.snack.open('列を追加しました', 'OK', { duration: 2500 });
+      } catch (err) {
+        console.error('[BoardPage] Failed to create column', err);
+        this.snack.open('列の追加に失敗しました', 'OK', { duration: 3000 });
+      }
+    });
+  }
+
+  async onDeleteColumn(column: BoardColumn) {
+    if (!(await this.requireCanEdit())) return;
+    if (!column?.columnId) return;
+    if (!confirm(`「${this.columnTitle(column)}」列を削除しますか？`)) return;
+
+    this.withPid(async (pid) => {
+      try {
+        await this.boardColumns.deleteColumn(pid, column.columnId);
+        this.snack.open('列を削除しました', 'OK', { duration: 2500 });
+      } catch (err) {
+        console.error('[BoardPage] Failed to delete column', err);
+        this.snack.open('列の削除に失敗しました', 'OK', { duration: 3000 });
+      }
+    });
+  }
+
+  async onColumnDrop(event: CdkDragDrop<BoardColumn[]>) {
+    if (!(await this.requireCanEdit())) return;
+    if (event.previousIndex === event.currentIndex) return;
+
+    const reordered = [...this.columns];
+    moveItemInArray(reordered, event.previousIndex, event.currentIndex);
+
+    const withOrder = this.reindexColumns(reordered);
+    this.columns = withOrder;
+    this.resetColumnTotals();
+    this.recalcTotals();
+
+    this.withPid(async (pid) => {
+      try {
+        await Promise.all(
+          withOrder.map((col) =>
+            this.boardColumns.updateColumn(pid, col.columnId, { order: col.order })
+          )
+        );
+      } catch (err) {
+        console.error('[BoardPage] Failed to reorder columns', err);
+        this.snack.open('列の並び順を保存できませんでした', 'OK', { duration: 3000 });
+      }
+    });
+  }
+
   allowDnD = false;
 
   ngOnInit() {
@@ -347,6 +428,18 @@ export class BoardPage {
 
   private resetColumnTotals() {
     this.columnTotals = new Map(this.columns.map(col => [col.columnId, 0] as [string, number]));
+  }
+
+  private reindexColumns(cols: BoardColumn[]): BoardColumn[] {
+    return cols.map((col, idx) => ({
+      ...col,
+      order: (idx + 1) * 10,
+    }));
+  }
+
+  private nextColumnOrder(): number {
+    if (!this.columns.length) return 0;
+    return Math.max(...this.columns.map(col => Number(col.order ?? 0))) + 10;
   }
 
   private columnById(columnId: string): BoardColumn | undefined {

@@ -3,12 +3,14 @@ import { Injectable } from '@angular/core';
 import { Firestore } from '@angular/fire/firestore';
 import {
   collection as nativeCollection,
+  deleteDoc as nativeDeleteDoc,
   doc as nativeDoc,
+  getDocs as nativeGetDocs,
   setDoc as nativeSetDoc,
 } from 'firebase/firestore';
 import { collectionData as rxCollectionData } from 'rxfire/firestore';
-import { Observable, of } from 'rxjs';
-import { catchError, map, tap } from 'rxjs/operators';
+import { from, Observable, of } from 'rxjs';
+import { catchError, map, switchMap, tap } from 'rxjs/operators';
 import { BoardColumn, DEFAULT_BOARD_COLUMNS, normalizeColumns } from '../models/types';
 
 @Injectable({ providedIn: 'root' })
@@ -35,8 +37,7 @@ export class BoardColumnsService {
 
     const colRef = nativeCollection(this.fs as any, this.colPath(projectId));
 
-    // orderByなしでそのまま読み込む
-    return (rxCollectionData(colRef as any) as Observable<any[]>).pipe(
+    const stream$ = (rxCollectionData(colRef as any) as Observable<any[]>).pipe(
       tap(raw => {
         console.log(
           '[BoardColumnsService] raw from Firestore for projectId=',
@@ -50,11 +51,29 @@ export class BoardColumnsService {
           '[BoardColumnsService] normalized columns =',
           normalized
         );
-        // 空配列だったらデフォルト3列を返す（旧仕様どおり）
         return normalized.length ? normalized : DEFAULT_BOARD_COLUMNS;
       }),
       catchError((err) => {
         console.warn('[BoardColumnsService] Failed to load columns, fallback to default', err);
+        return of(DEFAULT_BOARD_COLUMNS);
+      })
+    );
+
+    return from(nativeGetDocs(colRef as any)).pipe(
+      switchMap((snapshot) => {
+        if (!snapshot.empty) {
+          return stream$;
+        }
+        return from(this.seedDefaultColumns(projectId)).pipe(
+          switchMap(() => stream$),
+          catchError((err) => {
+            console.warn('[BoardColumnsService] Failed to seed default columns', err);
+            return of(DEFAULT_BOARD_COLUMNS);
+          })
+        );
+      }),
+      catchError((err) => {
+        console.warn('[BoardColumnsService] Failed to ensure board columns', err);
         return of(DEFAULT_BOARD_COLUMNS);
       })
     );
@@ -97,5 +116,57 @@ export class BoardColumnsService {
     });
 
     await nativeSetDoc(ref as any, data, { merge: true });
+  }
+
+  async createColumn(projectId: string, column: BoardColumn): Promise<void> {
+    if (!projectId) {
+      throw new Error('[BoardColumnsService] projectId is required');
+    }
+    if (!column?.columnId) {
+      throw new Error('[BoardColumnsService] columnId is required');
+    }
+
+    const ref = nativeDoc(this.fs as any, `${this.colPath(projectId)}/${column.columnId}`);
+    await nativeSetDoc(
+      ref as any,
+      {
+        columnId: column.columnId,
+        title: column.title,
+        order: column.order,
+        categoryHint: column.categoryHint,
+        progressHint: column.progressHint,
+      },
+      { merge: true }
+    );
+  }
+
+  async deleteColumn(projectId: string, columnId: string): Promise<void> {
+    if (!projectId) {
+      throw new Error('[BoardColumnsService] projectId is required');
+    }
+    if (!columnId) {
+      throw new Error('[BoardColumnsService] columnId is required');
+    }
+
+    const ref = nativeDoc(this.fs as any, `${this.colPath(projectId)}/${columnId}`);
+    await nativeDeleteDoc(ref as any);
+  }
+
+  private async seedDefaultColumns(projectId: string): Promise<void> {
+    const writes = DEFAULT_BOARD_COLUMNS.map((col, idx) => {
+      const ref = nativeDoc(this.fs as any, `${this.colPath(projectId)}/${col.columnId}`);
+      return nativeSetDoc(
+        ref as any,
+        {
+          columnId: col.columnId,
+          title: col.title,
+          order: col.order ?? idx,
+          categoryHint: col.categoryHint,
+          progressHint: col.progressHint,
+        },
+        { merge: true }
+      );
+    });
+    await Promise.all(writes);
   }
 }
