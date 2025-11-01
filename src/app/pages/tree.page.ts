@@ -24,11 +24,13 @@ import { MembersService } from '../services/members.service';
 import { CommentsService, CommentDoc, CommentTarget } from '../services/comments.service';
 import { DraftsService } from '../services/drafts.service';
 import { NetworkService } from '../services/network.service';
-import { TranslateModule, TranslateService } from '@ngx-translate/core'; 
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AttachmentsService, AttachmentDoc, AttachmentTarget } from '../services/attachments.service';
 import { NgClass } from '@angular/common';
+import { BoardColumnsService } from '../services/board-columns.service';
+import { BoardColumn, DEFAULT_BOARD_COLUMNS, Task } from '../models/types';
 
-type Status = 'not_started' | 'in_progress' | 'done';
+type Status = BoardColumn['categoryHint'];
 
 type TreeNode = {
   id: string;
@@ -39,6 +41,7 @@ type TreeNode = {
   parentIssueId?: string;       // task の親 issueId
   parentProblemId?: string;     // task の親 problemId
   children?: TreeNode[];
+  task?: Task;
 };
 
 const DEBUG_TREE = false; // ← 必要なときだけ true に
@@ -60,20 +63,60 @@ function dlog(...args: any[]) {
 })
 export class TreePage {
 
-  // 表示ユーティリティ
-  statusIcon(s?: Status) {
-    if (s === 'done') return '✅';
-    if (s === 'in_progress') return '🔼';
-    return '✕';
-  }
-  statusColor(s?: Status) {
-    if (s === 'done') return '#16a34a';
-    if (s === 'in_progress') return '#2563eb';
-    return '#dc2626';
-  }
+  columns: BoardColumn[] = DEFAULT_BOARD_COLUMNS;
 
   busyIds = new Set<string>();
   isBusyId(id?: string|null){ return !!id && this.busyIds.has(id); }
+
+  private boardColumnsSub?: import('rxjs').Subscription;
+
+  bucket(status: Task['status'] | undefined): BoardColumn['categoryHint'] {
+    if (status === 'done') return 'done';
+    if (status === 'in_progress' || status === 'review_wait' || status === 'fixing') {
+      return 'in_progress';
+    }
+    return 'not_started';
+  }
+
+  resolveColumnIdForCategory(categoryHint: BoardColumn['categoryHint']): string {
+    const exact = this.columns.find(col => col.columnId === categoryHint);
+    if (exact) return exact.columnId;
+
+    const matched = this.columns.find(col => col.categoryHint === categoryHint);
+    if (matched) return matched.columnId;
+
+    return this.columns[0]?.columnId ?? categoryHint;
+  }
+
+  findColumnForTask(t?: Task | null): BoardColumn | undefined {
+    if (!t) return undefined;
+    const cat = this.bucket(t.status);
+    const colId = this.resolveColumnIdForCategory(cat);
+    return this.columns.find(c => c.columnId === colId);
+  }
+
+  private categoryHintLabel(h: BoardColumn['categoryHint']): string {
+    switch (h) {
+      case 'not_started': return '未着手';
+      case 'in_progress': return '進行中';
+      case 'done':        return '完了';
+      default:            return '進行中';
+    }
+  }
+
+  tooltipForColumn(col?: BoardColumn): string {
+    if (!col) return '進行中扱い / 進捗50%';
+    return `${this.categoryHintLabel(col.categoryHint)}扱い / 進捗${col.progressHint}%`;
+  }
+
+  statusClassForColumn(col?: BoardColumn): string {
+    const h = col?.categoryHint ?? 'in_progress';
+    switch (h) {
+      case 'not_started': return 'status-not-started';
+      case 'done':        return 'status-done';
+      default:            return 'status-in-progress';
+    }
+  }
 
   private decideAggregateStatus(taskStatuses: Status[]): Status {
     if (!taskStatuses.length) return 'not_started';
@@ -174,11 +217,12 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
     private tasks: TasksService,
     public auth: AuthService,
     private currentProject: CurrentProjectService,
+    private boardColumns: BoardColumnsService,
     public members: MembersService,
     private comments: CommentsService,
     private snack: MatSnackBar,
     private drafts: DraftsService,
-    private network: NetworkService, 
+    private network: NetworkService,
     private tr: TranslateService,
     private attachments: AttachmentsService,
   ) {
@@ -246,8 +290,23 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
   // ===== /保持ここまで =====
 
   ngOnInit() {
+    this.startBoardColumnsSubscription();
     this.startProblemsSubscription();
     this.dash$ = this.buildDash$();
+  }
+
+  private startBoardColumnsSubscription() {
+    this.boardColumnsSub?.unsubscribe();
+    this.boardColumnsSub = this.currentProject.projectId$
+      .pipe(
+        switchMap(pid => (pid && pid !== 'default')
+          ? this.boardColumns.list(pid)
+          : of(DEFAULT_BOARD_COLUMNS)
+        )
+      )
+      .subscribe(cols => {
+        this.columns = (cols && cols.length) ? cols : DEFAULT_BOARD_COLUMNS;
+      });
   }
 
   private startProblemsSubscription() {
@@ -307,6 +366,7 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
     this.subForTree?.unsubscribe();
     this.issueSubs.forEach(s => s.unsubscribe());
     this.taskSubs.forEach(s => s.unsubscribe());
+    this.boardColumnsSub?.unsubscribe();
     if (this.commentSaveTimer) { clearTimeout(this.commentSaveTimer); this.commentSaveTimer = null; }
     this.commentCountSubs.forEach(s => s.unsubscribe());
     this.attachmentCountSubs.forEach(s => s.unsubscribe());
@@ -404,9 +464,10 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
         id: t.id!,
         name: t.title,
         kind: 'task',
-        status: (t.status as Status) ?? 'not_started',
+        status: this.bucket(t.status) as Status,
         parentIssueId: issueNode.id,
-        parentProblemId: problemId
+        parentProblemId: problemId,
+        task: t
       }));
 
       const pIdx = this.data.findIndex(p => p.id === problemId);

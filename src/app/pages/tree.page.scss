@@ -157,6 +157,24 @@
   font-weight: 600;
 }
 
+.task-status-pill {
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.4;
+  display: inline-block;
+  padding: 0 4px;
+}
+
+.status-not-started {
+  color: #e53935;
+}
+.status-in-progress {
+  color: #1e88e5;
+}
+.status-done {
+  color: #43a047;
+}
+
 .node-chips {
   display: flex;
   gap: var(--gap-2);
