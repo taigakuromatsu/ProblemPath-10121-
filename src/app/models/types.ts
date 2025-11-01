@@ -71,35 +71,74 @@ export type BoardColumn = {
 
 export function normalizeColumns(rawCols: any[] | null | undefined): BoardColumn[] {
   const arr = Array.isArray(rawCols) ? rawCols : [];
+
+  // Firestore から来たデータを order 昇順に並べる
   const sorted = [...arr].sort((a, b) => {
     const aOrder = Number(a?.order ?? 0);
     const bOrder = Number(b?.order ?? 0);
     return aOrder - bOrder;
   });
+
+  // 並び順に応じたデフォルト推測を「足りないときだけ」使う
   const lastIndex = sorted.length - 1;
 
-  return sorted.map((raw, i) => {
-    const defaultCategory: BoardColumnCategoryHint =
+  // もし1件もなければ、初期値（Not started / In progress / Done）を返す
+  if (sorted.length === 0) {
+    return DEFAULT_BOARD_COLUMNS;
+  }
+
+  return sorted.map((raw, i): BoardColumn => {
+    // デフォルトのカテゴリ（先頭=not_started / 末尾=done / 中間=in_progress）
+    const fallbackCategory: BoardColumnCategoryHint =
       i === 0
         ? 'not_started'
         : i === lastIndex
           ? 'done'
           : 'in_progress';
 
-    const defaultProgress =
+    // デフォルトの進捗%（0〜100を並び順で割り振る。ただしFirestoreに値があればそれを優先）
+    const fallbackProgress =
       lastIndex > 0
         ? Math.round((i / lastIndex) * 100)
         : 0;
 
+    const columnId =
+      (raw?.columnId ?? raw?.id ?? `col-${i}`) as string;
+
+    const title =
+      (typeof raw?.title === 'string' ? raw.title : '') as string;
+
+    const order =
+      Number(raw?.order ?? i);
+
+    const categoryHint: BoardColumnCategoryHint = (
+      (typeof raw?.categoryHint === 'string' &&
+        (raw.categoryHint === 'not_started' ||
+         raw.categoryHint === 'in_progress' ||
+         raw.categoryHint === 'done'))
+        ? raw.categoryHint
+        : fallbackCategory
+    ) as BoardColumnCategoryHint;
+
+    const hasProgress =
+      raw?.progressHint !== undefined &&
+      raw?.progressHint !== null &&
+      Number.isFinite(Number(raw?.progressHint));
+
+    const progressHint = hasProgress
+      ? Number(raw.progressHint)
+      : fallbackProgress;
+
     return {
-      columnId: (raw?.columnId ?? raw?.id ?? `col-${i}`) as string,
-      title: (raw?.title ?? '') as string,
-      order: Number(raw?.order ?? i),
-      categoryHint: (raw?.categoryHint ?? defaultCategory) as BoardColumnCategoryHint,
-      progressHint: Number(raw?.progressHint ?? defaultProgress),
+      columnId,
+      title,
+      order,
+      categoryHint,
+      progressHint,
     };
   });
 }
+
 
 export const DEFAULT_BOARD_COLUMNS: BoardColumn[] = normalizeColumns([
   { columnId: 'not_started', title: 'Not started', order: 0 },

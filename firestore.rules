@@ -26,27 +26,22 @@ service cloud.firestore {
     // ---- プロジェクトツリー ----
     match /projects/{projectId} {
 
-        // Analytics summary (集計結果のダッシュボード用)
-        match /analytics/currentSummary {
-        // ダッシュボード表示用に、プロジェクトメンバーは読み取りOK
+      // Analytics summary (集計結果のダッシュボード用)
+      match /analytics/currentSummary {
         allow read: if isMember(projectId);
-
-        // 書き込みはクライアント側は禁止。Cloud Functions(admin)はルールをバイパスするのでそれで更新する。
         allow create, update, delete: if false;
       }
 
-
-      // 読み取りはメンバーのみ
+      // プロジェクト直下の読み取りはメンバーのみ
       allow read: if isMember(projectId);
 
-      // 監査ログ（Functions が onWrite で"追記のみ"する領域）
-      // クライアントからは"読み取りのみ"許可。create/update/delete は不可。
+      // 監査ログ
       match /auditLogs/{logId} {
         allow read: if isMember(projectId);
         allow create, update, delete: if false;
       }
 
-      // 【ブートストラップ例外】新規作成（meta だけ）を「作成者=自分」のとき許可
+      // 新規プロジェクトの作成
       allow create: if isSignedIn()
         && request.resource.data.keys().hasOnly(['meta'])
         && request.resource.data.meta.keys().hasOnly(['name','createdBy','createdAt'])
@@ -57,16 +52,13 @@ service cloud.firestore {
 
       // members 管理
       match /members/{uid} {
-        // 閲覧はメンバー全員
         allow read: if isMember(projectId);
 
-        // 【ブートストラップ例外】作成直後に「自分を admin で登録」は本人に許可
         allow create: if isSignedIn()
           && request.auth.uid == uid
           && request.resource.data.keys().hasOnly(['role','joinedAt','displayName','email'])
           && request.resource.data.role == 'admin';
 
-        // ★ 招待リンク経由の参加（本人のみ / member or viewer）
         allow create, update: if isSignedIn()
           && request.auth.uid == uid
           && request.resource.data.keys().hasOnly(['role','joinedAt','inviteId','invitedBy','displayName','email'])
@@ -76,28 +68,20 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/projects/$(projectId)/invites/$(request.resource.data.inviteId)).data.email
              == request.auth.token.email;
 
-        // 以降のメンバー管理は admin（更新フィールド制約付き）
         allow update: if isAdmin(projectId)
           && request.resource.data.keys().hasOnly(['role','joinedAt'])
           && isValidRole(request.resource.data.role);
 
-        // 削除：admin または「本人が自分の membership を削除（退出）」可
         allow delete: if (isSignedIn() && request.auth.uid == uid && resource.data.role in ['member','viewer'])
                       || isAdmin(projectId);
       }
 
-      // invites （トークン=docId を前提に “知っている人だけ読める” 方式）
+      // invites
       match /invites/{token} {
-        // ランダムID前提で公開GET可（推測困難）※get は可、list は通常不可
         allow get: if true;
-
-        // ★ Admin に限り list を許可（プロジェクト削除時の一括削除で必要）
         allow list: if isAdmin(projectId);
-
-        // 生成は Admin のみ
         allow create: if isAdmin(projectId);
 
-        // 招待された本人が「未使用の招待」を使用済みにできる
         allow update: if isSignedIn()
           && request.auth.token.email != null
           && resource.data.email == request.auth.token.email
@@ -105,8 +89,44 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).changedKeys().hasOnly(['redeemedBy','redeemedAt'])
           && request.resource.data.redeemedBy == request.auth.uid;
 
-        // 削除は Admin のみ
         allow delete: if isAdmin(projectId);
+      }
+
+      // --- カンバン列(boardColumns)のバリデーション ---
+      function isValidBoardColumn(col) {
+        return col.keys().hasOnly([
+          'columnId',
+          'title',
+          'order',
+          'categoryHint',
+          'progressHint'
+        ])
+        && (!('title' in col)
+          || ((col.title is string)
+              && col.title.size() >= 0
+              && col.title.size() <= 120))
+        && (!('order' in col)
+          || (col.order is int || col.order is float))
+        && (!('categoryHint' in col)
+          || (col.categoryHint in ['not_started','in_progress','done']))
+        && (!('progressHint' in col)
+          || ((col.progressHint is int || col.progressHint is float)
+              && col.progressHint >= 0
+              && col.progressHint <= 100))
+        && (!('columnId' in col)
+          || (col.columnId is string && col.columnId.size() > 0 && col.columnId.size() <= 200));
+      }
+
+      match /boardColumns/{columnId} {
+        // 読み取り：メンバーならOK → これでUIがfallbackしなくなる
+        allow read: if isMember(projectId);
+
+        // 作成・更新：エディターかつpayloadが妥当
+        allow create, update: if isEditor(projectId)
+          && isValidBoardColumn(request.resource.data);
+
+        // 削除：エディターならOK（request.resource.data は存在しないのでバリデしない）
+        allow delete: if isEditor(projectId);
       }
 
       // Problems
@@ -114,21 +134,15 @@ service cloud.firestore {
         allow read: if isMember(projectId);
 
         function validProblemDef(def) {
-          // 許可キーのみ
           return def.keys().hasOnly(['phenomenon','cause','solution','goal','updatedAt','updatedBy'])
-            // 型（必須2項目）
             && (def.phenomenon is string) && (def.goal is string)
-            // 長さ（[\s\S] で改行含む）
             && def.phenomenon.matches('^[\\s\\S]{1,1000}$')
             && def.goal.matches('^[\\s\\S]{1,500}$')
-            // 任意項目は存在すれば型・長さチェック
             && (!('cause' in def) || (def.cause is string && def.cause.matches('^[\\s\\S]{0,1000}$')))
             && (!('solution' in def) || (def.solution is string && def.solution.matches('^[\\s\\S]{0,1000}$')))
-            // 作成者は自分（更新時も自分）
             && (!('updatedBy' in def) || def.updatedBy == request.auth.uid);
         }
 
-        // 添付メタ（共通バリデータ）
         function validAttachmentData(d) {
           return d.keys().hasOnly([
                    'name','contentType','size','storagePath','downloadURL',
@@ -136,7 +150,7 @@ service cloud.firestore {
                  ])
                  && (d.name is string) && d.name.size() > 0 && d.name.size() <= 200
                  && (d.contentType is string) && d.contentType.size() > 0
-                 && ((d.size is int) || (d.size is float)) && d.size >= 0 && d.size <= 20 * 1024 * 1024 // 20MB 目安
+                 && ((d.size is int) || (d.size is float)) && d.size >= 0 && d.size <= 20 * 1024 * 1024
                  && (d.storagePath is string) && d.storagePath.size() > 0
                  && (d.downloadURL is string) && d.downloadURL.size() > 0
                  && (d.createdBy is string) && d.createdBy == request.auth.uid;
@@ -144,26 +158,23 @@ service cloud.firestore {
 
         allow create, update: if isEditor(projectId)
           && (
-            // problemDef 無しも許可（後から追記できる）
             !('problemDef' in request.resource.data)
             || validProblemDef(request.resource.data.problemDef)
           );
 
         allow delete: if isEditor(projectId);
 
-        // ===== Problem attachments =====
         match /attachments/{attId} {
           allow read: if isMember(projectId);
-          // 作成はエディターのみ＋作成時の必須フィールド検証
           allow create: if isEditor(projectId) && validAttachmentData(request.resource.data);
-          // 更新は名称変更程度に限定（必要に応じて拡張）
           allow update: if isEditor(projectId)
             && request.resource.data.keys().hasOnly(['name','updatedAt'])
-            && (request.resource.data.name is string) && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 200;
+            && (request.resource.data.name is string)
+            && request.resource.data.name.size() > 0
+            && request.resource.data.name.size() <= 200;
           allow delete: if isEditor(projectId);
         }
 
-        // Problem comments
         match /comments/{commentId} {
           allow read: if isMember(projectId);
           allow create: if isEditor(projectId)
@@ -174,34 +185,29 @@ service cloud.firestore {
           );
         }
 
-        // Issues
         match /issues/{issueId} {
           allow read: if isMember(projectId);
 
-          // Firestore ルールでは配列の要素ごとの詳細検証が困難なため、
-          // ここでは「配列であること」と上限（200件）のみチェック。
           function validIssueLinks(arr) {
             return arr is list && arr.size() <= 200;
           }
 
-          // ★ create/update のみ request.resource を検証
           allow create, update: if isEditor(projectId)
             && (!('links' in request.resource.data) || validIssueLinks(request.resource.data.links));
 
-          // ★ delete は request.resource が null なので分離
           allow delete: if isEditor(projectId);
 
-          // ===== Issue attachments =====
           match /attachments/{attId} {
             allow read: if isMember(projectId);
             allow create: if isEditor(projectId) && validAttachmentData(request.resource.data);
             allow update: if isEditor(projectId)
               && request.resource.data.keys().hasOnly(['name','updatedAt'])
-              && (request.resource.data.name is string) && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 200;
+              && (request.resource.data.name is string)
+              && request.resource.data.name.size() > 0
+              && request.resource.data.name.size() <= 200;
             allow delete: if isEditor(projectId);
           }
 
-          // Issue comments
           match /comments/{commentId} {
             allow read: if isMember(projectId);
             allow create: if isEditor(projectId)
@@ -212,22 +218,21 @@ service cloud.firestore {
             );
           }
 
-          // Tasks
           match /tasks/{taskId} {
             allow read: if isMember(projectId);
             allow create, update, delete: if isEditor(projectId);
 
-            // ===== Task attachments =====
             match /attachments/{attId} {
               allow read: if isMember(projectId);
               allow create: if isEditor(projectId) && validAttachmentData(request.resource.data);
               allow update: if isEditor(projectId)
                 && request.resource.data.keys().hasOnly(['name','updatedAt'])
-                && (request.resource.data.name is string) && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 200;
+                && (request.resource.data.name is string)
+                && request.resource.data.name.size() > 0
+                && request.resource.data.name.size() <= 200;
               allow delete: if isEditor(projectId);
             }
 
-            // Task comments
             match /comments/{commentId} {
               allow read: if isMember(projectId);
               allow create: if isEditor(projectId)
@@ -240,53 +245,42 @@ service cloud.firestore {
           }
         }
       }
-    }
+    } // end match /projects/{projectId}
 
     // ---- users コレクション（本人専用のサブコレクション制御）----
     match /users/{uid} {
-      // デフォルトは閉じる（必要なサブコレクションのみ明示許可）
       allow read, write: if false;
 
-      // 会員プロジェクト一覧（既存仕様を維持）
       match /memberships/{projectId} {
         allow read:   if isSignedIn() && request.auth.uid == uid;
         allow create: if isSignedIn() && request.auth.uid == uid;
         allow update: if isSignedIn() && request.auth.uid == uid;
-        // 削除のみ、admin による掃除を許可（プロジェクトが存在する間）
         allow delete: if isSignedIn() && (request.auth.uid == uid || isAdmin(projectId));
       }
 
-      // ★ FCM トークンの保存先 users/{uid}/fcmTokens/{token}
       match /fcmTokens/{token} {
-        // 読み取りは不要なら禁止（クライアントからの get/list をブロック）
         allow read: if false;
-        // 自分の配下のみ作成/更新/削除を許可
         allow create, update, delete: if isSignedIn() && request.auth.uid == uid;
       }
 
-      // ★ FCM 状態の保存先 users/{uid}/fcmStatus/{docId}（UI用の状態だけを保持）
       match /fcmStatus/{docId} {
-        // 本人のみ参照可（UIで「有効/未設定/エラー」を表示）
         allow read: if isSignedIn() && request.auth.uid == uid;
-        // 本人のみ作成・更新可。許可フィールドを限定して安全に。
         allow create, update: if isSignedIn()
           && request.auth.uid == uid
           && request.resource.data.keys().hasOnly(['enabled','lastTokenSavedAt','lastError']);
-        // 削除は不要なので禁止（必要なら後で緩める）
         allow delete: if false;
       }
     }
 
     // === collectionGroup('tasks') 用 ===
-    // Schedule 画面は tasks のコレクショングループを読むので、これが無いと PERMISSION DENIED になります。
     match /{path=**}/tasks/{taskId} {
-      // 各 Task に projectId フィールドが入っている前提
       allow read: if isMember(resource.data.projectId);
-      // 書き込みも通すなら以下を有効化（不要なら安全のため無効のまま）
       // allow create, update, delete: if isEditor(request.resource.data.projectId);
     }
   }
 }
+
+
 
 
 

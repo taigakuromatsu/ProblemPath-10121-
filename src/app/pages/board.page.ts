@@ -146,14 +146,26 @@ export class BoardPage {
 
     this.currentProject.projectId$
       .pipe(
-        switchMap(pid => (pid && pid !== 'default') ? this.boardColumns.list(pid) : of(DEFAULT_BOARD_COLUMNS)),
+        switchMap(pid =>
+          (pid && pid !== 'default')
+            ? this.boardColumns.list(pid)
+            : of(DEFAULT_BOARD_COLUMNS)
+        ),
         takeUntilDestroyed(this.destroyRef)
       )
       .subscribe(cols => {
+        console.log('[BoardPage] received columns =', cols);
+
+        // いま使ってるプロジェクトIDも一緒に確認したいので、直近の pid をもう一回覗く:
+        this.currentProject.projectId$.pipe(take(1)).subscribe(latestPid => {
+          console.log('[BoardPage] latestPid =', latestPid);
+        });
+
         this.columns = cols;
         this.resetColumnTotals();
         this.recalcTotals();
       });
+
 
     this.canEdit$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(v => this.allowDnD = !!v);
 
