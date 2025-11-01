@@ -78,9 +78,6 @@ export const computeAndWriteAnalytics = async (projectId: string) => {
   const knownStatuses: Array<{ value: string; label: string }> = [
     { value: "not_started", label: "未着手" },
     { value: "in_progress", label: "対応中" },
-    { value: "review_wait", label: "レビュー中" },
-    { value: "fixing", label: "手直し" },
-    { value: "review", label: "レビュー中" },
     { value: "done", label: "完了" },
   ];
   const statusCounts: Record<string, number> = {};
@@ -175,42 +172,64 @@ export const computeAndWriteAnalytics = async (projectId: string) => {
     .collection(`projects/${projectId}/problems`)
     .get();
 
-  const problemProgress = await Promise.all(
-    problemsSnapshot.docs.map(async (problemDoc: QueryDocumentSnapshotLike) => {
-      // 1. この Problem の配下の Issue を全部読む
-      const issuesSnap = await problemDoc.ref.collection("issues").get();
-
-      let totalTasks = 0;
-      let doneTasks = 0;
-
-      // 2. 各 Issue の配下の tasks をすべて集計
-      for (const issueDoc of issuesSnap.docs as QueryDocumentSnapshotLike[]) {
-        const tasksSnap = await issueDoc.ref.collection("tasks").get();
-
-        for (const taskDoc of tasksSnap.docs as QueryDocumentSnapshotLike[]) {
-          const data = taskDoc.data() ?? {};
-          if (data.softDeleted) continue;
-
-          totalTasks += 1;
-
-          const status = taskDoc.get("status");
-          if (status === "done") {
-            doneTasks += 1;
+      const problemProgress = await Promise.all(
+      problemsSnapshot.docs.map(async (problemDoc: QueryDocumentSnapshotLike) => {
+        // 1. この Problem の配下の Issue を全部読む
+        const issuesSnap = await problemDoc.ref.collection("issues").get();
+  
+        // 進捗平均用の集計
+        let progressSum = 0;
+        let progressCount = 0;
+  
+        // 2. 各 Issue の配下の tasks をすべて集計
+        for (const issueDoc of issuesSnap.docs as QueryDocumentSnapshotLike[]) {
+          const tasksSnap = await issueDoc.ref.collection("tasks").get();
+  
+          for (const taskDoc of tasksSnap.docs as QueryDocumentSnapshotLike[]) {
+            const data = taskDoc.data() ?? {};
+            if (data.softDeleted) continue;
+  
+            // progress が入っていればそれを使う
+            let p = data.progress;
+  
+            // progress が無い/おかしい場合は status から推測する
+            if (
+              typeof p !== "number" ||
+              isNaN(p) ||
+              p < 0 ||
+              p > 100
+            ) {
+              const st = (data.status as string) ?? "not_started";
+              if (st === "done") {
+                p = 100;
+              } else if (st === "in_progress") {
+                p = 50;
+              } else {
+                // not_started 他 → 0%
+                p = 0;
+              }
+            }
+  
+            progressSum += p;
+            progressCount += 1;
           }
         }
-      }
-
-      // 3. 完了率を算出
-      const percent =
-        totalTasks === 0
-          ? 0
-          : Math.round((doneTasks / totalTasks) * 100);
-
-      const title = (problemDoc.get("title") as string) ?? "";
-
-      return { title, percent };
-    })
-  );
+  
+        // 3. 平均進捗率を算出（タスクが0件のときは0扱い）
+        const avgProgress =
+          progressCount === 0
+            ? 0
+            : (progressSum / progressCount);
+  
+        // UI は整数%で十分なので丸める
+        const percent = Math.round(avgProgress);
+  
+        const title = (problemDoc.get("title") as string) ?? "";
+  
+        return { title, percent };
+      })
+    );
+  
 
 
   const summaryRef = firestore.doc(`projects/${projectId}/analytics/currentSummary`);

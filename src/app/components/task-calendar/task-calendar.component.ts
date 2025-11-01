@@ -92,10 +92,6 @@ export class TaskCalendarComponent implements OnChanges {
     switch (status) {
       case 'done':
         return '#16a34a';
-      case 'review_wait':
-        return '#7c3aed';
-      case 'fixing':
-        return '#f97316';
       case 'in_progress':
         return '#2563eb';
       default:

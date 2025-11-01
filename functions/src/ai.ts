@@ -13,8 +13,8 @@ const PROJECT =
   process.env.PROJECT_ID ||
   "kensyu10121";
 
-const LOCATION = process.env.VERTEX_LOCATION || "asia-northeast1";       // まずは us-central1 が堅い
-const MODEL    = process.env.VERTEX_MODEL    || "gemini-2.5-flash";   // 無印 flash（-002 等は権限/提供地域差で 404 出やすい）
+const LOCATION = process.env.VERTEX_LOCATION || "asia-northeast1";
+const MODEL    = process.env.VERTEX_MODEL    || "gemini-2.5-flash";
 
 // ====== 型 ======
 export type IssueSuggestInput = {

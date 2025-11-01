@@ -5,6 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatButtonModule } from '@angular/material/button';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { TranslateModule } from '@ngx-translate/core';
 import { doc, docData, Firestore } from '@angular/fire/firestore';
 import { getFunctions, httpsCallable } from '@angular/fire/functions';
@@ -52,6 +53,7 @@ const MOCK_SUMMARY: AnalyticsSummary = {
     MatDividerModule,
     MatProgressBarModule,
     MatButtonModule,
+    MatTooltipModule,
     TranslateModule,
   ],
 })

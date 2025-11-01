@@ -560,7 +560,7 @@ export class BoardPage {
 
   bucket(s: Task['status'] | undefined): BoardColumn['categoryHint'] {
     if (s === 'done') return 'done';
-    if (s === 'in_progress' || s === 'review_wait' || s === 'fixing') return 'in_progress';
+    if (s === 'in_progress') return 'in_progress';
     return 'not_started';
   }
 

@@ -2,8 +2,6 @@
 export type Status =
   | 'not_started'   // 0%
   | 'in_progress'   // 10–60%
-  | 'review_wait'   // 50%
-  | 'fixing'        // 60%
   | 'done';         // 100%
 
 // 基本フィールド（Problem/Issue/Task共通）

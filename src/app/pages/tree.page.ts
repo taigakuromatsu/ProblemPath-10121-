@@ -72,9 +72,7 @@ export class TreePage {
 
   bucket(status: Task['status'] | undefined): BoardColumn['categoryHint'] {
     if (status === 'done') return 'done';
-    if (status === 'in_progress' || status === 'review_wait' || status === 'fixing') {
-      return 'in_progress';
-    }
+    if (status === 'in_progress') return 'in_progress';
     return 'not_started';
   }
 

@@ -53,7 +53,7 @@ type AttachmentParams = {
   attachmentId: string;
 };
 
-const openTaskStatuses = ["not_started", "in_progress", "review_wait", "fixing"] as const;
+const openTaskStatuses = ["not_started", "in_progress"] as const;
 type ReminderWindow = "1d" | "7d";
 
 function determineScope(params: { issueId?: string; taskId?: string }): "problem" | "issue" | "task" {

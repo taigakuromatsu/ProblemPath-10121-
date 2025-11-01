@@ -23,7 +23,7 @@ import {
 } from 'firebase/firestore';
 import { collectionData as rxCollectionData } from 'rxfire/firestore';
 
-const OPEN_STATUSES: Status[] = ['not_started','in_progress','review_wait','fixing'];
+const OPEN_STATUSES: Status[] = ['not_started','in_progress'];
 
 @Injectable({ providedIn: 'root' })
 export class TasksService {
