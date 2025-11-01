@@ -84,16 +84,27 @@
         </mat-nested-tree-node>
 
         <mat-nested-tree-node *matTreeNodeDef="let node">
-          <div class="node-row node-row--task" [ngClass]="'status-' + (node.status || 'not_started')">
-            <!-- 先頭の task_alt アイコンは削除 -->
+          <div class="node-row node-row--task">
             <div class="node-main">
-              <!-- ✅/🔼/✕ を表示していた statusIcon の行を削除 -->
               <span class="node-title text-1line no-truncate" [matTooltip]="node.name">{{ node.name }}</span>
             </div>
             <div class="node-meta">
-              <span class="node-status" [style.color]="statusColor(node.status)">
-                {{ node.status === 'done' ? ('status.done' | translate) : node.status === 'in_progress' ? ('status.inProgress' | translate) : ('status.notStarted' | translate) }}
-              </span>
+              <ng-container *ngIf="findColumnForTask(node.task) as col; else fallbackColumn">
+                <span
+                  class="task-status-pill"
+                  [ngClass]="statusClassForColumn(col)"
+                  [matTooltip]="tooltipForColumn(col)">
+                  {{ col.title }}
+                </span>
+              </ng-container>
+              <ng-template #fallbackColumn>
+                <span
+                  class="task-status-pill"
+                  [ngClass]="statusClassForColumn()"
+                  [matTooltip]="tooltipForColumn()">
+                  —
+                </span>
+              </ng-template>
             </div>
             <div class="node-chips">
               <button mat-stroked-button type="button" class="chip-button" (click)="openComments(node)">
