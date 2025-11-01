@@ -42,7 +42,18 @@
           [style.--col-accent]="accentFor(col)"
         >
           <header class="column-header" [ngClass]="col.columnId">
-            <div class="column-title text-1line no-truncate">{{ ('board.col.' + col.columnId) | translate }}</div>
+            <div class="column-header__main">
+              <div class="column-title text-1line no-truncate">{{ columnTitle(col) }}</div>
+              <button
+                mat-icon-button
+                type="button"
+                (click)="onEditColumn(col)"
+                [disabled]="!(canEdit$ | async)"
+                aria-label="列を編集"
+              >
+                <mat-icon>edit</mat-icon>
+              </button>
+            </div>
             <span class="column-count count-badge">{{ totalFor(col.columnId) }}</span>
           </header>
 
@@ -102,7 +113,7 @@
                           </mat-chip>
                           <mat-chip appearance="outlined" class="chip chip-status">
                             <mat-icon matChipAvatar>timeline</mat-icon>
-                            <span>{{ ('board.col.' + bucket(t.status)) | translate }}</span>
+                            <span>{{ columnTitleByCategory(bucket(t.status)) }}</span>
                           </mat-chip>
                           <mat-chip appearance="outlined" class="chip chip-due">
                             <mat-icon matChipAvatar>event</mat-icon>
@@ -121,7 +132,7 @@
                           [disabled]="isTaskInColumn(t, next) || isBusy(t.id!) || !(canEdit$ | async)"
                           (click)="setTaskStatus(pid, issue.id!, t, next.columnId)"
                         >
-                          {{ ('board.col.' + next.columnId) | translate }}
+                          {{ columnTitle(next) }}
                         </button>
                       </div>
 
