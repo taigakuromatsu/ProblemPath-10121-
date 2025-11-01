@@ -15,7 +15,8 @@ import { ProblemsService } from '../services/problems.service';
 import { IssuesService } from '../services/issues.service';
 import { TasksService } from '../services/tasks.service';
 import { CurrentProjectService } from '../services/current-project.service';
-import { Problem, Issue, Task } from '../models/types';
+import { Problem, Issue, Task, BoardColumn, DEFAULT_BOARD_COLUMNS } from '../models/types';
+import { BoardColumnsService } from '../services/board-columns.service';
 
 import { DragDropModule, CdkDragDrop, moveItemInArray, transferArrayItem, CdkDrag, CdkDropList } from '@angular/cdk/drag-drop';
 import { Router, ActivatedRoute, RouterLink } from '@angular/router';
@@ -39,10 +40,9 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
   styleUrls: ['./board.page.scss']
 })
 export class BoardPage {
-  // 列定義（表示は翻訳キーで行う）
-  statusCols = ['not_started','in_progress','done'] as const;
+  columns: BoardColumn[] = DEFAULT_BOARD_COLUMNS;
 
-  readonly colAccent: Record<(typeof this.statusCols)[number], string> = {
+  readonly categoryAccent: Record<BoardColumn['categoryHint'], string> = {
     not_started: '#9ca3af',
     in_progress: '#0ea5e9',
     done: '#22c55e'
@@ -54,7 +54,10 @@ export class BoardPage {
   private selectedProblem$ = new BehaviorSubject<string | null>(null);
   issues$: Observable<Issue[] | null> = of(null);
 
-  totals: Record<'not_started'|'in_progress'|'done', number> = { not_started: 0, in_progress: 0, done: 0 };
+  private columnTotals = new Map<string, number>();
+  totalFor(columnId: string): number {
+    return this.columnTotals.get(columnId) ?? 0;
+  }
 
   isEditor$!: Observable<boolean>;
   isOnline$!: Observable<boolean>;
@@ -76,6 +79,7 @@ export class BoardPage {
     private destroyRef: DestroyRef,
     public auth: AuthService,
     private currentProject: CurrentProjectService,
+    private boardColumns: BoardColumnsService,
     public members: MembersService,
     private network: NetworkService,
     private snack: MatSnackBar,
@@ -94,6 +98,17 @@ export class BoardPage {
     this.problems$ = this.currentProject.projectId$.pipe(
       switchMap(pid => (pid && pid !== 'default') ? this.problems.list(pid) : of([]))
     );
+
+    this.currentProject.projectId$
+      .pipe(
+        switchMap(pid => (pid && pid !== 'default') ? this.boardColumns.list(pid) : of(DEFAULT_BOARD_COLUMNS)),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe(cols => {
+        this.columns = cols;
+        this.resetColumnTotals();
+        this.recalcTotals();
+      });
 
     this.canEdit$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(v => this.allowDnD = !!v);
 
@@ -118,7 +133,7 @@ export class BoardPage {
     this.taskCountSubs.forEach(s => s.unsubscribe());
     this.taskCountSubs.clear();
     this.tasksSnapshot = {};
-    this.totals = { not_started: 0, in_progress: 0, done: 0 };
+    this.resetColumnTotals();
     this.tasksMap = {};
 
     this.selectedProblemId = problemId;
@@ -158,26 +173,29 @@ export class BoardPage {
   }
 
   private recalcTotals() {
-    const t = { not_started: 0, in_progress: 0, done: 0 } as Record<'not_started'|'in_progress'|'done', number>;
+    const totals = new Map<string, number>();
+    for (const column of this.columns) {
+      totals.set(column.columnId, 0);
+    }
     for (const list of Object.values(this.tasksSnapshot)) {
       for (const x of list) {
-        if (x.status === 'done') t.done++;
-        else if (x.status === 'in_progress') t.in_progress++;
-        else t.not_started++;
+        const columnId = this.resolveColumnIdForCategory(this.bucket(x.status));
+        totals.set(columnId, (totals.get(columnId) ?? 0) + 1);
       }
     }
-    this.totals = t;
+    this.columnTotals = totals;
   }
 
   async setTaskStatus(
     problemId: string,
     issueId: string,
     t: Task,
-    status: 'not_started'|'in_progress'|'done'
+    columnId: string
   ) {
     if (!(await this.requireCanEdit())) return;
     if (!t.id || this.isBusy(t.id)) return;
-    const progress = status === 'done' ? 100 : status === 'not_started' ? 0 : 50;
+    const status = this.statusForColumn(columnId);
+    const progress = this.progressForColumn(columnId);
 
     this.busyTaskIds.add(t.id);
     this.withPid(async pid => {
@@ -190,9 +208,8 @@ export class BoardPage {
   async onListDrop(ev: CdkDragDrop<Task[]>, problemId: string, issueId: string) {
     if (!(await this.requireCanEdit())) return;
 
-    const parse = (id: string) => id.split('-')[1] as 'not_started'|'in_progress'|'done';
-    const srcStatus  = parse(ev.previousContainer.id);
-    const destStatus = parse(ev.container.id);
+    const destColumnId = this.columnIdFromListId(ev.container.id);
+    const destStatus = this.statusForColumn(destColumnId);
 
     const src = ev.previousContainer.data ?? [];
     const dst = ev.container.data ?? [];
@@ -209,7 +226,7 @@ export class BoardPage {
     if (!moved?.id || this.isBusy(moved.id)) return;
 
     const id = moved.id!;
-    const progress = destStatus === 'done' ? 100 : destStatus === 'not_started' ? 0 : 50;
+    const progress = this.progressForColumn(destColumnId);
 
     this.busyTaskIds.add(moved.id);
     this.withPid(async pid => {
@@ -242,10 +259,76 @@ export class BoardPage {
   key(problemId: string, issueId: string) { return `${problemId}_${issueId}`; }
 
   listIds(issueId: string): string[] {
-    return (['not_started','in_progress','done'] as const).map(s => this.listId(s, issueId));
+    return this.columns.map(col => this.listId(col, issueId));
   }
-  listId(status: 'not_started'|'in_progress'|'done', issueId: string): string {
-    return `dl-${status}-${issueId}`;
+  listId(column: BoardColumn, issueId: string): string {
+    return `dl-${column.columnId}__${issueId}`;
+  }
+
+  private columnIdFromListId(listId: string): string {
+    const prefix = 'dl-';
+    if (!listId.startsWith(prefix)) return listId;
+    const remainder = listId.slice(prefix.length);
+    const separatorIndex = remainder.indexOf('__');
+    return separatorIndex >= 0 ? remainder.slice(0, separatorIndex) : remainder;
+  }
+
+  trackColumn = (_: number, column: BoardColumn) => column.columnId;
+
+  accentFor(column: BoardColumn): string {
+    return this.categoryAccent[column.categoryHint] ?? '#9ca3af';
+  }
+
+  tasksForColumn(tasks: Task[] | null | undefined, column: BoardColumn): Task[] {
+    const targetColumnId = column.columnId;
+    return (tasks ?? []).filter(t => this.resolveColumnIdForCategory(this.bucket(t.status)) === targetColumnId);
+  }
+
+  isTaskInColumn(task: Task, column: BoardColumn): boolean {
+    return this.resolveColumnIdForCategory(this.bucket(task.status)) === column.columnId;
+  }
+
+  private resetColumnTotals() {
+    this.columnTotals = new Map(this.columns.map(col => [col.columnId, 0] as [string, number]));
+  }
+
+  private columnById(columnId: string): BoardColumn | undefined {
+    return this.columns.find(col => col.columnId === columnId);
+  }
+
+  private statusForColumn(columnId: string): 'not_started'|'in_progress'|'done' {
+    return this.columnById(columnId)?.categoryHint ?? 'not_started';
+  }
+
+  private progressForColumn(columnId: string): number {
+    const column = this.columnById(columnId);
+    if (!column) {
+      return this.progressFallbackForCategory('not_started');
+    }
+    const value = Number(column.progressHint);
+    if (!Number.isFinite(value)) {
+      return this.progressFallbackForCategory(column.categoryHint);
+    }
+    return value;
+  }
+
+  private resolveColumnIdForCategory(category: BoardColumn['categoryHint']): string {
+    const exact = this.columns.find(col => col.columnId === category);
+    if (exact) return exact.columnId;
+    const match = this.columns.find(col => col.categoryHint === category);
+    if (match) return match.columnId;
+    return this.columns[0]?.columnId ?? category;
+  }
+
+  private progressFallbackForCategory(category: BoardColumn['categoryHint']): number {
+    switch (category) {
+      case 'done':
+        return 100;
+      case 'in_progress':
+        return 50;
+      default:
+        return 0;
+    }
   }
 
   canEnter = (drag: CdkDrag, _drop: CdkDropList) => {
@@ -270,14 +353,10 @@ export class BoardPage {
     });
   }
 
-  bucket(s: Task['status'] | undefined): 'not_started'|'in_progress'|'done' {
+  bucket(s: Task['status'] | undefined): BoardColumn['categoryHint'] {
     if (s === 'done') return 'done';
     if (s === 'in_progress' || s === 'review_wait' || s === 'fixing') return 'in_progress';
     return 'not_started';
-  }
-
-  tasksByStatus(tasks: Task[] | null | undefined, status: 'not_started'|'in_progress'|'done'): Task[] {
-    return (tasks ?? []).filter(t => this.bucket(t.status) === status);
   }
 
   async assignToMe(problemId: string, issueId: string, t: Task) {
