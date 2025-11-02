@@ -163,6 +163,7 @@ export class TreePage {
   canEdit$!: Observable<boolean>;               
 
   selectedNode: TreeNode | null = null;
+  activeDetailTab: 'comments' | 'files' = 'comments';
   comments$?: Observable<CommentDoc[]>;
   newBody = '';
   editingId: string | null = null;
@@ -805,6 +806,7 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
   // コメントターゲット切替時に下書き復元を提案
   async openComments(node: TreeNode){
     this.selectedNode = node;
+    this.activeDetailTab = 'comments';
     const t = await this.toTarget(node);
     if (!t) { this.comments$ = undefined; return; }
     this.comments$ = this.comments.listByTarget(t, 50);
