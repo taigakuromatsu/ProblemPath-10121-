@@ -51,17 +51,17 @@
     <ng-container *ngIf="(issues$ | async) as issues">
       <div class="empty" *ngIf="!issues.length">{{ 'issue.noneYet' | translate }}</div>
 
-      <div
-        class="board-grid"
-        *ngIf="issues.length"
-        cdkDropList
-        cdkDropListOrientation="horizontal"
-        [cdkDropListData]="columns"
-        (cdkDropListDropped)="onColumnDrop($event)"
-        [cdkDropListDisabled]="!(canEdit$ | async)"
-      >
-        <section
-          class="board-column"
+      <div class="board-canvas" *ngIf="issues.length">
+        <div
+          class="board-grid board-lists"
+          cdkDropList
+          cdkDropListOrientation="horizontal"
+          [cdkDropListData]="columns"
+          (cdkDropListDropped)="onColumnDrop($event)"
+          [cdkDropListDisabled]="!(canEdit$ | async)"
+        >
+          <section
+            class="board-column board-list"
           [ngClass]="col.columnId"
           *ngFor="let col of columns; trackBy: trackColumn"
           [style.--col-accent]="accentFor(col)"
@@ -111,7 +111,7 @@
               <ng-container *ngIf="tasksMap[key(pid, issue.id!)] | async as tasks">
                 <ng-container *ngIf="tasksForColumn(tasks, col) as ts">
                   <section
-                    class="issue-stack"
+                    class="issue-stack list-section"
                     cdkDropList
                     [cdkDropListData]="ts"
                     [cdkDropListConnectedTo]="listIds(issue.id!)"
@@ -121,13 +121,13 @@
                     [cdkDropListDisabled]="!(canEdit$ | async)"
                     cdkDropListOrientation="vertical"
                   >
-                    <div class="issue-stack__header">
+                    <div class="issue-stack__header list-section__header">
                       <div class="issue-title text-1line no-truncate">{{ issue.title }}</div>
                       <span class="issue-count count-badge">{{ ts.length }} {{ 'board.items' | translate }}</span>
                     </div>
 
                     <mat-card
-                      class="task-card"
+                      class="task-card task-card--interactive"
                       *ngFor="let t of ts; trackBy: trackTask"
                       cdkDrag
                       [cdkDragData]="{ task: t, issueId: issue.id }"
@@ -136,7 +136,7 @@
                     >
                       <ng-template cdkDragPreview>
                         <mat-card class="task-card task-card--preview">
-                          <div class="task-card__title text-1line no-truncate">{{ t.title }}</div>
+                          <div class="task-card__title">{{ t.title }}</div>
                         </mat-card>
                       </ng-template>
                       <ng-template cdkDragPlaceholder>
@@ -145,19 +145,19 @@
 
                       <!-- 上: ID / 担当者数 -->
                       <div class="task-card__meta">
-                        <span class="task-assignees" *ngIf="(t.assignees?.length || 0) > 0">
+                        <span class="task-assignees meta-chip" *ngIf="(t.assignees?.length || 0) > 0">
                           <mat-icon>group</mat-icon>
                           {{ t.assignees?.length || 0 }}
                         </span>
                       </div>
 
                       <!-- タイトル・説明 -->
-                      <div class="task-card__title text-1line no-truncate">{{ t.title }}</div>
+                      <div class="task-card__title">{{ t.title }}</div>
                       <p class="task-card__description text-2line" *ngIf="t.description">{{ t.description }}</p>
 
                       <!-- チップ列 -->
                       <div class="task-card__chips">
-                        <mat-chip-set>
+                        <mat-chip-set class="task-chip-set">
 
                           <!-- 優先度 (既に導入済みのやつ) -->
                           <mat-chip
@@ -200,34 +200,36 @@
 
                           <!-- ステータス (列を直接選べるようにする) -->
                           <mat-chip
-                          appearance="outlined"
-                          class="chip chip-status"
-                          [matMenuTriggerFor]="statusMenu"
-                          [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
+                            appearance="outlined"
+                            class="chip chip-status"
+                            [matMenuTriggerFor]="statusMenu"
+                            [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
                           >
-                          <mat-icon matChipAvatar>timeline</mat-icon>
-                          <!-- いま属してる列の名前を表示 -->
-                          <span>{{ currentColumnTitle(t) }}</span>
-                          <mat-icon>arrow_drop_down</mat-icon>
+                            <mat-icon matChipAvatar>timeline</mat-icon>
+                            <!-- いま属してる列の名前を表示 -->
+                            <span>{{ currentColumnTitle(t) }}</span>
+                            <mat-icon>arrow_drop_down</mat-icon>
                           </mat-chip>
 
                           <mat-menu #statusMenu="matMenu">
-                          <button
-                            mat-menu-item
-                            *ngFor="let colOpt of columns; trackBy: trackColumn"
-                            (click)="moveTaskToColumn(pid, issue.id!, t, colOpt)"
-                            [disabled]="isBusy(t.id!) || !(canEdit$ | async) || isTaskInColumn(t, colOpt)"
-                          >
-                            <!-- アイコンは列のカテゴリヒントで軽く出し分けてもいい -->
-                            <mat-icon *ngIf="colOpt.categoryHint === 'done'">check_circle</mat-icon>
-                            <mat-icon *ngIf="colOpt.categoryHint === 'in_progress'">sync</mat-icon>
-                            <mat-icon *ngIf="colOpt.categoryHint === 'not_started'">play_disabled</mat-icon>
-                            <mat-icon *ngIf="colOpt.categoryHint !== 'done'
-                                          && colOpt.categoryHint !== 'in_progress'
-                                          && colOpt.categoryHint !== 'not_started'">more_horiz</mat-icon>
+                            <button
+                              mat-menu-item
+                              *ngFor="let colOpt of columns; trackBy: trackColumn"
+                              (click)="moveTaskToColumn(pid, issue.id!, t, colOpt)"
+                              [disabled]="isBusy(t.id!) || !(canEdit$ | async) || isTaskInColumn(t, colOpt)"
+                            >
+                              <!-- アイコンは列のカテゴリヒントで軽く出し分けてもいい -->
+                              <mat-icon *ngIf="colOpt.categoryHint === 'done'">check_circle</mat-icon>
+                              <mat-icon *ngIf="colOpt.categoryHint === 'in_progress'">sync</mat-icon>
+                              <mat-icon *ngIf="colOpt.categoryHint === 'not_started'">play_disabled</mat-icon>
+                              <mat-icon
+                                *ngIf="colOpt.categoryHint !== 'done' && colOpt.categoryHint !== 'in_progress' && colOpt.categoryHint !== 'not_started'"
+                              >
+                                more_horiz
+                              </mat-icon>
 
-                            <span>{{ columnTitle(colOpt) }}</span>
-                          </button>
+                              <span>{{ columnTitle(colOpt) }}</span>
+                            </button>
                           </mat-menu>
 
                           <!-- 期限 -->
@@ -271,6 +273,7 @@
             </ng-container>
           </div>
         </section>
+        </div>
       </div>
     </ng-container>
   </ng-container>
