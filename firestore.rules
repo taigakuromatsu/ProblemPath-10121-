@@ -26,9 +26,17 @@ service cloud.firestore {
     // ---- プロジェクトツリー ----
     match /projects/{projectId} {
 
-      // Analytics summary (集計結果のダッシュボード用)
+      // Analytics summary (集計結果のダッシュボード用：全体)
       match /analytics/currentSummary {
         allow read: if isMember(projectId);
+        allow create, update, delete: if false;
+      }
+
+      // Analytics per-user（個人用サマリー：本人のみ閲覧可）
+      match /analyticsPerUser/{uid} {
+        allow read: if isMember(projectId)
+                    && request.auth != null
+                    && request.auth.uid == uid; // 管理者にも読ませる場合は「|| isAdmin(projectId)」を追加
         allow create, update, delete: if false;
       }
 
@@ -118,14 +126,14 @@ service cloud.firestore {
       }
 
       match /boardColumns/{columnId} {
-        // 読み取り：メンバーならOK → これでUIがfallbackしなくなる
+        // 読み取り：メンバーならOK
         allow read: if isMember(projectId);
 
         // 作成・更新：エディターかつpayloadが妥当
         allow create, update: if isEditor(projectId)
           && isValidBoardColumn(request.resource.data);
 
-        // 削除：エディターならOK（request.resource.data は存在しないのでバリデしない）
+        // 削除：エディターならOK
         allow delete: if isEditor(projectId);
       }
 
@@ -279,6 +287,7 @@ service cloud.firestore {
     }
   }
 }
+
 
 
 

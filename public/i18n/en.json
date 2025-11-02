@@ -48,6 +48,12 @@
     "problemProgress": {
       "title": "Progress by Problem",
       "empty": "No Problem data available yet."
+    },
+    "personal": {
+      "title": "Personal Task Data",
+      "completedTasks7d": "Completed tasks (last 7 days)",
+      "lateRateThisWeek": "Late rate (this week)",
+      "avgLeadTime30d": "Average lead time (30 days)"
     }
   },
   "reports": {

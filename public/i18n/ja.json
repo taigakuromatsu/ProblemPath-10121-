@@ -48,6 +48,12 @@
     "problemProgress": {
       "title": "Problem別の進捗",
       "empty": "現在表示できるProblemはありません。"
+    },
+    "personal": {
+      "title": "個人タスクデータ",
+      "completedTasks7d": "完了タスク（過去7日・自分）",
+      "lateRateThisWeek": "遅延率（今週・自分）",
+      "avgLeadTime30d": "平均対応日数（30日・自分）"
     }
   },
   "reports": {
@@ -340,4 +346,5 @@
     "clear": "クリア",
     "noProblem": "問題を選択してください"
   }
+  
 }

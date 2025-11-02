@@ -4,12 +4,7 @@
       <h1 class="section-title section-title--info no-truncate">
         {{ 'analytics.title' | translate }}
       </h1>
-      <button
-        type="button"
-        mat-stroked-button
-        class="analytics-page__refresh-button"
-        (click)="onRefreshAnalytics()"
-      >
+      <button type="button" mat-stroked-button class="analytics-page__refresh-button" (click)="onRefreshAnalytics()">
         再集計
       </button>
     </div>
@@ -79,16 +74,13 @@
           <mat-icon
             class="problem-progress__info"
             matTooltip="この値は、そのProblem内にあるタスクの進捗率(progress)の平均です。各タスクはボード上で置かれた列に応じて自動的に進捗率が更新されます。"
-          >
-            info
-          </mat-icon>
+          >info</mat-icon>
         </div>
         <mat-card-subtitle class="problem-progress__subtitle">
-          列を「未着手 / 対応中 / レビュー中 / 完了」などに分けると、
-          その列にあるタスクの進捗率が使われ、平均値としてここに表示されます。
+          列を「未着手 / 対応中 / レビュー中 / 完了」などに分けると、その列にあるタスクの進捗率が使われ、平均値としてここに表示されます。
         </mat-card-subtitle>
       </mat-card-header>
-    
+
       <mat-card-content>
         <div *ngIf="summary.problemProgress.length; else noProblems" class="problem-progress">
           <div class="problem-progress__item" *ngFor="let problem of summary.problemProgress">
@@ -104,6 +96,44 @@
         </ng-template>
       </mat-card-content>
     </mat-card>
-    
+
+    <!-- ここから新設：個人タスクデータ -->
+    <mat-card class="analytics-page__personal-card">
+      <mat-card-header>
+        <mat-card-title>{{ 'analytics.personal.title' | translate }}</mat-card-title>
+      </mat-card-header>
+      <mat-card-content *ngIf="mySummary$ | async as me">
+        <div class="personal-card__metrics">
+          <div class="personal-metric">
+            <div class="personal-metric__label">{{ 'analytics.personal.completedTasks7d' | translate }}</div>
+            <div class="personal-metric__value">{{ me.completedTasks7d }}</div>
+          </div>
+          <div class="personal-metric">
+            <div class="personal-metric__label">{{ 'analytics.personal.lateRateThisWeek' | translate }}</div>
+            <div class="personal-metric__value">{{ me.lateRateThisWeekPercent | number: '1.0-1' }}%</div>
+          </div>
+          <div class="personal-metric">
+            <div class="personal-metric__label">{{ 'analytics.personal.avgLeadTime30d' | translate }}</div>
+            <div class="personal-metric__value">
+              {{ me.avgLeadTime30dDays | number: '1.0-1' }}
+              <span class="metric-card__unit">{{ 'analytics.cards.avgLeadTime30dUnit' | translate }}</span>
+            </div>
+          </div>
+        </div>
+
+        <mat-divider></mat-divider>
+
+        <div class="personal-status" *ngIf="myStatusEntries$ | async as myEntries">
+          <div class="status-row" *ngFor="let entry of myEntries">
+            <div class="status-row__meta">
+              <span class="status-row__label">{{ entry.label | translate }}</span>
+              <span class="status-row__value">{{ entry.count }}</span>
+            </div>
+            <mat-progress-bar mode="determinate" [value]="entry.percent"></mat-progress-bar>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
   </ng-container>
 </section>
+

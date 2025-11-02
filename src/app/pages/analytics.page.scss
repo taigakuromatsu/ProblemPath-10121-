@@ -131,3 +131,30 @@
   color: var(--pp-muted-fg, rgba(0, 0, 0, 0.56));
   margin: 0;
 }
+
+/* 追加分 */
+.analytics-page__personal-card {
+  margin-top: 12px;
+}
+
+.personal-card__metrics {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  margin-bottom: 12px;
+}
+
+.personal-metric__label {
+  color: var(--pp-muted-fg, rgba(0, 0, 0, 0.56));
+  font-size: 0.9rem;
+}
+
+.personal-metric__value {
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+.personal-status .status-row + .status-row {
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+

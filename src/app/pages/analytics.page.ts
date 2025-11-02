@@ -9,9 +9,10 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { TranslateModule } from '@ngx-translate/core';
 import { doc, docData, Firestore } from '@angular/fire/firestore';
 import { getFunctions, httpsCallable } from '@angular/fire/functions';
-import { catchError, firstValueFrom, map, Observable, of, switchMap } from 'rxjs';
+import { catchError, firstValueFrom, map, Observable, of, switchMap, combineLatest } from 'rxjs';
 
 import { CurrentProjectService } from '../services/current-project.service';
+import { AuthService } from '../services/auth.service';
 
 export interface AnalyticsSummary {
   completedTasks7d: number;
@@ -19,6 +20,13 @@ export interface AnalyticsSummary {
   lateRateThisWeekPercent: number;
   statusBreakdown: { label: string; count: number }[];
   problemProgress: { title: string; percent: number }[];
+}
+
+export interface PersonalAnalyticsSummary {
+  completedTasks7d: number;
+  avgLeadTime30dDays: number;
+  lateRateThisWeekPercent: number;
+  statusBreakdown: { label: string; count: number }[];
 }
 
 const MOCK_SUMMARY: AnalyticsSummary = {
@@ -38,41 +46,36 @@ const MOCK_SUMMARY: AnalyticsSummary = {
   ],
 };
 
+const MOCK_MY: PersonalAnalyticsSummary = {
+  completedTasks7d: 0,
+  avgLeadTime30dDays: 0,
+  lateRateThisWeekPercent: 0,
+  statusBreakdown: [],
+};
+
 @Component({
   standalone: true,
   selector: 'pp-analytics-page',
   templateUrl: './analytics.page.html',
   styleUrls: ['./analytics.page.scss'],
   imports: [
-    AsyncPipe,
-    NgFor,
-    NgIf,
-    DecimalPipe,
-    MatCardModule,
-    MatIconModule,
-    MatDividerModule,
-    MatProgressBarModule,
-    MatButtonModule,
-    MatTooltipModule,
-    TranslateModule,
+    AsyncPipe, NgFor, NgIf, DecimalPipe,
+    MatCardModule, MatIconModule, MatDividerModule, MatProgressBarModule,
+    MatButtonModule, MatTooltipModule, TranslateModule,
   ],
 })
 export class AnalyticsPage {
   private readonly currentProject = inject(CurrentProjectService);
   private readonly firestore = inject(Firestore);
+  private readonly auth = inject(AuthService);
 
   readonly projectId$: Observable<string | null> = this.currentProject.projectId$;
 
+  // プロジェクト全体サマリー（既存）
   readonly summary$: Observable<AnalyticsSummary> = this.projectId$.pipe(
     switchMap(projectId => {
-      if (!projectId) {
-        return of(MOCK_SUMMARY);
-      }
-      const summaryRef = doc(
-        this.firestore,
-        `projects/${projectId}/analytics/currentSummary`,
-      );
-      // TODO: このドキュメントはCloud Functions側で集計して定期更新する予定（7日間完了数・30日平均リードタイム・今週の遅延率など）
+      if (!projectId) return of(MOCK_SUMMARY);
+      const summaryRef = doc(this.firestore, `projects/${projectId}/analytics/currentSummary`);
       return docData(summaryRef).pipe(
         map((data): AnalyticsSummary => (data as AnalyticsSummary) ?? MOCK_SUMMARY),
         catchError(() => of(MOCK_SUMMARY)),
@@ -82,11 +85,30 @@ export class AnalyticsPage {
 
   readonly statusEntries$ = this.summary$.pipe(
     map(summary => {
-      const total = summary.statusBreakdown.reduce((acc, entry) => acc + entry.count, 0) || 1;
-      return summary.statusBreakdown.map(entry => ({
-        ...entry,
-        percent: (entry.count / total) * 100,
-      }));
+      const total = summary.statusBreakdown.reduce((acc, e) => acc + e.count, 0) || 1;
+      return summary.statusBreakdown.map(e => ({ ...e, percent: (e.count / total) * 100 }));
+    }),
+  );
+
+  // 追加: ログインユーザー専用サマリー
+  readonly mySummary$: Observable<PersonalAnalyticsSummary> = combineLatest([
+    this.projectId$,
+    this.auth.uid$,
+  ]).pipe(
+    switchMap(([projectId, uid]) => {
+      if (!projectId || !uid) return of(MOCK_MY);
+      const ref = doc(this.firestore, `projects/${projectId}/analyticsPerUser/${uid}`);
+      return docData(ref).pipe(
+        map((data): PersonalAnalyticsSummary => (data as PersonalAnalyticsSummary) ?? MOCK_MY),
+        catchError(() => of(MOCK_MY)),
+      );
+    }),
+  );
+
+  readonly myStatusEntries$ = this.mySummary$.pipe(
+    map(summary => {
+      const total = summary.statusBreakdown.reduce((acc, e) => acc + e.count, 0) || 1;
+      return summary.statusBreakdown.map(e => ({ ...e, percent: (e.count / total) * 100 }));
     }),
   );
 
@@ -98,14 +120,8 @@ export class AnalyticsPage {
       console.warn('[analytics] Cannot refresh analytics summary without a projectId');
       return;
     }
-
-    // Functions呼び出し。リージョンが asia-northeast1 なので明示します。
     const functions = getFunctions(undefined, 'asia-northeast1');
-    const callable = httpsCallable<{ projectId: string }, { ok: boolean }>(
-      functions,
-      'refreshAnalyticsSummaryV2',
-    );
-
+    const callable = httpsCallable<{ projectId: string }, { ok: boolean }>(functions, 'refreshAnalyticsSummaryV2');
     try {
       await callable({ projectId });
       console.log('[analytics] manual refresh OK');

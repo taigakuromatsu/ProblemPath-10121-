@@ -31,13 +31,7 @@ interface Vm {
 }
 
 const EMPTY_VM: Vm = {
-  overdue: [],
-  today: [],
-  tomorrow: [],
-  thisWeekRest: [],
-  nextWeek: [],
-  later: [],
-  nodue: [],
+  overdue: [], today: [], tomorrow: [], thisWeekRest: [], nextWeek: [], later: [], nodue: [],
 };
 
 interface SectionDef {
@@ -58,29 +52,13 @@ interface MemberOption {
   templateUrl: './my-tasks.page.html',
   styleUrls: ['./my-tasks.page.scss'],
   imports: [
-    AsyncPipe,
-    NgFor,
-    NgIf,
-    NgClass,
-    NgSwitch,
-    NgSwitchCase,
-    NgTemplateOutlet, // *ngTemplateOutlet 用
-    FormsModule,
-    MatButtonModule,
-    MatButtonToggleModule,
-    MatCardModule,
-    MatIconModule,
-    MatTooltipModule,
-    MatProgressBarModule,
-    TranslateModule,
-    TaskRowComponent,
-    TaskCalendarComponent,
+    AsyncPipe, NgFor, NgIf, NgClass, NgSwitch, NgSwitchCase, NgTemplateOutlet,
+    FormsModule, MatButtonModule, MatButtonToggleModule, MatCardModule, MatIconModule,
+    MatTooltipModule, MatProgressBarModule, TranslateModule, TaskRowComponent, TaskCalendarComponent,
   ],
 })
 export class MyTasksPage implements OnInit, OnDestroy {
   vm$: Observable<Vm> = of(EMPTY_VM);
-  summary$: Observable<{ overdue: number; today: number; week: number; progress: number }> =
-    of({ overdue: 0, today: 0, week: 0, progress: 0 });
 
   openOnly = true;
   tagQuery = '';
@@ -99,7 +77,6 @@ export class MyTasksPage implements OnInit, OnDestroy {
     { key: 'nodue',        icon: 'more_time',          label: 'myTasks.nodue',        accent: 'muted'  },
   ];
 
-  // 0時跨ぎ検知
   private readonly midnightTick$ = interval(60_000).pipe(
     startWith(0),
     map(() => {
@@ -111,11 +88,9 @@ export class MyTasksPage implements OnInit, OnDestroy {
     filter(Boolean),
   );
 
-  // 保存のコアレッサ＆連打抑止
   private dueDateTimers = new Map<string, any>();
   private inFlight = new Set<string>();
 
-  // ngOnInitで安全に初期化
   members$!: Observable<MemberOption[]>;
   memberDirectory$!: Observable<Record<string, string>>;
 
@@ -127,7 +102,6 @@ export class MyTasksPage implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    // メンバー一覧
     this.members$ = this.current.projectId$.pipe(
       switchMap(pid => {
         if (!pid || pid === 'default') return of<MemberOption[]>([]);
@@ -136,10 +110,7 @@ export class MyTasksPage implements OnInit, OnDestroy {
           map(snapshot =>
             snapshot.docs.map(docSnap => {
               const data: any = docSnap.data();
-              return {
-                uid: docSnap.id,
-                label: data?.displayName || data?.email || docSnap.id,
-              } as MemberOption;
+              return { uid: docSnap.id, label: data?.displayName || data?.email || docSnap.id } as MemberOption;
             })
           ),
           catchError(() => of<MemberOption[]>([])),
@@ -148,7 +119,6 @@ export class MyTasksPage implements OnInit, OnDestroy {
       shareReplay({ bufferSize: 1, refCount: true })
     );
 
-    // UID→表示名
     this.memberDirectory$ = this.members$.pipe(
       map(list => {
         const dir: Record<string, string> = {};
@@ -198,7 +168,6 @@ export class MyTasksPage implements OnInit, OnDestroy {
     return `${y}-${m}-${d}`;
   }
 
-  // セクション優先順で重複IDを1つに（A: 重複排除）
   private dedupeVm(vm: Vm): Vm {
     const order: (keyof Vm)[] = ['overdue','today','tomorrow','thisWeekRest','nextWeek','later','nodue'];
     const seen = new Set<string>();
@@ -227,7 +196,6 @@ export class MyTasksPage implements OnInit, OnDestroy {
         const today = new Date(); today.setHours(0,0,0,0);
         const tomorrow = this.addDays(today, 1);
 
-        // 週境界（B: 週レンジは「月〜日」基準）
         const dow = today.getDay();
         const diffToMon = (dow === 0 ? -6 : 1 - dow);
         const startOfWeek = this.addDays(today, diffToMon);
@@ -249,32 +217,11 @@ export class MyTasksPage implements OnInit, OnDestroy {
 
         return combineLatest([overdue$, today$, tomorrow$, thisWeekRest$, nextWeek$, later$, nodue$]).pipe(
           map(([overdue, todayArr, tomorrowArr, thisWeekRest, nextWeek, later, nodue]) =>
-            this.dedupeVm({
-              overdue,
-              today: todayArr,
-              tomorrow: tomorrowArr,
-              thisWeekRest,
-              nextWeek,
-              later,
-              nodue,
-            })
+            this.dedupeVm({ overdue, today: todayArr, tomorrow: tomorrowArr, thisWeekRest, nextWeek, later, nodue })
           ),
         );
       }),
-      // 体感のチラつき抑制（同一オブジェクト再利用）
       shareReplay({ bufferSize: 1, refCount: true })
-    );
-
-    this.summary$ = this.vm$.pipe(
-      map(vm => {
-        const all = this.flattenVm(vm);
-        const overdue = vm.overdue.length;
-        const todayCount = vm.today.length;
-        const week = vm.thisWeekRest.length + vm.today.length + vm.tomorrow.length;
-        const done = all.filter(t => t.status === 'done').length;
-        const progress = all.length ? Math.round((done / all.length) * 100) : 0;
-        return { overdue, today: todayCount, week, progress };
-      })
     );
   }
 
@@ -285,13 +232,10 @@ export class MyTasksPage implements OnInit, OnDestroy {
 
   private scheduleDueUpdate(task: Task, dueDate: string | null) {
     if (!task?.id || !task.projectId || !task.problemId || !task.issueId) return;
-
     const key = task.id;
-    // 連打抑止（保存中は無視）
     if (this.inFlight.has(key)) return;
     this.inFlight.add(key);
 
-    // 既存タイマーがあれば置き換え（コアレッサ）
     const prev = this.dueDateTimers.get(key);
     if (prev) clearTimeout(prev);
 
@@ -309,7 +253,6 @@ export class MyTasksPage implements OnInit, OnDestroy {
   }
 
   async markDone(task: Task) {
-    // ※ このページでは complete を非表示にしている想定（保守用に残す）
     if (!task?.id || !task.projectId || !task.problemId || !task.issueId) return;
     try {
       await this.tasks.update(task.projectId, task.problemId, task.issueId, task.id, { status: 'done' as any });
@@ -318,11 +261,10 @@ export class MyTasksPage implements OnInit, OnDestroy {
     }
   }
 
-  // ボタンは {task, days} を受ける
   shiftTask(event: { task: Task; days: number }) {
     const { task, days } = event || {};
     if (!task?.id || !task.dueDate) return;
-    if (this.inFlight.has(task.id)) return; // 連打抑止
+    if (this.inFlight.has(task.id)) return;
 
     const current = new Date(task.dueDate);
     if (isNaN(current.getTime())) return;
@@ -333,20 +275,15 @@ export class MyTasksPage implements OnInit, OnDestroy {
 
   setTaskToday(task: Task) {
     if (!task?.id) return;
-    if (this.inFlight.has(task.id)) return; // 連打抑止
+    if (this.inFlight.has(task.id)) return;
     const today = new Date(); today.setHours(0,0,0,0);
     this.scheduleDueUpdate(task, this.ymd(today));
   }
 
   private flattenVm(vm: Vm) {
     return [
-      ...vm.overdue,
-      ...vm.today,
-      ...vm.tomorrow,
-      ...vm.thisWeekRest,
-      ...vm.nextWeek,
-      ...vm.later,
-      ...vm.nodue,
+      ...vm.overdue, ...vm.today, ...vm.tomorrow, ...vm.thisWeekRest,
+      ...vm.nextWeek, ...vm.later, ...vm.nodue,
     ];
   }
 
@@ -367,11 +304,11 @@ export class MyTasksPage implements OnInit, OnDestroy {
   }
 
   private toCsv(tasks: Task[], nameMap: Map<string, string>, dir: Map<string, string>): string {
-    const headers = ['ID', 'タイトル', '状態', '優先度', '期日', '担当者', 'プロジェクト', 'Problem', 'Issue', 'タグ', '進捗(%)', '作成日時', '更新日時'];
+    const headers = ['ID','タイトル','状態','優先度','期日','担当者','プロジェクト','Problem','Issue','タグ','進捗(%)','作成日時','更新日時'];
     const esc = (v: any) => `"${(v ?? '').toString().replace(/"/g, '""')}"`;
     const fmtTs = (x: any) => {
       const d = x?.toDate?.() ?? (typeof x === 'string' ? new Date(x) : null);
-      return d && !isNaN(d as any) ? new Date(d).toISOString().replace('T', ' ').replace('Z', '') : '';
+      return d && !isNaN(d as any) ? new Date(d).toISOString().replace('T',' ').replace('Z','') : '';
     };
     const joinAssignees = (xs: any) =>
       Array.isArray(xs) ? xs.map((u: string) => dir.get(u) ?? u).join(', ') : (xs ?? '');
@@ -381,19 +318,10 @@ export class MyTasksPage implements OnInit, OnDestroy {
       const pr = (t.projectId && t.problemId) ? (nameMap.get(`problem:${t.projectId}:${t.problemId}`) ?? t.problemId) : '';
       const is = (t.projectId && t.problemId && t.issueId) ? (nameMap.get(`issue:${t.projectId}:${t.problemId}:${t.issueId}`) ?? t.issueId) : '';
       return [
-        t.id,
-        t.title,
-        t.status,
-        t.priority ?? '',
-        t.dueDate ?? '',
-        joinAssignees(t.assignees),
-        pj,
-        pr,
-        is,
+        t.id, t.title, t.status, t.priority ?? '', t.dueDate ?? '',
+        joinAssignees(t.assignees), pj, pr, is,
         Array.isArray(t.tags) ? t.tags.join(', ') : (t.tags ?? ''),
-        (t as any).progress ?? '',
-        fmtTs((t as any).createdAt),
-        fmtTs((t as any).updatedAt),
+        (t as any).progress ?? '', fmtTs((t as any).createdAt), fmtTs((t as any).updatedAt),
       ].map(esc).join(',');
     });
 
@@ -402,36 +330,41 @@ export class MyTasksPage implements OnInit, OnDestroy {
 
   private toJson(tasks: Task[], nameMap: Map<string, string>, dir: Map<string, string>): string {
     const mapped = tasks.map(t => ({
-      id: t.id,
-      title: t.title,
-      status: t.status,
-      priority: t.priority ?? null,
+      id: t.id, title: t.title, status: t.status, priority: t.priority ?? null,
       dueDate: t.dueDate ?? null,
       assignees: Array.isArray(t.assignees) ? t.assignees.map(u => dir.get(u) ?? u) : [],
       project: t.projectId ? (nameMap.get(`project:${t.projectId}`) ?? t.projectId) : null,
       problem: (t.projectId && t.problemId) ? (nameMap.get(`problem:${t.projectId}:${t.problemId}`) ?? t.problemId) : null,
       issue: (t.projectId && t.problemId && t.issueId) ? (nameMap.get(`issue:${t.projectId}:${t.problemId}:${t.issueId}`) ?? t.issueId) : null,
-      tags: t.tags ?? [],
-      progress: (t as any).progress ?? null,
+      tags: t.tags ?? [], progress: (t as any).progress ?? null,
       createdAt: (t as any).createdAt?.toDate?.() ?? null,
       updatedAt: (t as any).updatedAt?.toDate?.() ?? null,
-      projectId: t.projectId ?? null,
-      problemId: t.problemId ?? null,
-      issueId: t.issueId ?? null,
+      projectId: t.projectId ?? null, problemId: t.problemId ?? null, issueId: t.issueId ?? null,
     }));
     return JSON.stringify(mapped, null, 2);
   }
 
+      // ---- File download helper ----
   private download(filename: string, content: string, mime = 'text/plain') {
-    const bom = mime === 'text/csv' ? '\uFEFF' : '';
+    const bom = mime.startsWith('text/csv') ? '\uFEFF' : '';
     const blob = new Blob([bom + content], { type: mime + ';charset=utf-8' });
+
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
+    a.href = url;
     a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(a.href);
+
+    // 後始末
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 0);
   }
 
+  
   private async resolveNames(tasks: Task[]): Promise<Map<string, string>> {
     const nameMap = new Map<string, string>();
     const needProject = new Set<string>();
