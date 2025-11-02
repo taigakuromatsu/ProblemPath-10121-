@@ -43,48 +43,60 @@
     </div>
   </div>
 
-  <!-- 右端アクション -->
   <div class="actions" *ngIf="actionConfig">
-    <!-- 完了にする -->
+    <!-- 完了ボタン（残す場合） -->
     <button
+      class="action-complete"
+      *ngIf="actions.complete !== false"
       mat-icon-button
-      *ngIf="actionConfig.showComplete"
-      (click)="onComplete()"
-      matTooltip="{{ 'schedule.actions.complete' | translate }}"
-    >
-      <mat-icon>task_alt</mat-icon>
+      matTooltip="完了にする"
+      (click)="complete.emit(task)">
+      <mat-icon>check_circle</mat-icon>
     </button>
-
-    <!-- 期日+1日 -->
+  
+    <!-- −1日 -->
     <button
+      *ngIf="actions.shift !== false"
       mat-icon-button
-      *ngIf="actionConfig.showShiftTomorrow"
-      (click)="onShift(1)"
-      matTooltip="{{ 'schedule.actions.plusOne' | translate }}"
-    >
-      <mat-icon>event</mat-icon>
+      matTooltip="-1日"
+      [disabled]="busy || !task.dueDate"
+      (click)="shiftDays.emit({ task, days: -1 })">
+      <mat-icon>arrow_back</mat-icon>
     </button>
-
-    <!-- 期日を今日にする -->
+  
+    <!-- ＋1日 -->
     <button
+      *ngIf="actions.shift !== false"
       mat-icon-button
-      *ngIf="actionConfig.showSetToday"
-      (click)="onSetToday()"
-      matTooltip="{{ 'schedule.actions.today' | translate }}"
-    >
-      <mat-icon>event_available</mat-icon>
+      matTooltip="+1日"
+      [disabled]="busy || !task.dueDate"
+      (click)="shiftDays.emit({ task, days: 1 })">
+      <mat-icon>arrow_forward</mat-icon>
     </button>
-
+  
+    <!-- 今日にする -->
+    <button
+      *ngIf="actions.setToday !== false"
+      mat-icon-button
+      matTooltip="今日にする"
+      [disabled]="busy"
+      (click)="setToday.emit(task)">
+      <mat-icon>today</mat-icon>
+    </button>
+  
     <!-- ボードを開く -->
     <a
       *ngIf="task.problemId && task.issueId"
       mat-icon-button
       [routerLink]="['/board']"
       [queryParams]="{ pid: task.problemId }"
-      matTooltip="{{ 'schedule.openInBoard' | translate }}"
-    >
+      matTooltip="{{ 'schedule.openInBoard' | translate }}">
       <mat-icon>open_in_new</mat-icon>
     </a>
   </div>
+  
 </div>
+
+
+
 

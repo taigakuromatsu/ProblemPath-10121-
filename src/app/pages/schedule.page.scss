@@ -1,7 +1,7 @@
 .schedule-page {
   display: flex;
   flex-direction: column;
-  gap: var(--gap-4);
+  gap: calc(var(--gap-4) + 12px * var(--m)); 
   padding: var(--pad-2);
   font-size: var(--fs-b);
   line-height: 1.5;
@@ -14,6 +14,7 @@
   flex-direction: column;
   gap: var(--gap-3);
 }
+
 
 .headline {
   display: flex;
@@ -218,4 +219,26 @@ mat-card header h2 {
     grid-template-columns: 1fr;
   }
 }
+
+  /* === ヘッダー内の不要スクロールを無効化 === */
+  .page-header.card {
+    overflow: visible;   /* auto → visible にして内部スクロールをやめる */
+    max-height: none;    /* 念のため高さ制限があれば解除 */
+  }
+
+  /* 念のため：残留スクロールバーを非表示（保険） */
+  .page-header.card {
+    -ms-overflow-style: none;   /* IE/旧Edge */
+    scrollbar-width: none;      /* Firefox */
+  }
+  .page-header.card::-webkit-scrollbar {
+    display: none;               /* Chrome/Safari */
+  }
+
+  /* ヘッダーとリストの間だけ確実に空ける */
+.schedule-page > .page-header {
+  margin-bottom: clamp(24px, 3.5vh, 56px);
+}
+
+
 

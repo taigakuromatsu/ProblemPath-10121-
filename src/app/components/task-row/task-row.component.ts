@@ -6,6 +6,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatButtonModule } from '@angular/material/button';
 import { TranslateModule } from '@ngx-translate/core';
 import { Task } from '../../models/types';
+import { input } from '@angular/core';
 
 export interface TaskRowActionConfig {
   showComplete?: boolean;
@@ -30,6 +31,14 @@ export class TaskRowComponent {
   @Output() complete = new EventEmitter<Task>();
   @Output() shiftDays = new EventEmitter<{ task: Task; days: number }>();
   @Output() setToday = new EventEmitter<Task>();
+
+  @Input() actions: { complete?: boolean; shift?: boolean; setToday?: boolean } = {
+    complete: true,
+    shift: true,
+    setToday: true,
+  };
+
+  @Input() busy = false;
 
   statusColor(status: string | undefined): string {
     switch (status) {

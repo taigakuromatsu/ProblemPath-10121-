@@ -89,10 +89,12 @@
           *ngFor="let task of vm[section.key]; trackBy: trackTask"
           [task]="task"
           [memberDirectory]="directory || {}"
-          (complete)="markDone($event)"
+          [busy]="isBusy(task.id)"
+          [actions]="{ complete: false, shift: true, setToday: true }"
           (shiftDays)="shiftTask($event.task, $event.days)"
           (setToday)="setTaskToday($event)"
         ></pp-task-row>
+
       </div>
     </mat-card>
   </div>

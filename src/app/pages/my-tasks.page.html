@@ -1,11 +1,9 @@
-<!-- my-tasks.page.html (full replace) -->
+
 <div class="my-page">
   <section class="page-header card">
     <div class="headline">
       <div>
-        <h1 class="section-title section-title--success no-truncate">
-          {{ 'nav.my' | translate }}
-        </h1>
+        <h1 class="section-title section-title--success no-truncate">{{ 'nav.my' | translate }}</h1>
         <p class="muted text-2line">{{ 'myTasks.subtitle' | translate }}</p>
       </div>
 
@@ -28,6 +26,14 @@
       </div>
 
       <div class="filters">
+        <div class="filter-group range">
+          <label>{{ 'myTasks.range.start' | translate }}</label>
+          <input type="date" [(ngModel)]="startRange" (change)="onDateRangeChange()" />
+        </div>
+        <div class="filter-group range">
+          <label>{{ 'myTasks.range.end' | translate }}</label>
+          <input type="date" [(ngModel)]="endRange" (change)="onDateRangeChange()" />
+        </div>
         <div class="filter-group">
           <label>{{ 'filter.show' | translate }}</label>
           <mat-button-toggle-group [(ngModel)]="openOnly" (change)="onOpenOnlyChange($event.value)">
@@ -35,7 +41,6 @@
             <mat-button-toggle [value]="false">{{ 'filter.all' | translate }}</mat-button-toggle>
           </mat-button-toggle-group>
         </div>
-
         <div class="filter-group">
           <label>{{ 'filter.tags' | translate }}</label>
           <input
@@ -44,15 +49,6 @@
             (ngModelChange)="onTagQueryChange()"
             [placeholder]="'filter.tagsPlaceholder' | translate"
           />
-        </div>
-
-        <div class="filter-group range">
-          <label>{{ 'myTasks.range.start' | translate }}</label>
-          <input type="date" [(ngModel)]="startRange" (change)="onDateRangeChange()" />
-        </div>
-        <div class="filter-group range">
-          <label>{{ 'myTasks.range.end' | translate }}</label>
-          <input type="date" [(ngModel)]="endRange" (change)="onDateRangeChange()" />
         </div>
       </div>
     </div>
@@ -85,7 +81,9 @@
   <section class="view-container" [ngSwitch]="viewMode">
     <ng-container *ngSwitchCase="'list'">
       <ng-container *ngIf="vm$ | async as vm">
-        <ng-container *ngTemplateOutlet="listView; context: { vm: vm, directory: memberDirectory$ | async }"></ng-container>
+        <ng-container
+          *ngTemplateOutlet="listView; context: { vm: vm, directory: memberDirectory$ | async }"
+        ></ng-container>
       </ng-container>
     </ng-container>
 
@@ -130,10 +128,13 @@
           *ngFor="let task of vm[section.key]; trackBy: trackTask"
           [task]="task"
           [memberDirectory]="directory || {}"
+          [busy]="isBusy(task.id)"
+          [actions]="{ complete: false, shift: true, setToday: true }"
           (complete)="markDone($event)"
           (shiftDays)="shiftTask($event)"
           (setToday)="setTaskToday($event)"
-        ></pp-task-row>
+        >
+        </pp-task-row>
       </div>
     </mat-card>
   </div>

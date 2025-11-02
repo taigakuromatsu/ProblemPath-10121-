@@ -63,7 +63,7 @@ interface MemberOption {
     NgClass,
     NgSwitch,
     NgSwitchCase,
-    NgTemplateOutlet, // ★ 追加（*ngTemplateOutlet 用）
+    NgTemplateOutlet, // *ngTemplateOutlet 用
     FormsModule,
     MatButtonModule,
     MatButtonToggleModule,
@@ -85,15 +85,14 @@ export class SchedulePage implements OnInit, OnDestroy {
   calendarMonth = new Date();
 
   readonly sections: SectionDef[] = [
-    { key: 'overdue',      icon: 'warning_amber',      label: 'schedule.section.overdue',     accent: 'danger' },
-    { key: 'today',        icon: 'today',              label: 'schedule.section.today',       accent: 'info' },
-    { key: 'tomorrow',     icon: 'event_available',    label: 'schedule.section.tomorrow',    accent: 'info' },
-    { key: 'thisWeekRest', icon: 'date_range',         label: 'schedule.section.thisWeekRest',accent: 'muted' },
-    { key: 'nextWeek',     icon: 'calendar_view_week', label: 'schedule.section.nextWeek',    accent: 'muted' },
-    { key: 'later',        icon: 'calendar_month',     label: 'schedule.section.later',       accent: 'muted' },
-    { key: 'nodue',        icon: 'more_time',          label: 'schedule.section.noDue',       accent: 'muted' },
+    { key: 'overdue',      icon: 'warning_amber',      label: 'schedule.section.overdue',      accent: 'danger' },
+    { key: 'today',        icon: 'today',              label: 'schedule.section.today',        accent: 'info' },
+    { key: 'tomorrow',     icon: 'event_available',    label: 'schedule.section.tomorrow',     accent: 'info' },
+    { key: 'thisWeekRest', icon: 'date_range',         label: 'schedule.section.thisWeekRest', accent: 'muted' },
+    { key: 'nextWeek',     icon: 'calendar_view_week', label: 'schedule.section.nextWeek',     accent: 'muted' },
+    { key: 'later',        icon: 'calendar_month',     label: 'schedule.section.later',        accent: 'muted' },
+    { key: 'nodue',        icon: 'more_time',          label: 'schedule.section.noDue',        accent: 'muted' },
   ];
-  
 
   private readonly midnightTick$ = interval(60_000).pipe(
     startWith(0),
@@ -106,11 +105,18 @@ export class SchedulePage implements OnInit, OnDestroy {
     filter(Boolean),
   );
 
+  /** 保存のデバウンス用タイマー */
   private dueDateTimers = new Map<string, any>();
+  /** 体感チラつき対策：同一タスクの連打抑止（保存完了まで busy） */
+  private inFlight = new Set<string>();
 
-  // ★ TS2729回避：ここでは初期化しない
+  // TS2729 回避：ngOnInit で代入
   members$!: Observable<MemberOption[]>;
   memberDirectory$!: Observable<Record<string, string>>;
+
+  isBusy(id?: string): boolean {
+    return !!id && this.inFlight.has(id);
+  }
 
   constructor(
     private tasks: TasksService,
@@ -119,7 +125,7 @@ export class SchedulePage implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    // members$ を起動時に組み立て（this.currentProject を安全に参照）
+    // メンバー
     this.members$ = this.currentProject.projectId$.pipe(
       switchMap(pid => {
         if (!pid || pid === 'default') return of<MemberOption[]>([]);
@@ -154,27 +160,24 @@ export class SchedulePage implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.dueDateTimers.forEach(timer => clearTimeout(timer));
+    this.dueDateTimers.forEach(t => clearTimeout(t));
     this.dueDateTimers.clear();
+    this.inFlight.clear();
   }
 
   onViewModeChange(mode: 'list' | 'calendar') {
     this.viewMode = mode;
   }
-
   onOpenOnlyChange(value: boolean) {
     this.openOnly = value;
     this.reload();
   }
-
   onTagQueryChange() {
     this.reload();
   }
-
   onAssigneeChange() {
     this.reload();
   }
-
   onMonthChange(date: Date) {
     this.calendarMonth = date;
   }
@@ -191,7 +194,6 @@ export class SchedulePage implements OnInit, OnDestroy {
       ...vm.later,
     ].filter(t => !!t.dueDate);
   }
-
   calendarUndated(vm: Vm): Task[] {
     return [...vm.nodue];
   }
@@ -203,18 +205,21 @@ export class SchedulePage implements OnInit, OnDestroy {
       .filter(Boolean)
       .slice(0, 10);
   }
-
   private addDays(base: Date, n: number): Date {
     const d = new Date(base);
     d.setDate(d.getDate() + n);
     return d;
   }
-
   private ymd(date: Date): string {
     const y = date.getFullYear();
     const m = `${date.getMonth() + 1}`.padStart(2, '0');
     const d = `${date.getDate()}`.padStart(2, '0');
     return `${y}-${m}-${d}`;
+  }
+  private sameDay(a: Date, b: Date): boolean {
+    return a.getFullYear() === b.getFullYear() &&
+           a.getMonth() === b.getMonth() &&
+           a.getDate() === b.getDate();
   }
 
   private filterByAssignee(tasks: Task[]): Task[] {
@@ -222,7 +227,6 @@ export class SchedulePage implements OnInit, OnDestroy {
     const set = new Set(this.selectedAssignees);
     return tasks.filter(task => (task.assignees ?? []).some(uid => set.has(uid)));
   }
-
   private applyAssigneeFilter(vm: Vm): Vm {
     if (!this.selectedAssignees.length) return vm;
     return {
@@ -233,6 +237,28 @@ export class SchedulePage implements OnInit, OnDestroy {
       nextWeek: this.filterByAssignee(vm.nextWeek),
       later: this.filterByAssignee(vm.later),
       nodue: this.filterByAssignee(vm.nodue),
+    };
+  }
+
+  /** バケット間の重複排除（先勝ち） */
+  private dedupeBuckets(vm: Vm): Vm {
+    const used = new Set<string>();
+    const take = (xs: Task[]) =>
+      xs.filter(t => {
+        const id = t.id!;
+        if (used.has(id)) return false;
+        used.add(id);
+        return true;
+      });
+
+    return {
+      overdue:      take(vm.overdue),
+      today:        take(vm.today),
+      tomorrow:     take(vm.tomorrow),
+      thisWeekRest: take(vm.thisWeekRest),
+      nextWeek:     take(vm.nextWeek),
+      later:        take(vm.later),
+      nodue:        take(vm.nodue),
     };
   }
 
@@ -249,31 +275,42 @@ export class SchedulePage implements OnInit, OnDestroy {
         today.setHours(0, 0, 0, 0);
         const tomorrow = this.addDays(today, 1);
 
-        const dow = today.getDay();
+        const dow = today.getDay(); // 月曜始まり
         const diffToMon = (dow === 0 ? -6 : 1 - dow);
         const startOfWeek = this.addDays(today, diffToMon);
         const endOfWeek = this.addDays(startOfWeek, 6);
         const startOfNextWeek = this.addDays(endOfWeek, 1);
         const endOfNextWeek = this.addDays(startOfNextWeek, 6);
 
-        const overdue$ = this.tasks.listAllOverdue(pid, this.ymd(today), this.openOnly, tags);
-        const today$ = this.tasks.listAllByDueRange(pid, this.ymd(today), this.ymd(today), this.openOnly, tags);
-        const tomorrow$ = this.tasks.listAllByDueRange(pid, this.ymd(tomorrow), this.ymd(tomorrow), this.openOnly, tags);
+        // --- 対処B：来週の開始を「明日」と重ならないよう調整 ---
+        let nextWeekStart = startOfNextWeek;
+        if (this.sameDay(tomorrow, startOfNextWeek)) {
+          nextWeekStart = this.addDays(startOfNextWeek, 1); // 明日(月)を除外
+        }
+
+        const overdue$      = this.tasks.listAllOverdue(pid, this.ymd(today), this.openOnly, tags);
+        const today$        = this.tasks.listAllByDueRange(pid, this.ymd(today), this.ymd(today), this.openOnly, tags);
+        const tomorrow$     = this.tasks.listAllByDueRange(pid, this.ymd(tomorrow), this.ymd(tomorrow), this.openOnly, tags);
         const thisWeekRest$ = this.tasks.listAllByDueRange(pid, this.ymd(this.addDays(tomorrow, 1)), this.ymd(endOfWeek), this.openOnly, tags);
-        const nextWeek$ = this.tasks.listAllByDueRange(pid, this.ymd(startOfNextWeek), this.ymd(endOfNextWeek), this.openOnly, tags);
-        const later$ = this.tasks.listAllByDueRange(pid, this.ymd(this.addDays(endOfNextWeek, 1)), FAR_FUTURE, this.openOnly, tags);
-        const nodue$ = this.tasks.listAllNoDue(pid, this.openOnly, tags);
+        const nextWeek$     = this.tasks.listAllByDueRange(pid, this.ymd(nextWeekStart), this.ymd(endOfNextWeek), this.openOnly, tags);
+        const later$        = this.tasks.listAllByDueRange(pid, this.ymd(this.addDays(endOfNextWeek, 1)), FAR_FUTURE, this.openOnly, tags);
+        const nodue$        = this.tasks.listAllNoDue(pid, this.openOnly, tags);
 
         return combineLatest([overdue$, today$, tomorrow$, thisWeekRest$, nextWeek$, later$, nodue$]).pipe(
-          map(([overdue, todayArr, tomorrowArr, thisWeekRest, nextWeek, later, nodue]) => this.applyAssigneeFilter({
-            overdue,
-            today: todayArr,
-            tomorrow: tomorrowArr,
-            thisWeekRest,
-            nextWeek,
-            later,
-            nodue,
-          })),
+          map(([overdue, todayArr, tomorrowArr, thisWeekRest, nextWeekArr, laterArr, nodue]) => {
+            // まず VM を作る
+            const vmRaw: Vm = {
+              overdue,
+              today: todayArr,
+              tomorrow: tomorrowArr,
+              thisWeekRest,
+              nextWeek: nextWeekArr,
+              later: laterArr,
+              nodue,
+            };
+            // A：バケット間の重複排除 → 担当者フィルタ
+            return this.applyAssigneeFilter(this.dedupeBuckets(vmRaw));
+          }),
         );
       }),
       shareReplay({ bufferSize: 1, refCount: true }),
@@ -284,15 +321,27 @@ export class SchedulePage implements OnInit, OnDestroy {
     this.scheduleDueUpdate(event.task, event.dueDate);
   }
 
+  /** 期日変更のデバウンス＋inFlight管理（体感チラつき対策） */
   private scheduleDueUpdate(task: Task, dueDate: string | null) {
     if (!task?.id || !task.projectId || !task.problemId || !task.issueId) return;
-    const key = task.id;
-    const prev = this.dueDateTimers.get(key);
-    if (prev) clearTimeout(prev);
+
+    const key = task.id!;
+    // 同一タスクの連打は無視
+    const prevTimer = this.dueDateTimers.get(key);
+    if (prevTimer) clearTimeout(prevTimer);
+
+    this.inFlight.add(key); // 保存完了まで busy 扱い
+
     const timer = setTimeout(() => {
-      this.tasks.update(task.projectId!, task.problemId!, task.issueId!, task.id!, { dueDate }).catch(err => console.error(err));
-      this.dueDateTimers.delete(key);
+      this.tasks
+        .update(task.projectId!, task.problemId!, task.issueId!, key, { dueDate })
+        .catch(err => console.error(err))
+        .finally(() => {
+          this.inFlight.delete(key);
+          this.dueDateTimers.delete(key);
+        });
     }, 400);
+
     this.dueDateTimers.set(key, timer);
   }
 
@@ -305,20 +354,23 @@ export class SchedulePage implements OnInit, OnDestroy {
     }
   }
 
+  /** +n/-n 日シフト（busy中や無効な期日は無視） */
   shiftTask(task: Task, days: number) {
     if (!task.dueDate) return;
+    const id = task.id!;
+    if (this.inFlight.has(id)) return; // 保存中は無視
     const current = new Date(task.dueDate);
     if (isNaN(current.getTime())) return;
     current.setDate(current.getDate() + days);
-    const next = this.ymd(current);
-    this.scheduleDueUpdate(task, next);
+    this.scheduleDueUpdate(task, this.ymd(current));
   }
 
   setTaskToday(task: Task) {
+    const id = task.id!;
+    if (this.inFlight.has(id)) return; // 保存中は無視
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const next = this.ymd(today);
-    this.scheduleDueUpdate(task, next);
+    this.scheduleDueUpdate(task, this.ymd(today));
   }
 
   private flattenVm(vm: Vm) {
