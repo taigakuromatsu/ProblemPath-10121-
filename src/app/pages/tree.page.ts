@@ -29,6 +29,7 @@ import { AttachmentsService, AttachmentDoc, AttachmentTarget } from '../services
 import { NgClass } from '@angular/common';
 import { BoardColumnsService } from '../services/board-columns.service';
 import { BoardColumn, DEFAULT_BOARD_COLUMNS, Task } from '../models/types';
+import { CommonModule } from '@angular/common';
 
 type Status = BoardColumn['categoryHint'];
 
@@ -55,7 +56,7 @@ function dlog(...args: any[]) {
   imports: [
     NgIf, NgFor, AsyncPipe, DatePipe, DecimalPipe, FormsModule,
     MatButtonModule, MatTreeModule, MatIconModule, MatTooltipModule, MatCardModule,
-    NgChartsModule, MatSnackBarModule, TranslateModule, NgClass
+    NgChartsModule, MatSnackBarModule, TranslateModule, NgClass, CommonModule
   ],
   templateUrl: './tree.page.html',
   styleUrls: ['./tree.page.scss']
