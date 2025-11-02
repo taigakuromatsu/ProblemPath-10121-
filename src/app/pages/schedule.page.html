@@ -16,30 +16,49 @@
         </mat-button-toggle>
       </mat-button-toggle-group>
     </div>
-    <div class="toolbar">
-      <div class="export">
-        <button mat-stroked-button (click)="exportCurrent('csv')">{{ 'schedule.export.csv' | translate }}</button>
-        <button mat-stroked-button (click)="exportCurrent('json')">{{ 'schedule.export.json' | translate }}</button>
-      </div>
-      <div class="filters">
-        <div class="filter-group">
-          <label>{{ 'schedule.view.label' | translate }}</label>
-        <mat-button-toggle-group [(ngModel)]="openOnly" (change)="onOpenOnlyChange($event.value)">
-            <mat-button-toggle [value]="true">{{ 'schedule.view.onlyOpen' | translate }}</mat-button-toggle>
-            <mat-button-toggle [value]="false">{{ 'schedule.view.all' | translate }}</mat-button-toggle>
-          </mat-button-toggle-group>
+    
+    <div class="header-grid">
+      <!-- 左：データエキスポート -->
+      <section class="export-card" aria-labelledby="export-title">
+        <div class="group-title" id="export-title">
+          <mat-icon fontSet="material-icons-outlined">download</mat-icon>
+          <span>データエキスポート</span>
         </div>
+        <div class="group-actions">
+          <button mat-stroked-button (click)="exportCurrent('csv')">{{ 'schedule.export.csv' | translate }}</button>
+          <button mat-stroked-button (click)="exportCurrent('json')">{{ 'schedule.export.json' | translate }}</button>
+        </div>
+      </section>
+  
+      <!-- 中央：表示（未完了のみ / すべて） -->
+      <section class="center-controls">
+        <label class="control-label">{{ 'schedule.view.label' | translate }}</label>
+        <mat-button-toggle-group [(ngModel)]="openOnly" (change)="onOpenOnlyChange($event.value)">
+          <mat-button-toggle [value]="true">{{ 'schedule.view.onlyOpen' | translate }}</mat-button-toggle>
+          <mat-button-toggle [value]="false">{{ 'schedule.view.all' | translate }}</mat-button-toggle>
+        </mat-button-toggle-group>
+      </section>
+  
+      <!-- 右：タグ検索 + 担当者 -->
+      <section class="right-filters">
         <div class="filter-group">
           <label>{{ 'schedule.tags.label' | translate }}</label>
-          <input type="text" [(ngModel)]="tagQuery" (ngModelChange)="onTagQueryChange()" [placeholder]="'schedule.tags.placeholder' | translate" />
+          <input type="text"
+                 [(ngModel)]="tagQuery"
+                 (ngModelChange)="onTagQueryChange()"
+                 [placeholder]="'schedule.tags.placeholder' | translate" />
         </div>
-        <div class="filter-group">
+  
+        <div class="filter-group assignees">
           <label>{{ 'schedule.assignees.label' | translate }}</label>
-          <mat-select multiple [(ngModel)]="selectedAssignees" (ngModelChange)="onAssigneeChange()" placeholder="{{ 'schedule.assignees.placeholder' | translate }}">
+          <mat-select multiple
+                      [(ngModel)]="selectedAssignees"
+                      (ngModelChange)="onAssigneeChange()"
+                      [placeholder]="'schedule.assignees.placeholder' | translate">
             <mat-option *ngFor="let member of members$ | async" [value]="member.uid">{{ member.label }}</mat-option>
           </mat-select>
         </div>
-      </div>
+      </section>
     </div>
   </section>
 
