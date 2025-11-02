@@ -150,71 +150,93 @@
                 <h2 class="detail-title no-truncate">{{ selectedNode.name }}</h2>
                 <p class="detail-subtitle">{{ 'cf.header' | translate:{ kind: selectedNode.kind, name: selectedNode.name } }}</p>
               </div>
-              <div class="detail-tabs" role="presentation" aria-hidden="true">
-                <span class="detail-tab is-active">コメント</span>
-                <span class="detail-tab">ファイル</span>
+              <div class="detail-tabs" role="tablist" aria-label="コメントとファイルの表示切替">
+                <button
+                  type="button"
+                  class="detail-tab"
+                  role="tab"
+                  [class.is-active]="activeDetailTab === 'comments'"
+                  [attr.aria-selected]="activeDetailTab === 'comments'"
+                  [attr.tabindex]="activeDetailTab === 'comments' ? 0 : -1"
+                  (click)="activeDetailTab = 'comments'">
+                  コメント
+                </button>
+                <button
+                  type="button"
+                  class="detail-tab"
+                  role="tab"
+                  [class.is-active]="activeDetailTab === 'files'"
+                  [attr.aria-selected]="activeDetailTab === 'files'"
+                  [attr.tabindex]="activeDetailTab === 'files' ? 0 : -1"
+                  (click)="activeDetailTab = 'files'">
+                  ファイル
+                </button>
               </div>
             </header>
 
-            <div class="detail-scroll">
-              <div class="alert-inline" *ngIf="!(isOnline$ | async)">{{ 'warn.offlineComments' | translate }}</div>
+            <div class="detail-scroll" [ngSwitch]="activeDetailTab">
+              <div class="detail-pane detail-pane--comments" *ngSwitchCase="'comments'">
+                <div class="alert-inline" *ngIf="!(isOnline$ | async)">{{ 'warn.offlineComments' | translate }}</div>
 
-              <div class="comment-editor">
-                <textarea [(ngModel)]="newBody" (ngModelChange)="onCommentBodyChange($event)" [disabled]="!(canEdit$ | async)" rows="3" [placeholder]="'comment.placeholder' | translate"></textarea>
-                <div class="editor-actions">
-                  <button mat-raised-button color="primary" type="button" (click)="editingId ? saveEdit() : addComment()" [disabled]="!newBody.trim() || !(canEdit$ | async)">
-                    {{ editingId ? ('comment.update' | translate) : ('comment.post' | translate) }}
-                  </button>
-                  <button mat-stroked-button type="button" (click)="cancelEdit()" *ngIf="editingId">{{ 'common.cancel' | translate }}</button>
+                <div class="comment-editor">
+                  <textarea [(ngModel)]="newBody" (ngModelChange)="onCommentBodyChange($event)" [disabled]="!(canEdit$ | async)" rows="3" [placeholder]="'comment.placeholder' | translate"></textarea>
+                  <div class="editor-actions">
+                    <button mat-raised-button color="primary" type="button" (click)="editingId ? saveEdit() : addComment()" [disabled]="!newBody.trim() || !(canEdit$ | async)">
+                      {{ editingId ? ('comment.update' | translate) : ('comment.post' | translate) }}
+                    </button>
+                    <button mat-stroked-button type="button" (click)="cancelEdit()" *ngIf="editingId">{{ 'common.cancel' | translate }}</button>
+                  </div>
                 </div>
+
+                <section class="comment-list" *ngIf="comments$ | async as cs; else loadingComments">
+                  <div class="empty-state" *ngIf="!cs.length">{{ 'comment.noneYet' | translate }}</div>
+                  <article class="comment-item" *ngFor="let c of cs">
+                    <header>
+                      <span class="author">{{ c.authorName || c.authorId }}</span>
+                      <span class="timestamp">{{ c.createdAt?.toDate?.() ? (c.createdAt.toDate() | date:'yyyy/MM/dd HH:mm') : '' }}</span>
+                    </header>
+                    <div class="body">{{ c.body }}</div>
+                    <div class="comment-actions" *ngIf="(members.isAdmin$ | async) || ((auth.uid$ | async) === c.authorId)">
+                      <button mat-button type="button" (click)="startEdit(c.id!, c.body)" [disabled]="!(canEdit$ | async)">{{ 'common.edit' | translate }}</button>
+                      <button mat-button type="button" color="warn" (click)="deleteComment(c.id!)" [disabled]="!(canEdit$ | async)">{{ 'common.delete' | translate }}</button>
+                    </div>
+                  </article>
+                </section>
+                <ng-template #loadingComments>
+                  <div class="empty-state">{{ 'common.loading' | translate }}</div>
+                </ng-template>
               </div>
 
-              <section class="comment-list" *ngIf="comments$ | async as cs; else loadingComments">
-                <div class="empty-state" *ngIf="!cs.length">{{ 'comment.noneYet' | translate }}</div>
-                <article class="comment-item" *ngFor="let c of cs">
-                  <header>
-                    <span class="author">{{ c.authorName || c.authorId }}</span>
-                    <span class="timestamp">{{ c.createdAt?.toDate?.() ? (c.createdAt.toDate() | date:'yyyy/MM/dd HH:mm') : '' }}</span>
-                  </header>
-                  <div class="body">{{ c.body }}</div>
-                  <div class="comment-actions" *ngIf="(members.isAdmin$ | async) || ((auth.uid$ | async) === c.authorId)">
-                    <button mat-button type="button" (click)="startEdit(c.id!, c.body)" [disabled]="!(canEdit$ | async)">{{ 'common.edit' | translate }}</button>
-                    <button mat-button type="button" color="warn" (click)="deleteComment(c.id!)" [disabled]="!(canEdit$ | async)">{{ 'common.delete' | translate }}</button>
+              <div class="detail-pane detail-pane--files" *ngSwitchCase="'files'">
+                <section class="attachments">
+                  <h3>📎 添付ファイル</h3>
+                  <div class="upload-bar">
+                    <input type="file" multiple accept="image/*,.pdf" (change)="onPickFiles($event)" [disabled]="uploadBusy || !(canEdit$ | async)" />
+                    <span class="muted" *ngIf="uploadBusy">アップロード中…</span>
                   </div>
-                </article>
-              </section>
-              <ng-template #loadingComments>
-                <div class="empty-state">{{ 'common.loading' | translate }}</div>
-              </ng-template>
 
-              <section class="attachments">
-                <h3>📎 添付ファイル</h3>
-                <div class="upload-bar">
-                  <input type="file" multiple accept="image/*,.pdf" (change)="onPickFiles($event)" [disabled]="uploadBusy || !(canEdit$ | async)" />
-                  <span class="muted" *ngIf="uploadBusy">アップロード中…</span>
-                </div>
-
-                <div class="attachment-list" *ngIf="attachments$ | async as ats; else loadingAttachments">
-                  <div class="empty-state" *ngIf="!ats.length">（まだありません）</div>
-                  <div class="attachment-item" *ngFor="let a of ats">
-                    <div class="thumb">
-                      <img *ngIf="a.downloadURL && a.contentType?.startsWith('image/')" [src]="a.downloadURL" alt="" />
-                      <span *ngIf="!a.contentType?.startsWith('image/')">📄</span>
-                    </div>
-                    <div class="details">
-                      <div class="name text-1line no-truncate">{{ a.name }}</div>
-                      <div class="meta">{{ a.contentType || 'binary' }} ・ {{ a.size | number }} bytes</div>
-                    </div>
-                    <div class="attachment-actions">
-                      <a *ngIf="a.downloadURL" mat-stroked-button [href]="a.downloadURL" target="_blank" rel="noopener">開く</a>
-                      <button mat-button color="warn" type="button" (click)="removeAttachment(a)" [disabled]="!(canEdit$ | async)">削除</button>
+                  <div class="attachment-list" *ngIf="attachments$ | async as ats; else loadingAttachments">
+                    <div class="empty-state" *ngIf="!ats.length">（まだありません）</div>
+                    <div class="attachment-item" *ngFor="let a of ats">
+                      <div class="thumb">
+                        <img *ngIf="a.downloadURL && a.contentType?.startsWith('image/')" [src]="a.downloadURL" alt="" />
+                        <span *ngIf="!a.contentType?.startsWith('image/')">📄</span>
+                      </div>
+                      <div class="details">
+                        <div class="name text-1line no-truncate">{{ a.name }}</div>
+                        <div class="meta">{{ a.contentType || 'binary' }} ・ {{ a.size | number }} bytes</div>
+                      </div>
+                      <div class="attachment-actions">
+                        <a *ngIf="a.downloadURL" mat-stroked-button [href]="a.downloadURL" target="_blank" rel="noopener">開く</a>
+                        <button mat-button color="warn" type="button" (click)="removeAttachment(a)" [disabled]="!(canEdit$ | async)">削除</button>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <ng-template #loadingAttachments>
-                  <div class="empty-state">読み込み中…</div>
-                </ng-template>
-              </section>
+                  <ng-template #loadingAttachments>
+                    <div class="empty-state">読み込み中…</div>
+                  </ng-template>
+                </section>
+              </div>
             </div>
           </div>
         </ng-container>
