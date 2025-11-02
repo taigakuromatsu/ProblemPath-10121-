@@ -179,6 +179,14 @@ export class TreePage {
 
   data: TreeNode[] = [];
   tree = new NestedTreeControl<TreeNode>(n => n.children ?? []);
+  private programmaticExpansion = false;
+  private userAdjustedExpansion = false;
+  private treeExpansionSub = this.tree.expansionModel.changed.subscribe(() => {
+    if (this.programmaticExpansion) {
+      return;
+    }
+    this.userAdjustedExpansion = true;
+  });
   private subForTree?: import('rxjs').Subscription;
 
   private issueSubs = new Map<string, import('rxjs').Subscription>(); // problemId -> sub
@@ -337,6 +345,7 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
 
         this.tree.dataNodes = [...this.data];
         this.dataSource.data = [...this.data];
+        this.ensureInitialExpansion();
 
         // 件数をProblem単位で先にロード
         try {
@@ -366,6 +375,21 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
 
   retryProblems() { this.startProblemsSubscription(); }
 
+  private ensureInitialExpansion() {
+    if (this.userAdjustedExpansion) {
+      return;
+    }
+    this.programmaticExpansion = true;
+    Promise.resolve().then(() => {
+      if (this.userAdjustedExpansion) {
+        this.programmaticExpansion = false;
+        return;
+      }
+      this.tree.expandAll();
+      this.programmaticExpansion = false;
+    });
+  }
+
   ngOnDestroy() {
     this.subForTree?.unsubscribe();
     this.issueSubs.forEach(s => s.unsubscribe());
@@ -376,6 +400,7 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
     this.attachmentCountSubs.forEach(s => s.unsubscribe());
     this.commentCountSubs.clear();
     this.attachmentCountSubs.clear();
+    this.treeExpansionSub.unsubscribe();
   }
 
   dataSource = new MatTreeNestedDataSource<TreeNode>();
@@ -422,6 +447,7 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
 
       this.tree.dataNodes = [...this.data];
       this.dataSource.data = [...this.data];
+      this.ensureInitialExpansion();
 
       // 件数ロード：親Problem自身＋子Issue
       try {
@@ -493,6 +519,7 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
 
           this.tree.dataNodes = [...this.data];
           this.dataSource.data = [...this.data];
+          this.ensureInitialExpansion();
 
           // 件数ロード：当該Issue＋子Task
           try {
