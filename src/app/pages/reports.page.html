@@ -12,12 +12,7 @@
   <mat-card class="reports-page__actions">
     <mat-card-content>
       <div class="reports-page__action-buttons">
-        <button
-          mat-raised-button
-          color="primary"
-          type="button"
-          [matMenuTriggerFor]="aiDraftMenu"
-        >
+        <button mat-raised-button color="primary" type="button" [matMenuTriggerFor]="aiDraftMenu">
           <mat-icon>auto_awesome</mat-icon>
           {{ 'reports.actions.generateAi' | translate }}
         </button>
@@ -29,24 +24,18 @@
             {{ 'reports.actions.ai.projectWeekly' | translate }}
           </button>
         </mat-menu>
+
         <button mat-stroked-button color="primary" type="button" (click)="addManualReport()">
           <mat-icon>edit_note</mat-icon>
           {{ 'reports.actions.addManual' | translate }}
         </button>
       </div>
 
-      <form
-        *ngIf="manualFormOpen"
-        class="reports-page__manual-form"
-        (ngSubmit)="saveReport('manual')"
-      >
+      <form *ngIf="manualFormOpen" class="reports-page__manual-form" (ngSubmit)="saveReport('manual')">
         <mat-form-field appearance="outline">
           <mat-label>{{ 'reports.form.titleLabel' | translate }}</mat-label>
           <input
-            matInput
-            name="title"
-            [(ngModel)]="draftReport.title"
-            required
+            matInput name="title" [(ngModel)]="draftReport.title" required
             placeholder="{{ 'reports.form.titlePlaceholder' | translate }}"
           />
         </mat-form-field>
@@ -54,11 +43,7 @@
         <mat-form-field appearance="outline">
           <mat-label>{{ 'reports.form.bodyLabel' | translate }}</mat-label>
           <textarea
-            matInput
-            name="body"
-            rows="5"
-            [(ngModel)]="draftReport.body"
-            required
+            matInput name="body" rows="5" [(ngModel)]="draftReport.body" required
             placeholder="{{ 'reports.form.bodyPlaceholder' | translate }}"
           ></textarea>
         </mat-form-field>
@@ -76,24 +61,30 @@
   </mat-card>
 
   <div class="reports-page__content">
+    <!-- 左：一覧 -->
     <mat-card class="reports-page__list">
       <mat-card-header>
         <mat-card-title>{{ 'reports.list.title' | translate }}</mat-card-title>
       </mat-card-header>
       <mat-card-content *ngIf="reports$ | async as reports">
-        <mat-nav-list>
+        <mat-nav-list class="reports-list">
           <a
             mat-list-item
             *ngFor="let report of reports"
             (click)="setActiveReport(report)"
-            [class.active]="report.id === activeReport?.id"
+            [activated]="report.id === activeReport?.id"
           >
-            <div class="reports-page__list-item">
-              <div class="reports-page__list-item-title">{{ report.title }}</div>
-              <div class="reports-page__list-item-meta">
-                <span>{{ createdAtToDate(report.createdAt) | date: 'yyyy/MM/dd' }}</span>
-                <span class="reports-page__list-item-summary">{{ report.metrics.notes }}</span>
-              </div>
+            <div matListItemTitle class="item-title">
+              {{ report.title }}
+            </div>
+            <div matListItemLine class="item-meta">
+              <span class="date">{{ createdAtToDate(report.createdAt) | date: 'yyyy/MM/dd' }}</span>
+              <span class="dot">•</span>
+              <span class="summary ellipsis">{{ report.metrics.notes }}</span>
+              <span class="dot" *ngIf="report.createdBy || report.createdByName">•</span>
+              <span class="author" *ngIf="report.createdBy || report.createdByName">
+                {{ report.createdByName || report.createdBy }}
+              </span>
             </div>
           </a>
         </mat-nav-list>
@@ -101,6 +92,7 @@
       </mat-card-content>
     </mat-card>
 
+    <!-- 右：プレビュー -->
     <mat-card class="reports-page__preview" *ngIf="activeReport as report">
       <mat-card-header>
         <mat-card-title>{{ report.title }}</mat-card-title>
@@ -108,11 +100,20 @@
           {{ createdAtToDate(report.createdAt) | date: 'yyyy/MM/dd (EEE)' }}
         </mat-card-subtitle>
       </mat-card-header>
+
+      <!-- 下書き保存（新規作成） -->
       <mat-card-actions *ngIf="report.id?.startsWith('draft-')">
         <button mat-flat-button color="primary" type="button" (click)="saveReport('active')">
           {{ 'reports.form.save' | translate }}
         </button>
       </mat-card-actions>
+
+      <!-- 既存レポートの作成者（または作者情報なし＝レガシー）だけ編集/削除 -->
+      <mat-card-actions *ngIf="!report.id?.startsWith('draft-') && canEdit(report)">
+        <button mat-stroked-button type="button" (click)="editReport(report)">編集</button>
+        <button mat-stroked-button color="warn" type="button" (click)="deleteReport(report)">削除</button>
+      </mat-card-actions>
+
       <mat-divider></mat-divider>
       <mat-card-content>
         <p class="reports-page__preview-body">{{ report.body }}</p>
@@ -134,3 +135,5 @@
     </mat-card>
   </div>
 </section>
+
+

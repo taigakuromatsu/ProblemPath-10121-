@@ -14,13 +14,17 @@ import {
   addDoc,
   collection,
   collectionData,
+  deleteDoc,
+  doc,
   Firestore,
   Timestamp,
   serverTimestamp,
+  updateDoc,
 } from '@angular/fire/firestore';
 import { Functions, httpsCallable } from '@angular/fire/functions';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { BehaviorSubject, catchError, combineLatest, map, Observable, of, switchMap, take } from 'rxjs';
+import { Auth } from '@angular/fire/auth';
 
 import { CurrentProjectService } from '../services/current-project.service';
 
@@ -33,9 +37,13 @@ export interface ReportMetrics {
 export interface ReportEntry {
   id: string;
   title: string;
-  createdAt: Timestamp | string | null | undefined; // ← ここだけ変更
+  createdAt: Timestamp | string | null | undefined;
   body: string;
   metrics: ReportMetrics;
+  createdBy?: string;
+  createdByName?: string;
+  scope?: 'personal' | 'project';
+  lang?: 'ja' | 'en';
 }
 
 interface DraftReport {
@@ -50,11 +58,7 @@ const MOCK_REPORTS: ReportEntry[] = [
     createdAt: '2024-04-07T09:00:00+09:00',
     body:
       '今週はUI改善関連のタスクが中心。ユーザーからのフィードバックを受けたナビゲーション調整が完了し、モバイル向けの最適化も進捗。',
-    metrics: {
-      completedTasks: 5,
-      avgProgressPercent: 84,
-      notes: 'UI改善を重点対応',
-    },
+    metrics: { completedTasks: 5, avgProgressPercent: 84, notes: 'UI改善を重点対応' },
   },
   {
     id: 'rpt-20240331',
@@ -62,11 +66,7 @@ const MOCK_REPORTS: ReportEntry[] = [
     createdAt: '2024-03-31T09:00:00+09:00',
     body:
       'ヒアリング結果を分析し、今後の改善テーマを整理。バックエンド側の安定化タスクは進行中で、来週も継続。',
-    metrics: {
-      completedTasks: 3,
-      avgProgressPercent: 76,
-      notes: '課題ヒアリング継続',
-    },
+    metrics: { completedTasks: 3, avgProgressPercent: 76, notes: '課題ヒアリング継続' },
   },
 ];
 
@@ -98,35 +98,39 @@ export class ReportsPage {
   private readonly functions = inject(Functions);
   private readonly translate = inject(TranslateService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly auth = inject(Auth);
 
   readonly projectId$: Observable<string | null> = this.currentProject.projectId$;
 
   private readonly manualReportsSubject = new BehaviorSubject<ReportEntry[]>([]);
   private readonly manualReports$ = this.manualReportsSubject.asObservable();
 
+  /** 直近の生成指定（保存メタ用） */
+  private lastScope: 'personal' | 'project' = 'project';
+  private lastLang: 'ja' | 'en' = 'ja';
+
+  /** 編集対象ID（nullなら新規作成） */
+  private editingReportId: string | null = null;
+
   private readonly firestoreReports$: Observable<ReportEntry[]> = this.projectId$.pipe(
     switchMap(projectId => {
-      if (!projectId) {
-        return of(MOCK_REPORTS);
-      }
-      const reportsRef = collection(
-        this.firestore,
-        `projects/${projectId}/reports`,
-      );
-      // TODO: Cloud Functions + Geminiで自動生成した週次サマリをここにaddDocする予定
+      if (!projectId) return of(MOCK_REPORTS);
+      const reportsRef = collection(this.firestore, `projects/${projectId}/reports`);
       return collectionData(reportsRef, { idField: 'id' }).pipe(
-        map((entries): ReportEntry[] => (entries as ReportEntry[]).length ? (entries as ReportEntry[]) : MOCK_REPORTS),
+        map((entries) => {
+          const list = (entries as any[]).map(e => this.normalizeEntry(e));
+          return list.length ? list : MOCK_REPORTS;
+        }),
         catchError(() => of(MOCK_REPORTS)),
       );
+      
     }),
   );
 
   readonly reports$: Observable<ReportEntry[]> = combineLatest([
     this.firestoreReports$,
     this.manualReports$,
-  ]).pipe(
-    map(([remoteReports, manualReports]) => [...manualReports, ...remoteReports]),
-  );
+  ]).pipe(map(([remoteReports, manualReports]) => [...manualReports, ...remoteReports]));
 
   activeReport: ReportEntry | null = null;
   manualFormOpen = false;
@@ -136,48 +140,30 @@ export class ReportsPage {
     this.reports$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(reports => {
-        if (!reports.length) {
-          this.activeReport = null;
-          return;
-        }
+        if (!reports.length) { this.activeReport = null; return; }
         if (this.activeReport) {
-          const current = reports.find(report => report.id === this.activeReport?.id);
-          if (current) {
-            this.activeReport = current;
-            return;
-          }
+          const current = reports.find(r => r.id === this.activeReport?.id);
+          if (current) { this.activeReport = current; return; }
         }
         this.activeReport = reports[0];
       });
   }
 
-  generateDraft(): void {
-    this.generateDraftBy('project', 'weekly');
-  }
+  /** 旧ショートカット（デフォはプロジェクト週次） */
+  generateDraft(): void { this.generateDraftBy('project', 'weekly'); }
 
   generateDraftBy(scope: 'personal' | 'project', period: 'daily' | 'weekly'): void {
     this.projectId$.pipe(take(1)).subscribe(projectId => {
-      // TODO: role check (viewerは不可)
-      if (!projectId) {
-        console.warn('generateDraftBy: projectId is not available');
-        return;
-      }
+      if (!projectId) { console.warn('generateDraftBy: projectId is not available'); return; }
 
       const currentLang = this.translate.currentLang || this.translate.defaultLang || 'ja';
-      const normalizedLang = currentLang.startsWith('en') ? 'en' : 'ja';
+      const normalizedLang: 'ja' | 'en' = currentLang.startsWith('en') ? 'en' : 'ja';
+      this.lastScope = scope;
+      this.lastLang = normalizedLang;
 
       const callable = httpsCallable<
-        {
-          projectId: string;
-          scope: 'personal' | 'project';
-          period: 'daily' | 'weekly';
-          lang: 'ja' | 'en';
-        },
-        {
-          title: string;
-          body: string;
-          metrics: { completedTasks: number; avgProgressPercent: number; notes: string };
-        }
+        { projectId: string; scope: 'personal' | 'project'; period: 'daily' | 'weekly'; lang: 'ja' | 'en' },
+        { title: string; body: string; metrics: { completedTasks: number; avgProgressPercent: number; notes: string } }
       >(this.functions, 'generateProgressReportDraft');
 
       callable({ projectId, scope, period, lang: normalizedLang })
@@ -189,36 +175,52 @@ export class ReportsPage {
             title: data.title,
             createdAt: now.toISOString(),
             body: data.body,
-            metrics:
-              data.metrics ?? {
-                completedTasks: 0,
-                avgProgressPercent: 0,
-                notes: this.buildSummaryFromBody(data.body),
-              },
+            metrics: data.metrics ?? {
+              completedTasks: 0,
+              avgProgressPercent: 0,
+              notes: this.buildSummaryFromBody(data.body),
+            },
+            scope,
+            lang: normalizedLang,
           };
-          // TODO: この草案はまだFirestoreに保存されていない一時データ。
-          //       「保存」ボタンで projects/{projectId}/reports に書き込む予定。
-          //       viewerロールは保存不可にする予定。
+          this.manualFormOpen = false;
+          this.editingReportId = null;
         })
-        .catch(error => {
-          console.warn('Failed to generate report draft', error);
-        });
+        .catch(error => console.warn('Failed to generate report draft', error));
     });
   }
 
   addManualReport(): void {
-    // TODO: 手動レポート追加時に Firestore 下書きドキュメントを生成する
     this.manualFormOpen = true;
     this.draftReport = { title: '', body: '' };
+    this.editingReportId = null;
+    // 手動作成はデフォでプロジェクト/現在言語
+    const currentLang = this.translate.currentLang || this.translate.defaultLang || 'ja';
+    this.lastScope = 'project';
+    this.lastLang = currentLang.startsWith('en') ? 'en' : 'ja';
   }
 
   cancelManualReport(): void {
     this.manualFormOpen = false;
     this.draftReport = { title: '', body: '' };
+    this.editingReportId = null;
   }
 
+  /** 一覧→プレビューで自分のレポートなら編集開始（フォームに読み込み） */
+  editReport(report: ReportEntry): void {
+    this.manualFormOpen = true;
+    this.draftReport = { title: report.title, body: report.body };
+    this.editingReportId = report.id;
+    this.lastScope = report.scope ?? 'project';
+    this.lastLang = report.lang ?? (this.translate.currentLang?.startsWith('en') ? 'en' : 'ja');
+  }
+
+  /** 保存：draftは新規、編集モードならupdate、手動フォームは新規/更新の両方対応 */
   saveReport(target: 'manual' | 'active' = 'manual'): void {
     const useManualDraft = target === 'manual';
+    const currentLang = this.translate.currentLang || this.translate.defaultLang || 'ja';
+    const normalizedLang: 'ja' | 'en' = currentLang.startsWith('en') ? 'en' : 'ja';
+
     const manualTitle = this.draftReport.title.trim();
     const manualBody = this.draftReport.body.trim();
     const manualMetrics: ReportMetrics = {
@@ -229,43 +231,66 @@ export class ReportsPage {
 
     const activeReport = this.activeReport;
     const reportToSave = useManualDraft
-      ? manualTitle && manualBody
-        ? { title: manualTitle, body: manualBody, metrics: manualMetrics }
-        : null
+      ? (manualTitle && manualBody ? { title: manualTitle, body: manualBody, metrics: manualMetrics } : null)
       : activeReport
-      ? {
-          title: activeReport.title,
-          body: activeReport.body,
-          metrics:
-            activeReport.metrics ?? {
+        ? {
+            title: activeReport.title,
+            body: activeReport.body,
+            metrics: activeReport.metrics ?? {
               completedTasks: 0,
               avgProgressPercent: 0,
               notes: this.buildSummaryFromBody(activeReport.body),
             },
-        }
-      : null;
+          }
+        : null;
 
-    if (!reportToSave) {
-      return;
-    }
+    if (!reportToSave) return;
 
-    this.projectId$.pipe(take(1)).subscribe(projectId => {
-      // TODO: roleチェック (admin/memberのみ保存可能、viewerは拒否)
-      if (!projectId) {
-        console.warn('saveReport: projectId is not available');
-        return;
-      }
+    this.projectId$.pipe(take(1)).subscribe(async projectId => {
+      if (!projectId) { console.warn('saveReport: projectId is not available'); return; }
+
+      const uid = this.auth.currentUser?.uid;
+      const displayName = this.auth.currentUser?.displayName || undefined;
 
       const reportsRef = collection(this.firestore, `projects/${projectId}/reports`);
-      addDoc(reportsRef, {
-        title: reportToSave.title,
-        body: reportToSave.body,
-        metrics: reportToSave.metrics,
-        createdAt: serverTimestamp(),
-        createdAtClient: new Date().toISOString(),
-      })
-        .then(docRef => {
-          console.log('saved!', docRef.id);
+
+      try {
+        if (useManualDraft && this.editingReportId) {
+          // 既存レポートの更新
+          const ref = doc(this.firestore, `projects/${projectId}/reports/${this.editingReportId}`);
+          await updateDoc(ref, {
+            title: reportToSave.title,
+            body: reportToSave.body,
+            metrics: reportToSave.metrics,
+            updatedAt: serverTimestamp(),
+          } as any);
+          this.activeReport = {
+            id: this.editingReportId,
+            title: reportToSave.title,
+            createdAt: this.activeReport?.createdAt ?? new Date().toISOString(),
+            body: reportToSave.body,
+            metrics: reportToSave.metrics,
+            createdBy: this.activeReport?.createdBy,
+            createdByName: this.activeReport?.createdByName,
+            scope: this.activeReport?.scope ?? this.lastScope,
+            lang: this.activeReport?.lang ?? this.lastLang,
+          };
+        } else {
+          // 新規保存（AI草案 or 手動）
+          const scope = useManualDraft ? 'project' : (this.lastScope ?? 'project');
+          const lang = useManualDraft ? normalizedLang : (this.lastLang ?? normalizedLang);
+          const docRef = await addDoc(reportsRef, {
+            title: reportToSave.title,
+            body: reportToSave.body,
+            metrics: reportToSave.metrics,
+            createdAt: serverTimestamp(),
+            createdAtClient: new Date().toISOString(),
+            // 追加メタ
+            createdBy: uid ?? null,
+            createdByName: displayName ?? null,
+            scope,
+            lang,
+          } as any);
           const createdAt = new Date();
           this.activeReport = {
             id: docRef.id,
@@ -273,50 +298,99 @@ export class ReportsPage {
             createdAt: createdAt.toISOString(),
             body: reportToSave.body,
             metrics: reportToSave.metrics,
+            createdBy: uid ?? undefined,
+            createdByName: displayName ?? undefined,
+            scope,
+            lang,
           };
-          this.manualFormOpen = false;
-          this.draftReport = { title: '', body: '' };
-        })
-        .catch(error => {
-          console.warn('saveReport failed', error);
-        });
+        }
+
+        this.manualFormOpen = false;
+        this.draftReport = { title: '', body: '' };
+        this.editingReportId = null;
+      } catch (error) {
+        console.warn('saveReport failed', error);
+      }
     });
   }
 
-  setActiveReport(report: ReportEntry): void {
-    this.activeReport = report;
+  deleteReport(report: ReportEntry): void {
+    if (!report?.id) return;
+    this.projectId$.pipe(take(1)).subscribe(async projectId => {
+      if (!projectId) return;
+      try {
+        await deleteDoc(doc(this.firestore, `projects/${projectId}/reports/${report.id}`));
+        this.activeReport = null;
+      } catch (e) {
+        console.warn('deleteReport failed', e);
+      }
+    });
+  }
+
+  setActiveReport(report: ReportEntry): void { this.activeReport = report; }
+
+  isMine(report: ReportEntry | null): boolean {
+    const uid = this.auth.currentUser?.uid;
+    return !!(report && uid && report.createdBy && report.createdBy === uid);
   }
 
   createdAtToDate(value: ReportEntry['createdAt']): Date {
-    // 未設定・null は epoch(1970) を返して安全に描画
     if (!value) return new Date(0);
-  
-    // 文字列ならそのまま
     if (typeof value === 'string') {
       const d = new Date(value);
       return Number.isNaN(d.getTime()) ? new Date(0) : d;
     }
-  
-    // Firestore Timestamp あるいは toDate() を持つオブジェクト
     const anyVal: any = value as any;
     if (typeof anyVal?.toDate === 'function') {
-      try { return anyVal.toDate(); } catch { /* fallthrough */ }
+      try { return anyVal.toDate(); } catch {}
     }
-  
-    // { seconds, nanoseconds } 形式の素オブジェクトに対応
     if (typeof anyVal?.seconds === 'number') {
       return new Date(anyVal.seconds * 1000);
     }
-  
-    // 最後の保険
     return new Date(0);
   }
 
   private buildSummaryFromBody(body: string): string {
     const normalized = body.replace(/\s+/g, ' ').trim();
-    if (normalized.length <= 80) {
-      return normalized;
-    }
+    if (normalized.length <= 80) return normalized;
     return `${normalized.slice(0, 77)}…`;
   }
+
+  private normalizeEntry(raw: any): ReportEntry {
+    const title = typeof raw?.title === 'string' ? raw.title : '(no title)';
+    const body  = typeof raw?.body === 'string'  ? raw.body  : '';
+    const m = raw?.metrics ?? {};
+  
+    const metrics: ReportMetrics = {
+      completedTasks: Number.isFinite(m?.completedTasks) ? m.completedTasks : 0,
+      avgProgressPercent: Number.isFinite(m?.avgProgressPercent) ? m.avgProgressPercent : 0,
+      notes: typeof m?.notes === 'string' ? m.notes : this.buildSummaryFromBody(body),
+    };
+  
+    return {
+      id: String(raw?.id ?? ''),
+      title,
+      createdAt: raw?.createdAt ?? null,
+      body,
+      metrics,
+      createdBy: raw?.createdBy,
+      createdByName: raw?.createdByName,
+      scope: raw?.scope,
+      lang: raw?.lang,
+    };
+  }
+
+  // 追記：一覧アクションの可否判定（レガシー互換あり）
+canEdit(report: ReportEntry | null): boolean {
+  const uid = this.auth.currentUser?.uid;
+  if (!report || !uid) return false;
+  if (!report.id || report.id.startsWith('draft-')) return false;
+
+  // レガシー: createdBy が無い古いデータは一時的に編集可とする
+  if (!report.createdBy) return true;
+
+  return report.createdBy === uid;
+}
+
+  
 }
