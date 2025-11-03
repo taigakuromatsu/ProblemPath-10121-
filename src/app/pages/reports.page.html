@@ -12,10 +12,30 @@
   <mat-card class="reports-page__actions">
     <mat-card-content>
       <div class="reports-page__action-buttons">
-        <button mat-raised-button color="primary" type="button" (click)="generateDraft()">
+        <button
+          mat-raised-button
+          color="primary"
+          type="button"
+          [matMenuTriggerFor]="aiDraftMenu"
+        >
           <mat-icon>auto_awesome</mat-icon>
           {{ 'reports.actions.generateAi' | translate }}
         </button>
+        <mat-menu #aiDraftMenu="matMenu">
+          <button mat-menu-item (click)="generateDraftBy('personal', 'daily')">
+            {{ 'reports.actions.ai.personalDaily' | translate }}
+          </button>
+          <button mat-menu-item (click)="generateDraftBy('personal', 'weekly')">
+            {{ 'reports.actions.ai.personalWeekly' | translate }}
+          </button>
+          <mat-divider></mat-divider>
+          <button mat-menu-item (click)="generateDraftBy('project', 'daily')">
+            {{ 'reports.actions.ai.projectDaily' | translate }}
+          </button>
+          <button mat-menu-item (click)="generateDraftBy('project', 'weekly')">
+            {{ 'reports.actions.ai.projectWeekly' | translate }}
+          </button>
+        </mat-menu>
         <button mat-stroked-button color="primary" type="button" (click)="addManualReport()">
           <mat-icon>edit_note</mat-icon>
           {{ 'reports.actions.addManual' | translate }}

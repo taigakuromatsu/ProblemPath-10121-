@@ -157,18 +157,140 @@ export class AiClient {
   }
 }
 
-export const generateProgressReportDraft = onCall<
-  { projectId: string },
-  {
-    title: string;
-    body: string;
-    metrics: { completedTasks: number; avgProgressPercent: number; notes: string };
+type ReportScope = "personal" | "project";
+type ReportPeriod = "daily" | "weekly";
+type ReportLang = "ja" | "en";
+
+type GenerateProgressReportDraftRequest = {
+  projectId: string;
+  scope?: ReportScope;
+  period?: ReportPeriod;
+  lang?: ReportLang;
+};
+
+type GenerateProgressReportDraftResponse = {
+  title: string;
+  body: string;
+  metrics: { completedTasks: number; avgProgressPercent: number; notes: string };
+};
+
+function toNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function roundTo(value: number, digits: number): number {
+  const factor = Math.pow(10, digits);
+  return Math.round(value * factor) / factor;
+}
+
+function formatNumber(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "0";
   }
->(async (request: CallableRequest<{ projectId: string }>) => {
-  // TODO: viewerロールは拒否したい（admin/memberだけ許可する）
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function buildTitle(scope: ReportScope, period: ReportPeriod, lang: ReportLang): string {
+  const isPersonal = scope === "personal";
+  if (lang === "ja") {
+    if (isPersonal) {
+      return period === "daily" ? "個人タスク 日次レポート" : "個人タスク 週次レポート";
+    }
+    return period === "daily" ? "プロジェクト全体 日次レポート" : "プロジェクト全体 週次レポート";
+  }
+
+  if (isPersonal) {
+    return period === "daily" ? "Personal Daily Summary" : "Personal Weekly Summary";
+  }
+  return period === "daily" ? "Project Daily Summary" : "Project Weekly Summary";
+}
+
+type BodyParams = {
+  scope: ReportScope;
+  period: ReportPeriod;
+  lang: ReportLang;
+  completedTasks7d: number;
+  avgLeadTime30dDays: number;
+  lateRateThisWeekPercent: number;
+  avgProgressPercent: number;
+  topProblemTitle: string;
+  topProblemPercent: number;
+};
+
+function buildBody(params: BodyParams): string {
+  const {
+    scope,
+    period,
+    lang,
+    completedTasks7d,
+    avgLeadTime30dDays,
+    lateRateThisWeekPercent,
+    avgProgressPercent,
+    topProblemTitle,
+    topProblemPercent,
+  } = params;
+
+  const sentences: string[] = [];
+
+  if (lang === "ja") {
+    sentences.push(
+      scope === "personal"
+        ? period === "daily"
+          ? "本日の個人タスクの振り返りです。"
+          : "今週の個人タスクの振り返りです。"
+        : period === "daily"
+        ? "本日のプロジェクト全体の状況です。"
+        : "今週のプロジェクト全体の状況です。"
+    );
+    sentences.push(`直近7日間の完了タスクは${completedTasks7d}件です。`);
+    sentences.push(`30日平均の対応日数は約${formatNumber(avgLeadTime30dDays)}日です。`);
+    sentences.push(`今週の遅延率は${formatNumber(lateRateThisWeekPercent)}%です。`);
+    sentences.push(
+      scope === "personal"
+        ? `チーム重点課題「${topProblemTitle}」は進捗${formatNumber(topProblemPercent)}%、平均進捗の目安は${formatNumber(avgProgressPercent)}%です。`
+        : `重点課題「${topProblemTitle}」は進捗${formatNumber(topProblemPercent)}%、平均進捗率は${formatNumber(avgProgressPercent)}%です。`
+    );
+    return sentences.join(" ");
+  }
+
+  sentences.push(
+    scope === "personal"
+      ? period === "daily"
+        ? "Daily snapshot for your tasks."
+        : "Weekly snapshot for your tasks."
+      : period === "daily"
+      ? "Daily overview for the project."
+      : "Weekly overview for the project."
+  );
+  sentences.push(`Completed tasks (last 7 days): ${completedTasks7d}.`);
+  sentences.push(`Average lead time (30-day avg): ${formatNumber(avgLeadTime30dDays)} days.`);
+  sentences.push(`Late rate this week: ${formatNumber(lateRateThisWeekPercent)}%.`);
+  sentences.push(
+    scope === "personal"
+      ? `Team focus "${topProblemTitle}" is ${formatNumber(topProblemPercent)}% complete; average progress sits around ${formatNumber(avgProgressPercent)}%.`
+      : `Key focus "${topProblemTitle}" is ${formatNumber(topProblemPercent)}% complete with an average progress of ${formatNumber(avgProgressPercent)}%.`
+  );
+  return sentences.join(" ");
+}
+
+export const generateProgressReportDraft = onCall<
+  GenerateProgressReportDraftRequest,
+  GenerateProgressReportDraftResponse
+>(async (request: CallableRequest<GenerateProgressReportDraftRequest>) => {
   const { projectId } = request.data ?? {};
   if (!projectId) {
     throw new HttpsError("invalid-argument", "projectId is required");
+  }
+
+  const scope: ReportScope = request.data?.scope === "personal" ? "personal" : "project";
+  const period: ReportPeriod = request.data?.period === "daily" ? "daily" : "weekly";
+  const lang: ReportLang = request.data?.lang === "en" ? "en" : "ja";
+
+  if (scope === "personal") {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError("unauthenticated", "Authentication required for personal reports");
+    }
   }
 
   const firestore = getFirestore();
@@ -180,9 +302,6 @@ export const generateProgressReportDraft = onCall<
   }
 
   const summary = summarySnap.data() ?? {};
-  const completedTasks7d = typeof summary.completedTasks7d === "number" ? summary.completedTasks7d : 0;
-  const avgLeadTime30dDays = typeof summary.avgLeadTime30dDays === "number" ? summary.avgLeadTime30dDays : 0;
-  const lateRateThisWeekPercent = typeof summary.lateRateThisWeekPercent === "number" ? summary.lateRateThisWeekPercent : 0;
   const problemProgress = Array.isArray(summary.problemProgress) ? summary.problemProgress : [];
 
   const normalizedProgress = problemProgress
@@ -194,29 +313,56 @@ export const generateProgressReportDraft = onCall<
 
   const avgProgressPercent = normalizedProgress.length
     ? Math.round(
-        normalizedProgress.reduce((total: number, current: { title: string; percent: number }) => total + current.percent, 0) /
-          normalizedProgress.length,
+        normalizedProgress.reduce(
+          (total: number, current: { title: string; percent: number }) => total + current.percent,
+          0,
+        ) / normalizedProgress.length,
       )
     : 0;
 
   const topProblem = normalizedProgress[0];
-  const topProblemTitle = topProblem?.title || "重点課題";
-  const topProblemPercent = topProblem?.percent ?? 0;
+  const fallbackTitle = lang === "ja" ? "重点課題" : "Key initiative";
+  const topProblemTitle = topProblem?.title || fallbackTitle;
+  const topProblemPercent = topProblem ? roundTo(toNumber(topProblem.percent), 1) : 0;
 
-  const title = "Weekly Progress Summary";
-  const bodyParts = [
-    `完了タスクは ${completedTasks7d} 件。`,
-    `平均対応日数は ${avgLeadTime30dDays} 日程度。`,
-    `遅延率は ${lateRateThisWeekPercent}% に留まっています。`,
-    `特に ${topProblemTitle} は進捗 ${topProblemPercent}% まで進み、引き続き優先テーマです。`,
-  ];
+  let completedTasks7d = Math.max(0, Math.round(toNumber(summary.completedTasks7d)));
+  let avgLeadTime30dDays = roundTo(toNumber(summary.avgLeadTime30dDays), 1);
+  let lateRateThisWeekPercent = roundTo(toNumber(summary.lateRateThisWeekPercent), 1);
 
-  const notes = `優先テーマは ${topProblemTitle}`;
+  if (scope === "personal") {
+    const uid = request.auth?.uid as string;
+    const personalRef = firestore.doc(`projects/${projectId}/analyticsPerUser/${uid}`);
+    const personalSnap = await personalRef.get();
+    const personalData = personalSnap.exists ? personalSnap.data() ?? {} : {};
 
-  // TODO: 最終的にはGeminiを使って自然な文章にする
+    completedTasks7d = Math.max(0, Math.round(toNumber(personalData.completedTasks7d)));
+    avgLeadTime30dDays = roundTo(toNumber(personalData.avgLeadTime30dDays), 1);
+    lateRateThisWeekPercent = roundTo(toNumber(personalData.lateRateThisWeekPercent), 1);
+  }
+
+  const title = buildTitle(scope, period, lang);
+  const body = buildBody({
+    scope,
+    period,
+    lang,
+    completedTasks7d,
+    avgLeadTime30dDays,
+    lateRateThisWeekPercent,
+    avgProgressPercent,
+    topProblemTitle,
+    topProblemPercent,
+  });
+
+  const notes =
+    scope === "personal"
+      ? lang === "ja"
+        ? `チーム重点: ${topProblemTitle}`
+        : `Team focus: ${topProblemTitle}`
+      : topProblemTitle;
+
   return {
     title,
-    body: bodyParts.join(" "),
+    body,
     metrics: {
       completedTasks: completedTasks7d,
       avgProgressPercent,

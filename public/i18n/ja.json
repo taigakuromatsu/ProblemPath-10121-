@@ -62,7 +62,13 @@
     "projectContext": "現在のプロジェクト ID: {{id}}",
     "actions": {
       "generateAi": "AI下書きを生成",
-      "addManual": "手動レポートを追加"
+      "addManual": "手動レポートを追加",
+      "ai": {
+        "personalDaily": "個人タスクの日次レポート",
+        "personalWeekly": "個人タスクの週次レポート",
+        "projectDaily": "プロジェクト全体の日次レポート",
+        "projectWeekly": "プロジェクト全体の週次レポート"
+      }
     },
     "form": {
       "titleLabel": "タイトル",
