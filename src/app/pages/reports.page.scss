@@ -4,94 +4,105 @@
   gap: 24px;
 }
 
+/* header */
 .page__header {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-
-.page__subtitle {
-  margin: 0;
-  color: var(--pp-muted-fg, rgba(0, 0, 0, 0.56));
-}
-
+.page__subtitle,
 .page__subsubtitle {
   margin: 0;
   color: var(--pp-muted-fg, rgba(0, 0, 0, 0.56));
 }
-
 .page__project {
   font-size: 1rem;
   margin: 0;
   color: var(--pp-muted-fg, rgb(0, 0, 0));
 }
 
-.reports-page__actions {
-  padding-bottom: 8px;
-}
-
+/* actions */
+.reports-page__actions { padding-bottom: 8px; }
 .reports-page__action-buttons {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
 }
 
+/* manual form */
 .reports-page__manual-form {
   display: flex;
   flex-direction: column;
   gap: 12px;
   margin-top: 16px;
 }
-
 .reports-page__manual-form-actions {
   display: flex;
   gap: 12px;
   justify-content: flex-end;
 }
 
+/* layout */
 .reports-page__content {
   display: grid;
   gap: 16px;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
-.reports-page__list-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
+/* --- past reports: card list --- */
+.reports-page__card-list {
+  display: grid;
+  gap: 12px;
 }
 
-.reports-page__list-item-title {
+.report-card {
+  background: var(--pp-card-bg, #fff);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: box-shadow 120ms ease, transform 120ms ease, border-color 120ms ease;
+  outline: none;
+}
+.report-card:hover {
+  box-shadow: 0 2px 10px rgba(0,0,0,.06);
+  transform: translateY(-1px);
+}
+.report-card:focus {
+  outline: 3px solid rgba(63, 81, 181, 0.25); /* indigo focus ring */
+  outline-offset: 2px;
+}
+.report-card.active {
+  border-color: rgba(63, 81, 181, 0.55);
+  box-shadow: 0 2px 10px rgba(63,81,181,.12);
+}
+
+.report-card__title {
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap; /* タイトル1行で省略 */
+  white-space: nowrap; /* 1行省略 */
 }
-
-.reports-page__list-item-meta {
-  display: flex;               /* 1行で日付・作成者を表示 */
+.report-card__meta {
+  margin-top: 4px;
+  display: flex;
   align-items: center;
   gap: 6px;
   font-size: 0.875rem;
   color: var(--pp-muted-fg, rgba(0, 0, 0, 0.56));
 }
+.report-card__meta .dot { opacity: 0.4; }
 
-.reports-page__list-item-meta .dot {
-  opacity: 0.4;
-}
-
-mat-nav-list a.active {
-  background: rgba(63, 81, 181, 0.12);
-}
-
+/* preview */
 .reports-page__preview-body {
   white-space: pre-wrap;
   line-height: 1.6;
 }
 
+/* misc */
 .muted {
   color: var(--pp-muted-fg, rgba(0, 0, 0, 0.56));
   margin: 16px 0 0;
 }
+
 

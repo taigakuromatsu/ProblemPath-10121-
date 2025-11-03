@@ -1,5 +1,5 @@
 // functions/src/ai.ts
-// Vertex AI (Gemini) 版: JSON 優先 + 行分割フェイルセーフ
+// Vertex AI (Gemini) 版: JSON 優先 + 行分割フェイルセーフ & 週次レポート「傾向・気づき」をGeminiで1文生成
 // @ts-ignore - firebase-functions/v2/httpsの型定義の問題を回避
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 // @ts-ignore
@@ -44,6 +44,16 @@ const SYSTEM_JA =
   `あなたは課題管理ツール向けに短く実行可能なイシュータイトルを作成します。` +
   `必ず JSON でのみ返答: {"suggestions": string[]}。5〜7件、8〜36文字、命令形、重複なし。`;
 
+// ----- Insight（傾向・気づき）専用の System -----
+const INSIGHT_SYS_JA =
+  `あなたはプロダクト/開発チームの進捗を1文で端的に要約するアナリストです。` +
+  `出力は日本語の1文のみ。箇条書き・接頭辞・引用符・余計な記号は禁止。` +
+  `与えられた指標を踏まえ、来週の注力方針を含めて80〜120文字程度で簡潔に。`;
+const INSIGHT_SYS_EN =
+  `You are an analyst who summarizes delivery signals in ONE sentence.` +
+  `Output exactly one English sentence. No bullets, no prefixes, no quotes.` +
+  `Use the given metrics and include a focus suggestion for next week (~20–30 words).`;
+
 // ====== helper ======
 function cleanLines(s: string): string[] {
   return s
@@ -51,28 +61,55 @@ function cleanLines(s: string): string[] {
     .map((x) => x.replace(/^[-*●・\d\.\)\]]+\s*/, "").trim())
     .filter(Boolean);
 }
+function oneLine(s: string): string {
+  return cleanLines(s).join(" ").replace(/\s+/g, " ").trim();
+}
+function firstSentence(text: string, lang: "ja" | "en"): string {
+  const t = oneLine(text);
+  if (!t) return "";
+  if (lang === "ja") {
+    const i = t.indexOf("。");
+    return i >= 0 ? t.slice(0, i + 1) : t;
+  }
+  const m = t.match(/[^.!?]+[.!?]/);
+  return m ? m[0].trim() : t;
+}
+function clampJa(text: string): string {
+  // 日本語だけ長すぎるときに丸める（約130字で切って読点を足す）
+  const limit = 130;
+  if (text.length <= limit) return text;
+  return text.slice(0, limit - 1) + "…";
+}
 
-function buildPrompt(input: IssueSuggestInput): string {
-  const preferLang = input.lang === "ja" ? "Japanese" : "English";
-  return [
-    `Project ID: ${input.projectId}`,
-    `Problem Title: ${input.problem.title}`,
-    input.problem.phenomenon ? `Phenomenon: ${input.problem.phenomenon}` : "",
-    input.problem.cause ? `Cause: ${input.problem.cause}` : "",
-    input.problem.solution ? `Solution: ${input.problem.solution}` : "",
-    input.problem.goal ? `Goal/KPI: ${input.problem.goal}` : "",
-    "",
-    `Return ${preferLang} issue titles only.`,
-    `Rules:`,
-    `- 8–36 characters`,
-    `- Start with a verb`,
-    `- Specific & scannable`,
-    `- No numbering, no markdown`,
-    `- Avoid duplicates`,
-    `- Provide 5 to 7 lines`,
-  ]
-    .filter(Boolean)
-    .join("\n");
+// --- 重複抑止ヘルパ ---
+function escapeRegExp(s: string): string {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+  function stripDuplicateHeadJa(text: string, title: string): string {
+    // 先頭に「タイトル」は進捗XX%（％）が来ていたら削除
+    const re = new RegExp(`^\\s*「?${escapeRegExp(title)}」?は進捗\\d+(?:\\.\\d+)?[％%]。?\\s*`);
+    return text.replace(re, "").trim();
+  }
+  function stripDuplicateHeadEn(text: string, title: string): string {
+    // Top priority "Title" is at XX% などを先頭から削除
+    const re = new RegExp(
+      `^\\s*(?:Top\\s+priority\\s+)?["']?${escapeRegExp(title)}["']?\\s+is\\s+at\\s+\\d+(?:\\.\\d+)?%\\.?\\s*`,
+      "i"
+    );
+    return text.replace(re, "").trim();
+  }
+
+
+function toNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+function roundTo(value: number, digits: number): number {
+  const factor = Math.pow(10, digits);
+  return Math.round(value * factor) / factor;
+}
+function formatNumber(value: number): string {
+  if (!Number.isFinite(value as number)) return "0";
+  return Number.isInteger(value as number) ? String(value) : (value as number).toFixed(1);
 }
 
 // ====== Vertex クライアント ======
@@ -147,7 +184,7 @@ export class AiClient {
       const suggestions = cleanLines(text).slice(0, 7);
       return { suggestions };
     } catch (e: any) {
-      console.error("[VertexAI] call failed", {
+      console.error("[VertexAI] suggestIssues failed", {
         message: e?.message,
         model: MODEL,
         location: LOCATION,
@@ -156,36 +193,139 @@ export class AiClient {
       throw new Error(`Vertex request failed: ${String(e?.message ?? e)}`);
     }
   }
+
+  // === NEW: 「傾向・気づき」1文生成 ===
+  async generateInsight(params: {
+    lang: "ja" | "en";
+    scope: "personal" | "project";
+    completedTasks7d: number;
+    avgLeadTime30dDays: number;
+    lateRateThisWeekPercent: number;
+    avgProgressPercent: number;
+    topProblemTitle: string;
+    topProblemPercent?: number;
+  }): Promise<string> {
+    const vertex = await this.vertexPromise;
+
+    const sys = params.lang === "ja" ? INSIGHT_SYS_JA : INSIGHT_SYS_EN;
+    const prompt = buildInsightPrompt(params);
+
+    const model = vertex.getGenerativeModel({
+      model: MODEL,
+      systemInstruction: sys,
+      generationConfig: {
+        temperature: 0.4,
+        maxOutputTokens: 128,
+        responseMimeType: "text/plain",
+      },
+    });
+
+    try {
+      const resp = await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }] as any,
+      });
+      const parts = (resp as any)?.response?.candidates?.[0]?.content?.parts ?? [];
+      const text = parts.map((p: any) => (p?.text ?? "")).join(" ");
+      let line = firstSentence(text, params.lang);
+      // 生成文の先頭に「最優先◯◯は進捗XX%」等があれば除去（headで付けるため）
+      line = params.lang === "ja"
+        ? stripDuplicateHeadJa(line, params.topProblemTitle)
+        : stripDuplicateHeadEn(line, params.topProblemTitle);
+      if (params.lang === "ja") line = clampJa(line);
+
+      // 念のため禁止文字除去
+      line = line.replace(/^["'「『（(【\-\*\•\s]+/, "").trim();
+      return line || this.fallbackInsight(params);
+    } catch (e) {
+      console.warn("[VertexAI] generateInsight failed, fallback used.", e);
+      return this.fallbackInsight(params);
+    }
+  }
+
+  private fallbackInsight(p: {
+    lang: "ja" | "en";
+    scope: "personal" | "project";
+    completedTasks7d: number;
+    avgLeadTime30dDays: number;
+    lateRateThisWeekPercent: number;
+    avgProgressPercent: number;
+    topProblemTitle: string;
+    topProblemPercent?: number;
+  }): string {
+    if (p.lang === "ja") {
+      if (p.lateRateThisWeekPercent >= 20) {
+        return `今週は遅延率がやや高め（${formatNumber(p.lateRateThisWeekPercent)}%）。「${p.topProblemTitle}」のボトルネックを特定し、WIP抑制とレビュー高速化に注力。`;
+      }
+      if (p.avgLeadTime30dDays >= 5) {
+        return `平均対応日数が長め（${formatNumber(p.avgLeadTime30dDays)}日）。タスク分割と詰まり解消で処理速度の底上げを優先。`;
+      }
+      const pctAvg = formatNumber(p.avgProgressPercent);
+      return `平均進捗は${pctAvg}%前後。現状ペース維持と品質確保を両立しつつ、軽微な遅延要因の除去を。`;
+    }
+    if (p.lateRateThisWeekPercent >= 20) {
+      return `Late rate is elevated (${formatNumber(p.lateRateThisWeekPercent)}%). Identify bottlenecks in "${p.topProblemTitle}" and prioritize WIP control and faster reviews.`;
+    }
+    if (p.avgLeadTime30dDays >= 5) {
+      return `Lead time is relatively long (${formatNumber(p.avgLeadTime30dDays)}d). Split work smaller and remove blockers to improve throughput.`;
+    }
+    return `Overall progress is around ${formatNumber(p.avgProgressPercent)}%. Maintain pace while trimming minor sources of delay.`;
+  }
 }
 
-// ===== レポート生成（週次固定） =====
-type ReportScope = "personal" | "project";
-type ReportPeriod = "daily" | "weekly";
-type ReportLang = "ja" | "en";
+const ai = new AiClient();
 
-type GenerateProgressReportDraftRequest = {
-  projectId: string;
-  scope?: ReportScope;
-  period?: ReportPeriod;
-  lang?: ReportLang;
-};
-
-type GenerateProgressReportDraftResponse = {
-  title: string;
-  body: string;
-  metrics: { completedTasks: number; avgProgressPercent: number; notes: string };
-};
-
-function toNumber(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+function buildPrompt(input: IssueSuggestInput): string {
+  const preferLang = input.lang === "ja" ? "Japanese" : "English";
+  return [
+    `Project ID: ${input.projectId}`,
+    `Problem Title: ${input.problem.title}`,
+    input.problem.phenomenon ? `Phenomenon: ${input.problem.phenomenon}` : "",
+    input.problem.cause ? `Cause: ${input.problem.cause}` : "",
+    input.problem.solution ? `Solution: ${input.problem.solution}` : "",
+    input.problem.goal ? `Goal/KPI: ${input.problem.goal}` : "",
+    "",
+    `Return ${preferLang} issue titles only.`,
+    `Rules:`,
+    `- 8–36 characters`,
+    `- Start with a verb`,
+    `- Specific & scannable`,
+    `- No numbering, no markdown`,
+    `- Avoid duplicates`,
+    `- Provide 5 to 7 lines`,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
-function roundTo(value: number, digits: number): number {
-  const factor = Math.pow(10, digits);
-  return Math.round(value * factor) / factor;
-}
-function formatNumber(value: number): string {
-  if (!Number.isFinite(value as number)) return "0";
-  return Number.isInteger(value as number) ? String(value) : (value as number).toFixed(1);
+
+// === NEW: Insight 用のプロンプト ===
+function buildInsightPrompt(p: {
+  lang: "ja" | "en";
+  scope: "personal" | "project";
+  completedTasks7d: number;
+  avgLeadTime30dDays: number;
+  lateRateThisWeekPercent: number;
+  avgProgressPercent: number;
+  topProblemTitle: string;
+  topProblemPercent?: number;
+}): string {
+  const lines: string[] = [];
+  lines.push(`Scope: ${p.scope}`);
+  lines.push(`Completed(7d): ${p.completedTasks7d}`);
+  lines.push(`AvgLeadTime(30d): ${formatNumber(p.avgLeadTime30dDays)} days`);
+  lines.push(`LateRate(thisWeek): ${formatNumber(p.lateRateThisWeekPercent)}%`);
+  lines.push(`AvgProgress(all problems): ${formatNumber(p.avgProgressPercent)}%`);
+  lines.push(`TopProblem: ${p.topProblemTitle}${typeof p.topProblemPercent === "number" ? ` (${formatNumber(p.topProblemPercent)}%)` : ""}`);
+
+  if (p.lang === "ja") {
+    lines.push(
+      `出力は日本語の1文のみ。数字を活かし、来週の注力方針（遅延低減/ボトルネック解消/WIP抑制/レビュー高速化 等）を具体的に示すこと。`
+    );
+  } else {
+    lines.push(
+      `Output exactly one English sentence; use metrics and suggest where to focus next (e.g., reduce lateness, remove bottlenecks, control WIP, speed up reviews).`
+    );
+  }
+  return lines.join("\n");
 }
 
 // ---- JST週範囲（Mon–Sun）ユーティリティ ----
@@ -204,8 +344,8 @@ function parseYmdToUtcDate(ymd: string): Date {
   return new Date(Date.UTC(y, m - 1, d));
 }
 function getJstWeekRange(today: Date = new Date()): { startYmd: string; endYmd: string; display: string } {
-  const todayYmd = ymdInTz(today, JST);         // JST の YYYY-MM-DD
-  const todayUtc = parseYmdToUtcDate(todayYmd); // JST日付の 00:00Z
+  const todayYmd = ymdInTz(today, JST);
+  const todayUtc = parseYmdToUtcDate(todayYmd);
   const dow = todayUtc.getUTCDay();             // 0=Sun
   const diffFromMon = (dow + 6) % 7;            // Mon=0
   const startUtc = new Date(todayUtc.getTime() - diffFromMon * 24 * 60 * 60 * 1000);
@@ -216,6 +356,10 @@ function getJstWeekRange(today: Date = new Date()): { startYmd: string; endYmd: 
 }
 
 // ---- タイトル（週次専用） ----
+type ReportScope = "personal" | "project";
+type ReportPeriod = "daily" | "weekly";
+type ReportLang = "ja" | "en";
+
 function buildWeeklyTitle(scope: ReportScope, lang: ReportLang, rangeDisp: string): string {
   if (lang === "ja") {
     return scope === "personal"
@@ -230,7 +374,6 @@ function buildWeeklyTitle(scope: ReportScope, lang: ReportLang, rangeDisp: strin
 // ---- ステータス内訳の表示整形 ----
 function formatStatusLine(items: StatusItem[], lang: ReportLang): string {
   if (!Array.isArray(items) || !items.length) return lang === "ja" ? "（データなし）" : "(no data)";
-  // 例: 未着手: 12 / 対応中: 8 / 完了: 5 / others...
   const parts = items.map((i: StatusItem) => `${i.label}: ${toNumber(i.count)}`);
   return parts.join(" / ");
 }
@@ -245,6 +388,8 @@ type WeeklyPersonalParams = {
   personalStatus: StatusItem[];
   topProblemTitle: string;
   avgProgressPercent: number;
+  topProblemPercent: number;
+  insight: string;              // NEW
 };
 
 function buildWeeklyPersonalBody(p: WeeklyPersonalParams): string {
@@ -255,13 +400,17 @@ function buildWeeklyPersonalBody(p: WeeklyPersonalParams): string {
       : `Completed(7d): ${p.completedTasks7d} / Avg lead(30d): ${formatNumber(p.avgLeadTime30dDays)} days / Late rate: ${formatNumber(p.lateRateThisWeekPercent)}%`;
   const statusLine = formatStatusLine(p.personalStatus, L);
 
+  const head = L === 'ja'
+      ? `最優先プロブレムである「${p.topProblemTitle}」は進捗${formatNumber(p.topProblemPercent)}%。`
+      : `Top priority "${p.topProblemTitle}" is at ${formatNumber(p.topProblemPercent)}%. `;
+
   const sections =
     L === "ja"
       ? [
           `【概要】個人の週次サマリーです（集計期間: ${p.rangeDisp} / JST）。`,
           `【今週の個人成果】${kpiLine}`,
           `【自分のステータス内訳】${statusLine}`,
-          `【傾向・気づき】チーム重点「${p.topProblemTitle}」の平均進捗目安は${formatNumber(p.avgProgressPercent)}%。遅延率や対応日数の推移を踏まえ、来週は遅延低減と処理速度の改善に注力。`,
+          `【傾向・気づき】${head}${p.insight}`,
           `【来週のフォーカス】（ここに具体的なタスク・OKRを記入）`,
           `【期間注記】集計はJSTの週（Mon–Sun）基準です。`,
         ]
@@ -269,7 +418,7 @@ function buildWeeklyPersonalBody(p: WeeklyPersonalParams): string {
           `【Overview】Weekly summary for your tasks (Range: ${p.rangeDisp}, JST).`,
           `【My Results】${kpiLine}`,
           `【My Status Breakdown】${statusLine}`,
-          `【Observations】Team focus "${p.topProblemTitle}" sits around ${formatNumber(p.avgProgressPercent)}% on average. Prioritize reducing lateness and improving lead time next week.`,
+          `【Insight】${head}${p.insight}`,
           `【Next Week Focus】(Fill in concrete tasks/OKRs here)`,
           `【Note】Week is based on Mon–Sun in JST.`,
         ];
@@ -286,6 +435,9 @@ type WeeklyProjectParams = {
   projectStatus: StatusItem[];
   topProblems: ProblemProgressItem[]; // Top3
   avgProgressPercent: number;
+  insight: string;                     // NEW
+  topProblemTitle: string;
+  topProblemPercent: number;
 };
 
 function buildWeeklyProjectBody(p: WeeklyProjectParams): string {
@@ -304,6 +456,10 @@ function buildWeeklyProjectBody(p: WeeklyProjectParams): string {
           .join(" / ")
       : (L === "ja" ? "（データなし）" : "(no data)");
 
+      const head = L === 'ja'
+      ? `最優先プロブレムである「${p.topProblemTitle}」は進捗${formatNumber(p.topProblemPercent)}%。`
+      : `Top priority "${p.topProblemTitle}" is at ${formatNumber(p.topProblemPercent)}%. `;
+
   const sections =
     L === "ja"
       ? [
@@ -311,7 +467,7 @@ function buildWeeklyProjectBody(p: WeeklyProjectParams): string {
           `【主要KPI】${kpiLine}`,
           `【Problem別平均進捗（上位3）】${top3}（平均: ${formatNumber(p.avgProgressPercent)}%）`,
           `【ステータス内訳】${statusLine}`,
-          `【リスク・対応方針】遅延率と対応日数の動向を監視し、ボトルネック工程の改善・引継ぎ基準の明確化・レビュー間隔の短縮等で処理速度を最適化。`,
+          `【傾向・気づき】${head}${p.insight}`,
           `【来週の重点】（ここにスプリント目標や重点イシューを記入）`,
           `【期間注記】集計はJSTの週（Mon–Sun）基準です。`,
         ]
@@ -320,7 +476,7 @@ function buildWeeklyProjectBody(p: WeeklyProjectParams): string {
           `【Key KPIs】${kpiLine}`,
           `【Top 3 Problems by Avg Progress】${top3} (Avg: ${formatNumber(p.avgProgressPercent)}%)`,
           `【Status Breakdown】${statusLine}`,
-          `【Risks & Actions】Watch lateness and lead time; address bottlenecks, tighten handoff/review cadence, and streamline workflows.`,
+          `【Insight】${head}${p.insight}`,
           `【Next Week Focus】(Fill in sprint goals and key issues here)`,
           `【Note】Week is based on Mon–Sun in JST.`,
         ];
@@ -331,6 +487,19 @@ function buildWeeklyProjectBody(p: WeeklyProjectParams): string {
 // ======================================================
 // Callable: generateProgressReportDraft（週次のみ）
 // ======================================================
+type GenerateProgressReportDraftRequest = {
+  projectId: string;
+  scope?: ReportScope;
+  period?: ReportPeriod;
+  lang?: ReportLang;
+};
+
+type GenerateProgressReportDraftResponse = {
+  title: string;
+  body: string;
+  metrics: { completedTasks: number; avgProgressPercent: number; notes: string };
+};
+
 export const generateProgressReportDraft = onCall<
   GenerateProgressReportDraftRequest,
   GenerateProgressReportDraftResponse
@@ -377,7 +546,7 @@ export const generateProgressReportDraft = onCall<
     normalizedProgress.sort(
       (a: ProblemProgressItem, b: ProblemProgressItem) => b.percent - a.percent
     );
-    const fallbackTitle = lang === "ja" ? "重点課題" : "Key initiative";
+    const fallbackTitle = lang === "ja" ? "最重要プロブレム" : "Top Priority Problem";
     const topProblems: ProblemProgressItem[] = normalizedProgress.slice(0, 3).map(
       (p: ProblemProgressItem): ProblemProgressItem => ({
         title: p.title || fallbackTitle,
@@ -435,10 +604,24 @@ export const generateProgressReportDraft = onCall<
     // 週範囲（JST）
     const { display: rangeDisp } = getJstWeekRange(new Date());
 
-    // タイトル & 本文
+    // タイトル
     const topProblemTitle = (topProblems[0]?.title ?? fallbackTitle);
+    const topProblemPercent = topProblems[0]?.percent ?? 0;
     const title = buildWeeklyTitle(scope, lang, rangeDisp);
 
+    // === NEW: 傾向・気づきを Gemini で生成 ===
+    const insight = await ai.generateInsight({
+      lang,
+      scope,
+      completedTasks7d,
+      avgLeadTime30dDays,
+      lateRateThisWeekPercent,
+      avgProgressPercent,
+      topProblemTitle,
+      topProblemPercent,
+    });
+
+    // 本文
     const body =
       scope === "personal"
         ? buildWeeklyPersonalBody({
@@ -450,6 +633,8 @@ export const generateProgressReportDraft = onCall<
             personalStatus,
             topProblemTitle,
             avgProgressPercent,
+            topProblemPercent,
+            insight, // ← ここに挿入
           })
         : buildWeeklyProjectBody({
             lang,
@@ -460,11 +645,14 @@ export const generateProgressReportDraft = onCall<
             projectStatus,
             topProblems,
             avgProgressPercent,
+            insight, // ← ここに挿入
+            topProblemTitle,
+            topProblemPercent,
           });
 
     const notes =
       scope === "personal"
-        ? (lang === "ja" ? `チーム重点: ${topProblemTitle}` : `Team focus: ${topProblemTitle}`)
+        ? (lang === "ja" ? `最優先プロブレム: ${topProblemTitle}` : `Top Priority Problem: ${topProblemTitle}`)
         : topProblemTitle;
 
     return {

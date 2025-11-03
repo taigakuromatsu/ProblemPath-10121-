@@ -132,6 +132,12 @@
   margin: 0;
 }
 
+.page__project {
+  font-size: 1rem;
+  margin: 0;
+  color: var(--pp-muted-fg, rgb(0, 0, 0));
+}
+
 /* 追加分 */
 .analytics-page__personal-card {
   margin-top: 12px;

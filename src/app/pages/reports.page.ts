@@ -52,25 +52,6 @@ interface DraftReport {
   body: string;
 }
 
-const MOCK_REPORTS: ReportEntry[] = [
-  {
-    id: 'rpt-20240407',
-    title: '2024-W14 Progress',
-    createdAt: '2024-04-07T09:00:00+09:00',
-    body:
-      '今週はUI改善関連のタスクが中心。ユーザーからのフィードバックを受けたナビゲーション調整が完了し、モバイル向けの最適化も進捗。',
-    metrics: { completedTasks: 5, avgProgressPercent: 84, notes: 'UI改善を重点対応' },
-  },
-  {
-    id: 'rpt-20240331',
-    title: '2024-W13 Check-in',
-    createdAt: '2024-03-31T09:00:00+09:00',
-    body:
-      'ヒアリング結果を分析し、今後の改善テーマを整理。バックエンド側の安定化タスクは進行中で、来週も継続。',
-    metrics: { completedTasks: 3, avgProgressPercent: 76, notes: '課題ヒアリング継続' },
-  },
-];
-
 @Component({
   standalone: true,
   selector: 'pp-reports-page',
@@ -118,14 +99,11 @@ export class ReportsPage {
 
   private readonly firestoreReports$: Observable<ReportEntry[]> = this.projectId$.pipe(
     switchMap(projectId => {
-      if (!projectId) return of(MOCK_REPORTS);
+      if (!projectId) return of([] as ReportEntry[]);
       const reportsRef = collection(this.firestore, `projects/${projectId}/reports`);
       return collectionData(reportsRef, { idField: 'id' }).pipe(
-        map((entries) => {
-          const list = (entries as any[]).map(e => this.normalizeEntry(e));
-          return list.length ? list : MOCK_REPORTS;
-        }),
-        catchError(() => of(MOCK_REPORTS)),
+        map((entries) => (entries as any[]).map(e => this.normalizeEntry(e))),
+        catchError(() => of([] as ReportEntry[])),
       );
     }),
   );

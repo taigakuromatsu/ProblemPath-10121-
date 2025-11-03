@@ -8,8 +8,6 @@
     <p class="page__project" *ngIf="projectName$ | async as projectName">
       {{ 'reports.projectNameLine' | translate:{ name: projectName } }}
     </p>
-    
-    
   </header>
 
   <mat-card class="reports-page__actions">
@@ -65,33 +63,41 @@
   </mat-card>
 
   <div class="reports-page__content">
+    <!-- 過去レポート（カード化） -->
     <mat-card class="reports-page__list">
       <mat-card-header>
         <mat-card-title>{{ 'reports.list.title' | translate }}</mat-card-title>
       </mat-card-header>
+
       <mat-card-content *ngIf="reports$ | async as reports">
-        <mat-nav-list>
-          <a
-            mat-list-item
+        <div class="reports-page__card-list" *ngIf="reports.length; else emptyList">
+          <div
+            class="report-card"
             *ngFor="let report of reports"
+            role="button"
+            tabindex="0"
             (click)="setActiveReport(report)"
+            (keydown.enter)="setActiveReport(report)"
+            (keydown.space)="setActiveReport(report)"
             [class.active]="report.id === activeReport?.id">
-            <div class="reports-page__list-item">
-              <div class="reports-page__list-item-title">{{ report.title }}</div>
-              <div class="reports-page__list-item-meta">
-                <span>{{ createdAtToDate(report.createdAt) | date: 'yyyy/MM/dd' }}</span>
-                <span class="dot" *ngIf="report.createdBy || report.createdByName">•</span>
-                <span class="reports-page__list-item-author" *ngIf="report.createdBy || report.createdByName">
-                  {{ report.createdByName || report.createdBy }}
-                </span>
-              </div>
+            <div class="report-card__title">{{ report.title }}</div>
+            <div class="report-card__meta">
+              <span>{{ createdAtToDate(report.createdAt) | date: 'yyyy/MM/dd' }}</span>
+              <span class="dot" *ngIf="report.createdBy || report.createdByName">•</span>
+              <span class="report-card__author" *ngIf="report.createdBy || report.createdByName">
+                {{ report.createdByName || report.createdBy }}
+              </span>
             </div>
-          </a>
-        </mat-nav-list>
-        <p *ngIf="!reports.length" class="muted">{{ 'reports.list.empty' | translate }}</p>
+          </div>
+        </div>
+
+        <ng-template #emptyList>
+          <p class="muted">{{ 'reports.list.empty' | translate }}</p>
+        </ng-template>
       </mat-card-content>
     </mat-card>
 
+    <!-- プレビュー -->
     <mat-card class="reports-page__preview" *ngIf="activeReport as report">
       <mat-card-header>
         <mat-card-title>{{ report.title }}</mat-card-title>
@@ -116,11 +122,12 @@
       <mat-divider></mat-divider>
       <mat-card-content>
         <p class="reports-page__preview-body">{{ report.body }}</p>
-        <!-- 指標メモ（metrics）は非表示にしました -->
+        <!-- 指標メモ（metrics）は非表示 -->
       </mat-card-content>
     </mat-card>
   </div>
 </section>
+
 
 
 

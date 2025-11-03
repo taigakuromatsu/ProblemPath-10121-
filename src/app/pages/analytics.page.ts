@@ -29,29 +29,66 @@ export interface PersonalAnalyticsSummary {
   statusBreakdown: { label: string; count: number }[];
 }
 
-const MOCK_SUMMARY: AnalyticsSummary = {
-  completedTasks7d: 42,
-  avgLeadTime30dDays: 3.6,
-  lateRateThisWeekPercent: 18.2,
-  statusBreakdown: [
-    { label: 'analytics.statusBreakdown.todo', count: 18 },
-    { label: 'analytics.statusBreakdown.inProgress', count: 12 },
-    { label: 'analytics.statusBreakdown.review', count: 6 },
-    { label: 'analytics.statusBreakdown.done', count: 64 },
-  ],
-  problemProgress: [
-    { title: 'オンボーディング改善', percent: 72 },
-    { title: 'モバイルUIリファイン', percent: 55 },
-    { title: '決済フロー安定化', percent: 88 },
-  ],
+/** ← モックは廃止。空状態はこの定数で表現します。 */
+const EMPTY_SUMMARY: AnalyticsSummary = {
+  completedTasks7d: 0,
+  avgLeadTime30dDays: 0,
+  lateRateThisWeekPercent: 0,
+  statusBreakdown: [],
+  problemProgress: [],
 };
 
-const MOCK_MY: PersonalAnalyticsSummary = {
+const EMPTY_MY: PersonalAnalyticsSummary = {
   completedTasks7d: 0,
   avgLeadTime30dDays: 0,
   lateRateThisWeekPercent: 0,
   statusBreakdown: [],
 };
+
+/** 受け取った Firestore 値を安全に整形（欠損・型違いを吸収） */
+function toNum(n: any, d = 0): number {
+  return Number.isFinite(n) ? Number(n) : d;
+}
+// ローカル型
+type StatusItem = { label: string; count: number };
+type ProgItem   = { title: string; percent: number };
+
+function coerceSummary(data: any): AnalyticsSummary {
+  const status = Array.isArray(data?.statusBreakdown) ? data.statusBreakdown : [];
+  const prog   = Array.isArray(data?.problemProgress) ? data.problemProgress : [];
+
+  const statusArr: StatusItem[] = (status as any[])
+    .map((e: any): StatusItem => ({ label: String(e?.label ?? ''), count: toNum(e?.count) }))
+    .filter((e: StatusItem) => e.label !== '');
+
+  const progArr: ProgItem[] = (prog as any[])
+    .map((p: any): ProgItem => ({ title: String(p?.title ?? ''), percent: toNum(p?.percent) }))
+    .filter((p: ProgItem) => p.title !== '');
+
+  return {
+    completedTasks7d: toNum(data?.completedTasks7d),
+    avgLeadTime30dDays: toNum(data?.avgLeadTime30dDays),
+    lateRateThisWeekPercent: toNum(data?.lateRateThisWeekPercent),
+    statusBreakdown: statusArr,
+    problemProgress: progArr,
+  };
+}
+
+function coerceMySummary(data: any): PersonalAnalyticsSummary {
+  const status = Array.isArray(data?.statusBreakdown) ? data.statusBreakdown : [];
+
+  const statusArr: StatusItem[] = (status as any[])
+    .map((e: any): StatusItem => ({ label: String(e?.label ?? ''), count: toNum(e?.count) }))
+    .filter((e: StatusItem) => e.label !== '');
+
+  return {
+    completedTasks7d: toNum(data?.completedTasks7d),
+    avgLeadTime30dDays: toNum(data?.avgLeadTime30dDays),
+    lateRateThisWeekPercent: toNum(data?.lateRateThisWeekPercent),
+    statusBreakdown: statusArr,
+  };
+}
+
 
 @Component({
   standalone: true,
@@ -71,14 +108,25 @@ export class AnalyticsPage {
 
   readonly projectId$: Observable<string | null> = this.currentProject.projectId$;
 
-  // プロジェクト全体サマリー（既存）
+  readonly projectName$: Observable<string | null> = this.projectId$.pipe(
+    switchMap(pid => {
+      if (!pid) return of<string | null>(null);
+      const ref = doc(this.firestore, `projects/${pid}`);
+      return docData(ref).pipe(
+        map((d: any) => (d?.meta?.name ?? d?.name ?? null) as string | null),
+        catchError(() => of<string | null>(null)),
+      );
+    })
+  );
+
+  /** プロジェクト全体サマリー（モックなし、空は EMPTY_*） */
   readonly summary$: Observable<AnalyticsSummary> = this.projectId$.pipe(
     switchMap(projectId => {
-      if (!projectId) return of(MOCK_SUMMARY);
+      if (!projectId) return of(EMPTY_SUMMARY);
       const summaryRef = doc(this.firestore, `projects/${projectId}/analytics/currentSummary`);
       return docData(summaryRef).pipe(
-        map((data): AnalyticsSummary => (data as AnalyticsSummary) ?? MOCK_SUMMARY),
-        catchError(() => of(MOCK_SUMMARY)),
+        map(data => (data ? coerceSummary(data) : EMPTY_SUMMARY)),
+        catchError(() => of(EMPTY_SUMMARY)),
       );
     }),
   );
@@ -90,17 +138,17 @@ export class AnalyticsPage {
     }),
   );
 
-  // 追加: ログインユーザー専用サマリー
+  /** ログインユーザー専用サマリー（モックなし） */
   readonly mySummary$: Observable<PersonalAnalyticsSummary> = combineLatest([
     this.projectId$,
     this.auth.uid$,
   ]).pipe(
     switchMap(([projectId, uid]) => {
-      if (!projectId || !uid) return of(MOCK_MY);
+      if (!projectId || !uid) return of(EMPTY_MY);
       const ref = doc(this.firestore, `projects/${projectId}/analyticsPerUser/${uid}`);
       return docData(ref).pipe(
-        map((data): PersonalAnalyticsSummary => (data as PersonalAnalyticsSummary) ?? MOCK_MY),
-        catchError(() => of(MOCK_MY)),
+        map(data => (data ? coerceMySummary(data) : EMPTY_MY)),
+        catchError(() => of(EMPTY_MY)),
       );
     }),
   );
@@ -130,3 +178,4 @@ export class AnalyticsPage {
     }
   }
 }
+

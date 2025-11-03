@@ -9,9 +9,14 @@
       </button>
     </div>
     <p class="page__subtitle">{{ 'analytics.subtitle' | translate }}</p>
-    <p class="page__project" *ngIf="projectId$ | async as projectId">
-      {{ 'analytics.projectContext' | translate: { id: projectId } }}
+    <p class="page__project" *ngIf="projectName$ | async as projectName; else idLine">
+      {{ 'reports.projectNameLine' | translate: { name: projectName } }}
     </p>
+    <ng-template #idLine>
+      <p class="page__project" *ngIf="projectId$ | async as projectId">
+        {{ 'analytics.projectContext' | translate: { id: projectId } }}
+      </p>
+    </ng-template>
   </header>
 
   <ng-container *ngIf="summary$ | async as summary">
