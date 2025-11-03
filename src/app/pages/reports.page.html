@@ -22,15 +22,8 @@
           {{ 'reports.actions.generateAi' | translate }}
         </button>
         <mat-menu #aiDraftMenu="matMenu">
-          <button mat-menu-item (click)="generateDraftBy('personal', 'daily')">
-            {{ 'reports.actions.ai.personalDaily' | translate }}
-          </button>
           <button mat-menu-item (click)="generateDraftBy('personal', 'weekly')">
             {{ 'reports.actions.ai.personalWeekly' | translate }}
-          </button>
-          <mat-divider></mat-divider>
-          <button mat-menu-item (click)="generateDraftBy('project', 'daily')">
-            {{ 'reports.actions.ai.projectDaily' | translate }}
           </button>
           <button mat-menu-item (click)="generateDraftBy('project', 'weekly')">
             {{ 'reports.actions.ai.projectWeekly' | translate }}

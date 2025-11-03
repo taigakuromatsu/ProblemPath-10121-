@@ -33,7 +33,7 @@ export interface ReportMetrics {
 export interface ReportEntry {
   id: string;
   title: string;
-  createdAt: Timestamp | string;
+  createdAt: Timestamp | string | null | undefined; // ← ここだけ変更
   body: string;
   metrics: ReportMetrics;
 }
@@ -262,6 +262,7 @@ export class ReportsPage {
         body: reportToSave.body,
         metrics: reportToSave.metrics,
         createdAt: serverTimestamp(),
+        createdAtClient: new Date().toISOString(),
       })
         .then(docRef => {
           console.log('saved!', docRef.id);
@@ -287,10 +288,28 @@ export class ReportsPage {
   }
 
   createdAtToDate(value: ReportEntry['createdAt']): Date {
+    // 未設定・null は epoch(1970) を返して安全に描画
+    if (!value) return new Date(0);
+  
+    // 文字列ならそのまま
     if (typeof value === 'string') {
-      return new Date(value);
+      const d = new Date(value);
+      return Number.isNaN(d.getTime()) ? new Date(0) : d;
     }
-    return value.toDate();
+  
+    // Firestore Timestamp あるいは toDate() を持つオブジェクト
+    const anyVal: any = value as any;
+    if (typeof anyVal?.toDate === 'function') {
+      try { return anyVal.toDate(); } catch { /* fallthrough */ }
+    }
+  
+    // { seconds, nanoseconds } 形式の素オブジェクトに対応
+    if (typeof anyVal?.seconds === 'number') {
+      return new Date(anyVal.seconds * 1000);
+    }
+  
+    // 最後の保険
+    return new Date(0);
   }
 
   private buildSummaryFromBody(body: string): string {

@@ -31,6 +31,10 @@ export type IssueSuggestInput = {
 
 export type IssueSuggestOutput = { suggestions: string[] };
 
+// Problem progress / Status の型
+type ProblemProgressItem = { title: string; percent: number };
+type StatusItem = { label: string; count: number };
+
 // ====== System prompts ======
 const SYSTEM_EN =
   `You generate concise, actionable issue titles for a Kanban/issue tracker. ` +
@@ -101,47 +105,44 @@ export class AiClient {
     });
 
     try {
-      // Vertex SDK の generateContent は { contents } 形式
       const resp = await model.generateContent({
         contents: [{ role: "user", parts: [{ text: prompt }] }] as any,
       });
 
-      // 応答本文（JSON 期待）
       const parts = (resp as any)?.response?.candidates?.[0]?.content?.parts ?? [];
       const text = parts.map((p: any) => (p?.text ?? "").trim()).filter(Boolean).join("\n");
 
-        // 追加: parts が複数ならそれをそのまま候補化（JSON不達時の強化）
-        if (Array.isArray(parts) && parts.length > 1) {
+      // JSON不達時の強化: parts が複数なら候補化
+      if (Array.isArray(parts) && parts.length > 1) {
         const fromParts = parts
-            .map((p: any) => (p?.text ?? "").trim())
-            .filter(Boolean);
+          .map((p: any) => (p?.text ?? "").trim())
+          .filter(Boolean);
         if (fromParts.length >= 3) {
-            return { suggestions: fromParts.slice(0, 7) };
+          return { suggestions: fromParts.slice(0, 7) };
         }
-        }
+      }
 
       // 1) JSON 優先
-        try {
-            const parsed = JSON.parse(text);
-            if (Array.isArray(parsed?.suggestions)) {
-            const arr = parsed.suggestions as unknown[];
-            const normalized = arr
-                .map(x => {
-                if (typeof x === "string") return x.trim();
-                if (x && typeof x === "object" && typeof (x as any).text === "string") {
-                    return String((x as any).text).trim();
-                }
-                return "";
-                })
-                .filter(Boolean);
-            if (normalized.length) {
-                return { suggestions: normalized.slice(0, 7) };
-            }
-            }
-        } catch {
-            /* JSON でなければ行分割へ */
+      try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray((parsed as any)?.suggestions)) {
+          const arr = (parsed as any).suggestions as unknown[];
+          const normalized = arr
+            .map((x) => {
+              if (typeof x === "string") return x.trim();
+              if (x && typeof x === "object" && typeof (x as any).text === "string") {
+                return String((x as any).text).trim();
+              }
+              return "";
+            })
+            .filter(Boolean);
+          if (normalized.length) {
+            return { suggestions: normalized.slice(0, 7) };
+          }
         }
-  
+      } catch {
+        /* JSON でなければ行分割へ */
+      }
 
       const suggestions = cleanLines(text).slice(0, 7);
       return { suggestions };
@@ -157,6 +158,7 @@ export class AiClient {
   }
 }
 
+// ===== レポート生成（週次固定） =====
 type ReportScope = "personal" | "project";
 type ReportPeriod = "daily" | "weekly";
 type ReportLang = "ja" | "en";
@@ -177,199 +179,306 @@ type GenerateProgressReportDraftResponse = {
 function toNumber(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
-
 function roundTo(value: number, digits: number): number {
   const factor = Math.pow(10, digits);
   return Math.round(value * factor) / factor;
 }
-
 function formatNumber(value: number): string {
-  if (!Number.isFinite(value)) {
-    return "0";
-  }
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+  if (!Number.isFinite(value as number)) return "0";
+  return Number.isInteger(value as number) ? String(value) : (value as number).toFixed(1);
 }
 
-function buildTitle(scope: ReportScope, period: ReportPeriod, lang: ReportLang): string {
-  const isPersonal = scope === "personal";
+// ---- JST週範囲（Mon–Sun）ユーティリティ ----
+const JST = "Asia/Tokyo";
+
+function ymdInTz(d: Date, tz: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d); // YYYY-MM-DD
+}
+function parseYmdToUtcDate(ymd: string): Date {
+  const [y, m, d] = ymd.split("-").map((s) => Number(s));
+  return new Date(Date.UTC(y, m - 1, d));
+}
+function getJstWeekRange(today: Date = new Date()): { startYmd: string; endYmd: string; display: string } {
+  const todayYmd = ymdInTz(today, JST);         // JST の YYYY-MM-DD
+  const todayUtc = parseYmdToUtcDate(todayYmd); // JST日付の 00:00Z
+  const dow = todayUtc.getUTCDay();             // 0=Sun
+  const diffFromMon = (dow + 6) % 7;            // Mon=0
+  const startUtc = new Date(todayUtc.getTime() - diffFromMon * 24 * 60 * 60 * 1000);
+  const endUtc   = new Date(startUtc.getTime() + 6 * 24 * 60 * 60 * 1000);
+  const start = ymdInTz(startUtc, JST).replace(/-/g, "/");
+  const end   = ymdInTz(endUtc,   JST).replace(/-/g, "/");
+  return { startYmd: start.replace(/\//g, "-"), endYmd: end.replace(/\//g, "-"), display: `${start}–${end}` };
+}
+
+// ---- タイトル（週次専用） ----
+function buildWeeklyTitle(scope: ReportScope, lang: ReportLang, rangeDisp: string): string {
   if (lang === "ja") {
-    if (isPersonal) {
-      return period === "daily" ? "個人タスク 日次レポート" : "個人タスク 週次レポート";
-    }
-    return period === "daily" ? "プロジェクト全体 日次レポート" : "プロジェクト全体 週次レポート";
+    return scope === "personal"
+      ? `個人タスク 週次レポート ${rangeDisp}`
+      : `プロジェクト全体 週次レポート ${rangeDisp}`;
   }
-
-  if (isPersonal) {
-    return period === "daily" ? "Personal Daily Summary" : "Personal Weekly Summary";
-  }
-  return period === "daily" ? "Project Daily Summary" : "Project Weekly Summary";
+  return scope === "personal"
+    ? `Personal Weekly Summary ${rangeDisp}`
+    : `Project Weekly Summary ${rangeDisp}`;
 }
 
-type BodyParams = {
-  scope: ReportScope;
-  period: ReportPeriod;
+// ---- ステータス内訳の表示整形 ----
+function formatStatusLine(items: StatusItem[], lang: ReportLang): string {
+  if (!Array.isArray(items) || !items.length) return lang === "ja" ? "（データなし）" : "(no data)";
+  // 例: 未着手: 12 / 対応中: 8 / 完了: 5 / others...
+  const parts = items.map((i: StatusItem) => `${i.label}: ${toNumber(i.count)}`);
+  return parts.join(" / ");
+}
+
+// ---- 週次本文（personal / project） ----
+type WeeklyPersonalParams = {
   lang: ReportLang;
+  rangeDisp: string;
   completedTasks7d: number;
   avgLeadTime30dDays: number;
   lateRateThisWeekPercent: number;
-  avgProgressPercent: number;
+  personalStatus: StatusItem[];
   topProblemTitle: string;
-  topProblemPercent: number;
+  avgProgressPercent: number;
 };
 
-function buildBody(params: BodyParams): string {
-  const {
-    scope,
-    period,
-    lang,
-    completedTasks7d,
-    avgLeadTime30dDays,
-    lateRateThisWeekPercent,
-    avgProgressPercent,
-    topProblemTitle,
-    topProblemPercent,
-  } = params;
+function buildWeeklyPersonalBody(p: WeeklyPersonalParams): string {
+  const L = p.lang;
+  const kpiLine =
+    L === "ja"
+      ? `完了(7日): ${p.completedTasks7d}件 / 平均対応日数(30日): ${formatNumber(p.avgLeadTime30dDays)}日 / 今週の遅延率: ${formatNumber(p.lateRateThisWeekPercent)}%`
+      : `Completed(7d): ${p.completedTasks7d} / Avg lead(30d): ${formatNumber(p.avgLeadTime30dDays)} days / Late rate: ${formatNumber(p.lateRateThisWeekPercent)}%`;
+  const statusLine = formatStatusLine(p.personalStatus, L);
 
-  const sentences: string[] = [];
+  const sections =
+    L === "ja"
+      ? [
+          `【概要】個人の週次サマリーです（集計期間: ${p.rangeDisp} / JST）。`,
+          `【今週の個人成果】${kpiLine}`,
+          `【自分のステータス内訳】${statusLine}`,
+          `【傾向・気づき】チーム重点「${p.topProblemTitle}」の平均進捗目安は${formatNumber(p.avgProgressPercent)}%。遅延率や対応日数の推移を踏まえ、来週は遅延低減と処理速度の改善に注力。`,
+          `【来週のフォーカス】（ここに具体的なタスク・OKRを記入）`,
+          `【期間注記】集計はJSTの週（Mon–Sun）基準です。`,
+        ]
+      : [
+          `【Overview】Weekly summary for your tasks (Range: ${p.rangeDisp}, JST).`,
+          `【My Results】${kpiLine}`,
+          `【My Status Breakdown】${statusLine}`,
+          `【Observations】Team focus "${p.topProblemTitle}" sits around ${formatNumber(p.avgProgressPercent)}% on average. Prioritize reducing lateness and improving lead time next week.`,
+          `【Next Week Focus】(Fill in concrete tasks/OKRs here)`,
+          `【Note】Week is based on Mon–Sun in JST.`,
+        ];
 
-  if (lang === "ja") {
-    sentences.push(
-      scope === "personal"
-        ? period === "daily"
-          ? "本日の個人タスクの振り返りです。"
-          : "今週の個人タスクの振り返りです。"
-        : period === "daily"
-        ? "本日のプロジェクト全体の状況です。"
-        : "今週のプロジェクト全体の状況です。"
-    );
-    sentences.push(`直近7日間の完了タスクは${completedTasks7d}件です。`);
-    sentences.push(`30日平均の対応日数は約${formatNumber(avgLeadTime30dDays)}日です。`);
-    sentences.push(`今週の遅延率は${formatNumber(lateRateThisWeekPercent)}%です。`);
-    sentences.push(
-      scope === "personal"
-        ? `チーム重点課題「${topProblemTitle}」は進捗${formatNumber(topProblemPercent)}%、平均進捗の目安は${formatNumber(avgProgressPercent)}%です。`
-        : `重点課題「${topProblemTitle}」は進捗${formatNumber(topProblemPercent)}%、平均進捗率は${formatNumber(avgProgressPercent)}%です。`
-    );
-    return sentences.join(" ");
-  }
-
-  sentences.push(
-    scope === "personal"
-      ? period === "daily"
-        ? "Daily snapshot for your tasks."
-        : "Weekly snapshot for your tasks."
-      : period === "daily"
-      ? "Daily overview for the project."
-      : "Weekly overview for the project."
-  );
-  sentences.push(`Completed tasks (last 7 days): ${completedTasks7d}.`);
-  sentences.push(`Average lead time (30-day avg): ${formatNumber(avgLeadTime30dDays)} days.`);
-  sentences.push(`Late rate this week: ${formatNumber(lateRateThisWeekPercent)}%.`);
-  sentences.push(
-    scope === "personal"
-      ? `Team focus "${topProblemTitle}" is ${formatNumber(topProblemPercent)}% complete; average progress sits around ${formatNumber(avgProgressPercent)}%.`
-      : `Key focus "${topProblemTitle}" is ${formatNumber(topProblemPercent)}% complete with an average progress of ${formatNumber(avgProgressPercent)}%.`
-  );
-  return sentences.join(" ");
+  return sections.join("\n");
 }
 
+type WeeklyProjectParams = {
+  lang: ReportLang;
+  rangeDisp: string;
+  completedTasks7d: number;
+  avgLeadTime30dDays: number;
+  lateRateThisWeekPercent: number;
+  projectStatus: StatusItem[];
+  topProblems: ProblemProgressItem[]; // Top3
+  avgProgressPercent: number;
+};
+
+function buildWeeklyProjectBody(p: WeeklyProjectParams): string {
+  const L = p.lang;
+  const kpiLine =
+    L === "ja"
+      ? `完了(7日): ${p.completedTasks7d}件 / 平均対応日数(30日): ${formatNumber(p.avgLeadTime30dDays)}日 / 今週の遅延率: ${formatNumber(p.lateRateThisWeekPercent)}%`
+      : `Completed(7d): ${p.completedTasks7d} / Avg lead(30d): ${formatNumber(p.avgLeadTime30dDays)} days / Late rate: ${formatNumber(p.lateRateThisWeekPercent)}%`;
+  const statusLine = formatStatusLine(p.projectStatus, L);
+
+  const top3 =
+    p.topProblems.length
+      ? p.topProblems
+          .slice(0, 3)
+          .map((tp, idx) => `${idx + 1}) ${tp.title}: ${formatNumber(tp.percent)}%`)
+          .join(" / ")
+      : (L === "ja" ? "（データなし）" : "(no data)");
+
+  const sections =
+    L === "ja"
+      ? [
+          `【概要】プロジェクト全体の週次サマリーです（集計期間: ${p.rangeDisp} / JST）。`,
+          `【主要KPI】${kpiLine}`,
+          `【Problem別平均進捗（上位3）】${top3}（平均: ${formatNumber(p.avgProgressPercent)}%）`,
+          `【ステータス内訳】${statusLine}`,
+          `【リスク・対応方針】遅延率と対応日数の動向を監視し、ボトルネック工程の改善・引継ぎ基準の明確化・レビュー間隔の短縮等で処理速度を最適化。`,
+          `【来週の重点】（ここにスプリント目標や重点イシューを記入）`,
+          `【期間注記】集計はJSTの週（Mon–Sun）基準です。`,
+        ]
+      : [
+          `【Overview】Weekly summary for the project (Range: ${p.rangeDisp}, JST).`,
+          `【Key KPIs】${kpiLine}`,
+          `【Top 3 Problems by Avg Progress】${top3} (Avg: ${formatNumber(p.avgProgressPercent)}%)`,
+          `【Status Breakdown】${statusLine}`,
+          `【Risks & Actions】Watch lateness and lead time; address bottlenecks, tighten handoff/review cadence, and streamline workflows.`,
+          `【Next Week Focus】(Fill in sprint goals and key issues here)`,
+          `【Note】Week is based on Mon–Sun in JST.`,
+        ];
+
+  return sections.join("\n");
+}
+
+// ======================================================
+// Callable: generateProgressReportDraft（週次のみ）
+// ======================================================
 export const generateProgressReportDraft = onCall<
   GenerateProgressReportDraftRequest,
   GenerateProgressReportDraftResponse
->(async (request: CallableRequest<GenerateProgressReportDraftRequest>) => {
-  const { projectId } = request.data ?? {};
-  if (!projectId) {
-    throw new HttpsError("invalid-argument", "projectId is required");
-  }
-
-  const scope: ReportScope = request.data?.scope === "personal" ? "personal" : "project";
-  const period: ReportPeriod = request.data?.period === "daily" ? "daily" : "weekly";
-  const lang: ReportLang = request.data?.lang === "en" ? "en" : "ja";
-
-  if (scope === "personal") {
-    const uid = request.auth?.uid;
-    if (!uid) {
-      throw new HttpsError("unauthenticated", "Authentication required for personal reports");
+>(
+  { region: "asia-northeast1" },
+  async (request: CallableRequest<GenerateProgressReportDraftRequest>) => {
+    const { projectId } = request.data ?? {};
+    if (!projectId) {
+      throw new HttpsError("invalid-argument", "projectId is required");
     }
+
+    const scope: ReportScope = request.data?.scope === "personal" ? "personal" : "project";
+    // UI は週次のみだが、念のため period 引数は週次に正規化
+    const period: ReportPeriod = "weekly";
+    const lang: ReportLang = request.data?.lang === "en" ? "en" : "ja";
+
+    if (scope === "personal") {
+      const uid = request.auth?.uid;
+      if (!uid) {
+        throw new HttpsError("unauthenticated", "Authentication required for personal reports");
+      }
+    }
+
+    const firestore = getFirestore();
+
+    // プロジェクト全体の集計
+    const summaryRef = firestore.doc(`projects/${projectId}/analytics/currentSummary`);
+    const summarySnap = await summaryRef.get();
+    if (!summarySnap.exists) {
+      throw new HttpsError("not-found", "Analytics summary not found");
+    }
+    const summary = summarySnap.data() ?? {};
+
+    // Problem progress 正規化 & Top3
+    const rawProgress: unknown[] = Array.isArray((summary as any).problemProgress)
+      ? ((summary as any).problemProgress as unknown[])
+      : [];
+    const normalizedProgress: ProblemProgressItem[] = rawProgress
+      .map((item: any): ProblemProgressItem => ({
+        title: typeof item?.title === "string" ? item.title : "",
+        percent: typeof item?.percent === "number" ? item.percent : 0,
+      }))
+      .filter((it: ProblemProgressItem) => it.title !== "" || it.percent > 0);
+    normalizedProgress.sort(
+      (a: ProblemProgressItem, b: ProblemProgressItem) => b.percent - a.percent
+    );
+    const fallbackTitle = lang === "ja" ? "重点課題" : "Key initiative";
+    const topProblems: ProblemProgressItem[] = normalizedProgress.slice(0, 3).map(
+      (p: ProblemProgressItem): ProblemProgressItem => ({
+        title: p.title || fallbackTitle,
+        percent: roundTo(toNumber(p.percent), 1),
+      })
+    );
+    const avgProgressPercent = normalizedProgress.length
+      ? Math.round(
+          normalizedProgress.reduce(
+            (total: number, cur: ProblemProgressItem) => total + toNumber(cur.percent),
+            0
+          ) / normalizedProgress.length
+        )
+      : 0;
+
+    // ステータス内訳（全体）
+    const projectStatusRaw: unknown[] = Array.isArray((summary as any).statusBreakdown)
+      ? ((summary as any).statusBreakdown as unknown[])
+      : [];
+    const projectStatus: StatusItem[] = projectStatusRaw
+      .map((x: any): StatusItem => ({
+        label: typeof x?.label === "string" ? x.label : "",
+        count: toNumber(x?.count),
+      }))
+      .filter((x: StatusItem) => x.label !== "");
+
+    // 主要KPI（全体）を初期値に
+    let completedTasks7d = Math.max(0, Math.round(toNumber((summary as any).completedTasks7d)));
+    let avgLeadTime30dDays = roundTo(toNumber((summary as any).avgLeadTime30dDays), 1);
+    let lateRateThisWeekPercent = roundTo(toNumber((summary as any).lateRateThisWeekPercent), 1);
+
+    // 個人用指標（必要時に上書き）
+    let personalStatus: StatusItem[] = [];
+    if (scope === "personal") {
+      const uid = request.auth!.uid as string;
+      const personalRef = firestore.doc(`projects/${projectId}/analyticsPerUser/${uid}`);
+      const personalSnap = await personalRef.get();
+      const personalData = personalSnap.exists ? personalSnap.data() ?? {} : {};
+
+      completedTasks7d = Math.max(0, Math.round(toNumber((personalData as any).completedTasks7d)));
+      avgLeadTime30dDays = roundTo(toNumber((personalData as any).avgLeadTime30dDays), 1);
+      lateRateThisWeekPercent = roundTo(toNumber((personalData as any).lateRateThisWeekPercent), 1);
+
+      const personalStatusRaw: unknown[] = Array.isArray((personalData as any).statusBreakdown)
+        ? ((personalData as any).statusBreakdown as unknown[])
+        : [];
+      personalStatus = personalStatusRaw
+        .map((x: any): StatusItem => ({
+          label: typeof x?.label === "string" ? x.label : "",
+          count: toNumber(x?.count),
+        }))
+        .filter((x: StatusItem) => x.label !== "");
+    }
+
+    // 週範囲（JST）
+    const { display: rangeDisp } = getJstWeekRange(new Date());
+
+    // タイトル & 本文
+    const topProblemTitle = (topProblems[0]?.title ?? fallbackTitle);
+    const title = buildWeeklyTitle(scope, lang, rangeDisp);
+
+    const body =
+      scope === "personal"
+        ? buildWeeklyPersonalBody({
+            lang,
+            rangeDisp,
+            completedTasks7d,
+            avgLeadTime30dDays,
+            lateRateThisWeekPercent,
+            personalStatus,
+            topProblemTitle,
+            avgProgressPercent,
+          })
+        : buildWeeklyProjectBody({
+            lang,
+            rangeDisp,
+            completedTasks7d,
+            avgLeadTime30dDays,
+            lateRateThisWeekPercent,
+            projectStatus,
+            topProblems,
+            avgProgressPercent,
+          });
+
+    const notes =
+      scope === "personal"
+        ? (lang === "ja" ? `チーム重点: ${topProblemTitle}` : `Team focus: ${topProblemTitle}`)
+        : topProblemTitle;
+
+    return {
+      title,
+      body,
+      metrics: {
+        completedTasks: completedTasks7d,
+        avgProgressPercent,
+        notes,
+      },
+    };
   }
+);
 
-  const firestore = getFirestore();
-  const summaryRef = firestore.doc(`projects/${projectId}/analytics/currentSummary`);
-  const summarySnap = await summaryRef.get();
-
-  if (!summarySnap.exists) {
-    throw new HttpsError("not-found", "Analytics summary not found");
-  }
-
-  const summary = summarySnap.data() ?? {};
-  const problemProgress = Array.isArray(summary.problemProgress) ? summary.problemProgress : [];
-
-  const normalizedProgress = problemProgress
-    .map((item: any) => ({
-      title: typeof item?.title === "string" ? item.title : "",
-      percent: typeof item?.percent === "number" ? item.percent : 0,
-    }))
-    .filter((item: { title: string; percent: number }) => item.title || item.percent);
-
-  const avgProgressPercent = normalizedProgress.length
-    ? Math.round(
-        normalizedProgress.reduce(
-          (total: number, current: { title: string; percent: number }) => total + current.percent,
-          0,
-        ) / normalizedProgress.length,
-      )
-    : 0;
-
-  const topProblem = normalizedProgress[0];
-  const fallbackTitle = lang === "ja" ? "重点課題" : "Key initiative";
-  const topProblemTitle = topProblem?.title || fallbackTitle;
-  const topProblemPercent = topProblem ? roundTo(toNumber(topProblem.percent), 1) : 0;
-
-  let completedTasks7d = Math.max(0, Math.round(toNumber(summary.completedTasks7d)));
-  let avgLeadTime30dDays = roundTo(toNumber(summary.avgLeadTime30dDays), 1);
-  let lateRateThisWeekPercent = roundTo(toNumber(summary.lateRateThisWeekPercent), 1);
-
-  if (scope === "personal") {
-    const uid = request.auth?.uid as string;
-    const personalRef = firestore.doc(`projects/${projectId}/analyticsPerUser/${uid}`);
-    const personalSnap = await personalRef.get();
-    const personalData = personalSnap.exists ? personalSnap.data() ?? {} : {};
-
-    completedTasks7d = Math.max(0, Math.round(toNumber(personalData.completedTasks7d)));
-    avgLeadTime30dDays = roundTo(toNumber(personalData.avgLeadTime30dDays), 1);
-    lateRateThisWeekPercent = roundTo(toNumber(personalData.lateRateThisWeekPercent), 1);
-  }
-
-  const title = buildTitle(scope, period, lang);
-  const body = buildBody({
-    scope,
-    period,
-    lang,
-    completedTasks7d,
-    avgLeadTime30dDays,
-    lateRateThisWeekPercent,
-    avgProgressPercent,
-    topProblemTitle,
-    topProblemPercent,
-  });
-
-  const notes =
-    scope === "personal"
-      ? lang === "ja"
-        ? `チーム重点: ${topProblemTitle}`
-        : `Team focus: ${topProblemTitle}`
-      : topProblemTitle;
-
-  return {
-    title,
-    body,
-    metrics: {
-      completedTasks: completedTasks7d,
-      avgProgressPercent,
-      notes,
-    },
-  };
-});
 
   
 
