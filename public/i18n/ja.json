@@ -58,8 +58,10 @@
   },
   "reports": {
     "title": "Reports / 進捗レポート",
-    "subtitle": "AI下書きや手動入力で週次・日次のレポートを管理します。",
+    "subtitle": "AI下書きや手動入力で週次・日次のレポートを管理します。レポートの編集・削除は、自分が作成したレポートのみ可能です。",
+    "subsubtitle": "週次レポート自動生成は分析ページのデータを元に作成され、個人タスクとプロジェクト全体の2種類から選択できます。",
     "projectContext": "現在のプロジェクト ID: {{id}}",
+    "projectNameLine": "現在のプロジェクト名: {{name}}",
     "actions": {
       "generateAi": "AI下書きを生成",
       "addManual": "手動レポートを追加",

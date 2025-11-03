@@ -10,6 +10,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatMenuModule } from '@angular/material/menu';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { docData } from '@angular/fire/firestore';
 import {
   addDoc,
   collection,
@@ -112,6 +113,9 @@ export class ReportsPage {
   /** 編集対象ID（nullなら新規作成） */
   private editingReportId: string | null = null;
 
+  /** AI/手動の一時メトリクス（手動フォーム保存時に利用） */
+  private pendingMetrics: ReportMetrics | null = null;
+
   private readonly firestoreReports$: Observable<ReportEntry[]> = this.projectId$.pipe(
     switchMap(projectId => {
       if (!projectId) return of(MOCK_REPORTS);
@@ -123,7 +127,6 @@ export class ReportsPage {
         }),
         catchError(() => of(MOCK_REPORTS)),
       );
-      
     }),
   );
 
@@ -169,22 +172,17 @@ export class ReportsPage {
       callable({ projectId, scope, period, lang: normalizedLang })
         .then(result => {
           const data = result.data;
-          const now = new Date();
-          this.activeReport = {
-            id: `draft-${now.getTime()}`,
-            title: data.title,
-            createdAt: now.toISOString(),
-            body: data.body,
-            metrics: data.metrics ?? {
-              completedTasks: 0,
-              avgProgressPercent: 0,
-              notes: this.buildSummaryFromBody(data.body),
-            },
-            scope,
-            lang: normalizedLang,
+
+          // ★ ここがポイント：AI下書きを手動フォームへ流し込む
+          this.manualFormOpen = true;
+          this.draftReport = { title: data.title, body: data.body };
+          this.pendingMetrics = data.metrics ?? {
+            completedTasks: 0,
+            avgProgressPercent: 0,
+            notes: this.buildSummaryFromBody(data.body),
           };
-          this.manualFormOpen = false;
           this.editingReportId = null;
+          // プレビューはそのまま（必要なら this.activeReport = null; にしてもOK）
         })
         .catch(error => console.warn('Failed to generate report draft', error));
     });
@@ -193,6 +191,7 @@ export class ReportsPage {
   addManualReport(): void {
     this.manualFormOpen = true;
     this.draftReport = { title: '', body: '' };
+    this.pendingMetrics = null;
     this.editingReportId = null;
     // 手動作成はデフォでプロジェクト/現在言語
     const currentLang = this.translate.currentLang || this.translate.defaultLang || 'ja';
@@ -203,6 +202,7 @@ export class ReportsPage {
   cancelManualReport(): void {
     this.manualFormOpen = false;
     this.draftReport = { title: '', body: '' };
+    this.pendingMetrics = null;
     this.editingReportId = null;
   }
 
@@ -210,6 +210,7 @@ export class ReportsPage {
   editReport(report: ReportEntry): void {
     this.manualFormOpen = true;
     this.draftReport = { title: report.title, body: report.body };
+    this.pendingMetrics = report.metrics ?? null;
     this.editingReportId = report.id;
     this.lastScope = report.scope ?? 'project';
     this.lastLang = report.lang ?? (this.translate.currentLang?.startsWith('en') ? 'en' : 'ja');
@@ -228,10 +229,11 @@ export class ReportsPage {
       avgProgressPercent: 0,
       notes: this.buildSummaryFromBody(manualBody),
     };
+    const metricsForManual = this.pendingMetrics ?? manualMetrics;
 
     const activeReport = this.activeReport;
     const reportToSave = useManualDraft
-      ? (manualTitle && manualBody ? { title: manualTitle, body: manualBody, metrics: manualMetrics } : null)
+      ? (manualTitle && manualBody ? { title: manualTitle, body: manualBody, metrics: metricsForManual } : null)
       : activeReport
         ? {
             title: activeReport.title,
@@ -264,6 +266,7 @@ export class ReportsPage {
             metrics: reportToSave.metrics,
             updatedAt: serverTimestamp(),
           } as any);
+
           this.activeReport = {
             id: this.editingReportId,
             title: reportToSave.title,
@@ -276,21 +279,22 @@ export class ReportsPage {
             lang: this.activeReport?.lang ?? this.lastLang,
           };
         } else {
-          // 新規保存（AI草案 or 手動）
-          const scope = useManualDraft ? 'project' : (this.lastScope ?? 'project');
-          const lang = useManualDraft ? normalizedLang : (this.lastLang ?? normalizedLang);
+          // 新規保存（AI草案をフォームから保存 or 完全手動）
+          const scope = this.lastScope ?? 'project';
+          const lang = this.lastLang ?? normalizedLang;
           const docRef = await addDoc(reportsRef, {
             title: reportToSave.title,
             body: reportToSave.body,
             metrics: reportToSave.metrics,
             createdAt: serverTimestamp(),
             createdAtClient: new Date().toISOString(),
-            // 追加メタ
+            // 保存メタ
             createdBy: uid ?? null,
             createdByName: displayName ?? null,
             scope,
             lang,
           } as any);
+
           const createdAt = new Date();
           this.activeReport = {
             id: docRef.id,
@@ -307,12 +311,24 @@ export class ReportsPage {
 
         this.manualFormOpen = false;
         this.draftReport = { title: '', body: '' };
+        this.pendingMetrics = null;
         this.editingReportId = null;
       } catch (error) {
         console.warn('saveReport failed', error);
       }
     });
   }
+
+  readonly projectName$ = this.projectId$.pipe(
+    switchMap(pid => {
+      if (!pid) return of<string | null>(null);
+      const ref = doc(this.firestore, `projects/${pid}`);
+      return docData(ref).pipe(
+        map((d: any) => (d?.meta?.name ?? d?.name ?? null) as string | null),
+        catchError(() => of<string | null>(null)),
+      );
+    })
+  );
 
   deleteReport(report: ReportEntry): void {
     if (!report?.id) return;
@@ -360,13 +376,13 @@ export class ReportsPage {
     const title = typeof raw?.title === 'string' ? raw.title : '(no title)';
     const body  = typeof raw?.body === 'string'  ? raw.body  : '';
     const m = raw?.metrics ?? {};
-  
+
     const metrics: ReportMetrics = {
       completedTasks: Number.isFinite(m?.completedTasks) ? m.completedTasks : 0,
       avgProgressPercent: Number.isFinite(m?.avgProgressPercent) ? m.avgProgressPercent : 0,
       notes: typeof m?.notes === 'string' ? m.notes : this.buildSummaryFromBody(body),
     };
-  
+
     return {
       id: String(raw?.id ?? ''),
       title,
@@ -379,18 +395,5 @@ export class ReportsPage {
       lang: raw?.lang,
     };
   }
-
-  // 追記：一覧アクションの可否判定（レガシー互換あり）
-canEdit(report: ReportEntry | null): boolean {
-  const uid = this.auth.currentUser?.uid;
-  if (!report || !uid) return false;
-  if (!report.id || report.id.startsWith('draft-')) return false;
-
-  // レガシー: createdBy が無い古いデータは一時的に編集可とする
-  if (!report.createdBy) return true;
-
-  return report.createdBy === uid;
 }
 
-  
-}

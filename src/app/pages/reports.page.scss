@@ -10,11 +10,20 @@
   gap: 8px;
 }
 
-.page__subtitle,
-.page__project {
+.page__subtitle {
   margin: 0;
   color: var(--pp-muted-fg, rgba(0, 0, 0, 0.56));
-  font-size: 0.95rem;
+}
+
+.page__subsubtitle {
+  margin: 0;
+  color: var(--pp-muted-fg, rgba(0, 0, 0, 0.56));
+}
+
+.page__project {
+  font-size: 1rem;
+  margin: 0;
+  color: var(--pp-muted-fg, rgb(0, 0, 0));
 }
 
 .reports-page__actions {
@@ -40,72 +49,45 @@
   justify-content: flex-end;
 }
 
-/* 2カラム（左:一覧 右:プレビュー）。狭い時は1カラムへ */
 .reports-page__content {
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(300px, 360px) 1fr;
-}
-@media (max-width: 960px) {
-  .reports-page__content {
-    grid-template-columns: 1fr;
-  }
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
-/* --- 一覧レイアウトの安定化（MDC List対応） --- */
-.reports-list .mat-mdc-list-item {
-  height: auto;
-  align-items: flex-start;
-}
-.reports-list .mdc-list-item__content {
+.reports-page__list-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   width: 100%;
-  min-width: 0; /* ← これが無いとellipsisが効かない */
 }
 
-.reports-list .item-title {
+.reports-page__list-item-title {
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: nowrap; /* タイトル1行で省略 */
 }
 
-.reports-list .item-meta {
-  display: flex;
+.reports-page__list-item-meta {
+  display: flex;               /* 1行で日付・作成者を表示 */
   align-items: center;
-  gap: 8px;
-  min-width: 0;
+  gap: 6px;
   font-size: 0.875rem;
   color: var(--pp-muted-fg, rgba(0, 0, 0, 0.56));
 }
-.reports-list .ellipsis {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.reports-list .dot { opacity: .6; }
 
-mat-nav-list a[activated] {
+.reports-page__list-item-meta .dot {
+  opacity: 0.4;
+}
+
+mat-nav-list a.active {
   background: rgba(63, 81, 181, 0.12);
-  border-radius: 8px;
 }
 
-/* プレビュー */
 .reports-page__preview-body {
   white-space: pre-wrap;
   line-height: 1.6;
-}
-.reports-page__preview-meta {
-  margin-top: 16px;
-}
-.reports-page__preview-meta h3 {
-  margin: 0 0 8px;
-  font-size: 1rem;
-}
-.reports-page__preview-meta ul {
-  margin: 0;
-  padding-left: 20px;
 }
 
 .muted {
