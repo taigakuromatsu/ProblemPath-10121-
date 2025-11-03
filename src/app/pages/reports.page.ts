@@ -8,7 +8,8 @@ import { MatListModule } from '@angular/material/list';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatDividerModule } from '@angular/material/divider';
-import { TranslateModule } from '@ngx-translate/core';
+import { MatMenuModule } from '@angular/material/menu';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   addDoc,
   collection,
@@ -87,6 +88,7 @@ const MOCK_REPORTS: ReportEntry[] = [
     MatFormFieldModule,
     MatInputModule,
     MatDividerModule,
+    MatMenuModule,
     TranslateModule,
   ],
 })
@@ -94,6 +96,7 @@ export class ReportsPage {
   private readonly currentProject = inject(CurrentProjectService);
   private readonly firestore = inject(Firestore);
   private readonly functions = inject(Functions);
+  private readonly translate = inject(TranslateService);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly projectId$: Observable<string | null> = this.currentProject.projectId$;
@@ -149,15 +152,27 @@ export class ReportsPage {
   }
 
   generateDraft(): void {
+    this.generateDraftBy('project', 'weekly');
+  }
+
+  generateDraftBy(scope: 'personal' | 'project', period: 'daily' | 'weekly'): void {
     this.projectId$.pipe(take(1)).subscribe(projectId => {
       // TODO: role check (viewerは不可)
       if (!projectId) {
-        console.warn('generateDraft: projectId is not available');
+        console.warn('generateDraftBy: projectId is not available');
         return;
       }
 
+      const currentLang = this.translate.currentLang || this.translate.defaultLang || 'ja';
+      const normalizedLang = currentLang.startsWith('en') ? 'en' : 'ja';
+
       const callable = httpsCallable<
-        { projectId: string },
+        {
+          projectId: string;
+          scope: 'personal' | 'project';
+          period: 'daily' | 'weekly';
+          lang: 'ja' | 'en';
+        },
         {
           title: string;
           body: string;
@@ -165,7 +180,7 @@ export class ReportsPage {
         }
       >(this.functions, 'generateProgressReportDraft');
 
-      callable({ projectId })
+      callable({ projectId, scope, period, lang: normalizedLang })
         .then(result => {
           const data = result.data;
           const now = new Date();
@@ -174,7 +189,12 @@ export class ReportsPage {
             title: data.title,
             createdAt: now.toISOString(),
             body: data.body,
-            metrics: data.metrics,
+            metrics:
+              data.metrics ?? {
+                completedTasks: 0,
+                avgProgressPercent: 0,
+                notes: this.buildSummaryFromBody(data.body),
+              },
           };
           // TODO: この草案はまだFirestoreに保存されていない一時データ。
           //       「保存」ボタンで projects/{projectId}/reports に書き込む予定。

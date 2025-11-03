@@ -40,6 +40,11 @@ service cloud.firestore {
         allow create, update, delete: if false;
       }
 
+      match /reports/{reportId} {
+        allow read: if isMember(projectId);
+        allow create, update, delete: if isEditor(projectId);
+      }
+
       // プロジェクト直下の読み取りはメンバーのみ
       allow read: if isMember(projectId);
 

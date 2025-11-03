@@ -62,7 +62,13 @@
     "projectContext": "Current project ID: {{id}}",
     "actions": {
       "generateAi": "Generate AI draft",
-      "addManual": "Add manual report"
+      "addManual": "Add manual report",
+      "ai": {
+        "personalDaily": "Personal — Daily report",
+        "personalWeekly": "Personal — Weekly report",
+        "projectDaily": "Project — Daily report",
+        "projectWeekly": "Project — Weekly report"
+      }
     },
     "form": {
       "titleLabel": "Title",
