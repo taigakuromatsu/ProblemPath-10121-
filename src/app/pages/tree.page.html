@@ -2,42 +2,49 @@
   <header class="page-header">
     <div class="page-titles">
       <h1 class="section-title section-title--info no-truncate">{{ 'tree.title' | translate }}</h1>
-      <p class="page-subtitle text-2line">課題の構造と進捗を一覧できます。</p>
+      <p class="page-subtitle text-2line">{{ 'tree.subtitle' | translate }}</p>
     </div>
   </header>
 
   <div class="kpi-grid" *ngIf="dash$ | async as d">
-    <article class="kpi-card" aria-label="全体の進捗">
+    <article class="kpi-card" aria-label="overall">
       <div class="kpi-card__header">
         <span class="kpi-card__icon" aria-hidden="true">📈</span>
-        <span class="kpi-card__title">全体の進捗</span>
+        <span class="kpi-card__title">{{ 'tree.kpi.overall' | translate }}</span>
       </div>
       <p class="kpi-card__value">{{ d.progressPct }}<span class="unit">%</span></p>
-      <p class="kpi-card__meta">{{ d.doneTotal }} / {{ d.openTotal + d.doneTotal }} 完了</p>
+      <p class="kpi-card__meta">
+        {{ 'tree.kpi.overallMeta' | translate:{ done: d.doneTotal, total: (d.openTotal + d.doneTotal) } }}
+      </p>
     </article>
-    <article class="kpi-card" aria-label="未完了タスク数">
+    
+    <article class="kpi-card" aria-label="open">
       <div class="kpi-card__header">
         <span class="kpi-card__icon" aria-hidden="true">🗂️</span>
-        <span class="kpi-card__title">未完了タスク数</span>
+        <span class="kpi-card__title">{{ 'tree.kpi.open' | translate }}</span>
       </div>
       <p class="kpi-card__value">{{ d.openTotal }}</p>
-      <p class="kpi-card__meta">未完了</p>
+      <p class="kpi-card__meta">{{ 'tree.open' | translate }}</p>
     </article>
-    <article class="kpi-card" aria-label="今週期限">
+    
+    <article class="kpi-card" aria-label="thisWeek">
       <div class="kpi-card__header">
         <span class="kpi-card__icon" aria-hidden="true">⏰</span>
-        <span class="kpi-card__title">今週期限</span>
+        <span class="kpi-card__title">{{ 'tree.kpi.thisWeek' | translate }}</span>
       </div>
       <p class="kpi-card__value">{{ d.today + d.thisWeek }}</p>
-      <p class="kpi-card__meta">今日 {{ d.today }} / 今週 {{ d.thisWeek }}</p>
+      <p class="kpi-card__meta">
+        {{ 'tree.kpi.todayAndWeek' | translate:{ today: d.today, week: d.thisWeek } }}
+      </p>
     </article>
-    <article class="kpi-card" aria-label="期限切れ">
+    
+    <article class="kpi-card" aria-label="overdue">
       <div class="kpi-card__header">
         <span class="kpi-card__icon" aria-hidden="true">⚠️</span>
-        <span class="kpi-card__title">期限切れ</span>
+        <span class="kpi-card__title">{{ 'tree.kpi.overdue' | translate }}</span>
       </div>
       <p class="kpi-card__value warning">{{ d.overdue }}</p>
-      <p class="kpi-card__meta">期限切れ {{ d.overdue }}</p>
+      <p class="kpi-card__meta">{{ 'tree.overdue' | translate }} {{ d.overdue }}</p>
     </article>
   </div>
 
@@ -45,7 +52,7 @@
     <div class="tree-layout">
       <mat-card class="tree-panel card-surface">
         <div class="panel-header sticky-header">
-          <h2 class="section-title section-title--info no-truncate">課題ツリー</h2>
+          <h2 class="section-title section-title--info no-truncate">{{ 'tree.treeTitle' | translate }}</h2>
           <button mat-stroked-button color="primary" type="button" (click)="retryProblems()" *ngIf="loadError">
             {{ 'common.retry' | translate }}
           </button>
@@ -129,42 +136,35 @@
                     </ng-template>
 
                       <!-- ▼ 追加: 優先度の表示＆変更（メニュー） -->
-                        <button
+                      <button
                         mat-stroked-button
                         type="button"
                         class="chip-button chip-priority"
                         [matMenuTriggerFor]="priorityMenu"
                         [disabled]="isBusyId(node.id) || !(canEdit$ | async)"
                         *ngIf="node.task"
-                        aria-label="優先度を変更"
+                        [attr.aria-label]="'priority.changeAria' | translate"
                       >
                         <mat-icon>flag</mat-icon>
-                        <span>{{ node.task?.priority || ('common.none' | translate) }}</span>
+                        <span>
+                          {{ (node.task?.priority ? ('priority.' + node.task.priority) : 'common.none') | translate }}
+                        </span>
                         <mat-icon>arrow_drop_down</mat-icon>
                       </button>
 
                       <!-- このメニューは各タスク行ごとにインスタンス化されます -->
                       <mat-menu #priorityMenu="matMenu">
-                        <button
-                          mat-menu-item
-                          (click)="setTaskPriority(node, 'high')"
-                          [disabled]="isBusyId(node.id) || !(canEdit$ | async)">
+                        <button mat-menu-item (click)="setTaskPriority(node, 'high')" [disabled]="isBusyId(node.id) || !(canEdit$ | async)">
                           <mat-icon>priority_high</mat-icon>
-                          <span>high</span>
+                          <span>{{ 'priority.high' | translate }}</span>
                         </button>
-                        <button
-                          mat-menu-item
-                          (click)="setTaskPriority(node, 'mid')"
-                          [disabled]="isBusyId(node.id) || !(canEdit$ | async)">
+                        <button mat-menu-item (click)="setTaskPriority(node, 'mid')" [disabled]="isBusyId(node.id) || !(canEdit$ | async)">
                           <mat-icon>flag</mat-icon>
-                          <span>mid</span>
+                          <span>{{ 'priority.mid' | translate }}</span>
                         </button>
-                        <button
-                          mat-menu-item
-                          (click)="setTaskPriority(node, 'low')"
-                          [disabled]="isBusyId(node.id) || !(canEdit$ | async)">
+                        <button mat-menu-item (click)="setTaskPriority(node, 'low')" [disabled]="isBusyId(node.id) || !(canEdit$ | async)">
                           <mat-icon>south</mat-icon>
-                          <span>low</span>
+                          <span>{{ 'priority.low' | translate }}</span>
                         </button>
                       </mat-menu>
                   </div>
@@ -199,7 +199,7 @@
                   [attr.aria-selected]="activeDetailTab === 'comments'"
                   [attr.tabindex]="activeDetailTab === 'comments' ? 0 : -1"
                   (click)="activeDetailTab = 'comments'">
-                  コメント
+                  {{ 'comment.title' | translate }}
                 </button>
                 <button
                   type="button"
@@ -209,7 +209,7 @@
                   [attr.aria-selected]="activeDetailTab === 'files'"
                   [attr.tabindex]="activeDetailTab === 'files' ? 0 : -1"
                   (click)="activeDetailTab = 'files'">
-                  ファイル
+                  {{ 'files.title' | translate }}
                 </button>
               </div>
             </header>
@@ -249,31 +249,52 @@
 
               <div class="detail-pane detail-pane--files" *ngSwitchCase="'files'">
                 <section class="attachments">
-                  <h3>📎 添付ファイル</h3>
+                  <h3>📎 {{ 'files.title' | translate }}</h3>
                   <div class="upload-bar">
-                    <input type="file" multiple accept="image/*,.pdf" (change)="onPickFiles($event)" [disabled]="uploadBusy || !(canEdit$ | async)" />
-                    <span class="muted" *ngIf="uploadBusy">アップロード中…</span>
+                    <label class="filepick"
+                          [class.is-disabled]="uploadBusy || !(canEdit$ | async)"
+                          [attr.aria-disabled]="uploadBusy || !(canEdit$ | async) ? 'true' : null">
+                      <!-- ネイティブ input は視覚的に隠す -->
+                      <input
+                        type="file"
+                        #fileInput
+                        multiple
+                        accept="image/*,.pdf"
+                        (change)="rememberPickedNames($event); onPickFiles($event)"
+                        [disabled]="uploadBusy || !(canEdit$ | async)"
+                      />
+                      <!-- 疑似ボタン：キーボード操作も可にする -->
+                      <span class="filepick__btn"
+                            tabindex="0"
+                            (keydown.enter)="fileInput.click()"
+                            (keydown.space)="fileInput.click(); $event.preventDefault()"
+                            [attr.aria-label]="'files.pick' | translate">
+                        {{ 'files.pick' | translate }}
+                      </span>
+                    </label>
+                  
+                    <!-- 選択ファイル名（先頭 + 件数）を任意表示 -->
+                    <span class="filepick__note" *ngIf="lastPickedNames?.length">
+                      {{ lastPickedNames[0] }}<ng-container *ngIf="lastPickedNames.length > 1">
+                        &nbsp;+{{ lastPickedNames.length - 1 }}
+                      </ng-container>
+                    </span>
+                  
+                    <span class="muted" *ngIf="uploadBusy">{{ 'files.uploading' | translate }}</span>
                   </div>
+                  
 
                   <div class="attachment-list" *ngIf="attachments$ | async as ats; else loadingAttachments">
-                    <div class="empty-state" *ngIf="!ats.length">（まだありません）</div>
+                    <div class="empty-state" *ngIf="!ats.length">{{ 'common.none' | translate }}</div>
                     <div class="attachment-item" *ngFor="let a of ats">
-                      <div class="thumb">
-                        <img *ngIf="a.downloadURL && a.contentType?.startsWith('image/')" [src]="a.downloadURL" alt="" />
-                        <span *ngIf="!a.contentType?.startsWith('image/')">📄</span>
-                      </div>
-                      <div class="details">
-                        <div class="name text-1line no-truncate">{{ a.name }}</div>
-                        <div class="meta">{{ a.contentType || 'binary' }} ・ {{ a.size | number }} bytes</div>
-                      </div>
                       <div class="attachment-actions">
-                        <a *ngIf="a.downloadURL" mat-stroked-button [href]="a.downloadURL" target="_blank" rel="noopener">開く</a>
-                        <button mat-button color="warn" type="button" (click)="removeAttachment(a)" [disabled]="!(canEdit$ | async)">削除</button>
+                        <a *ngIf="a.downloadURL" mat-stroked-button [href]="a.downloadURL" target="_blank" rel="noopener">{{ 'files.open' | translate }}</a>
+                        <button mat-button color="warn" type="button" (click)="removeAttachment(a)" [disabled]="!(canEdit$ | async)">{{ 'common.delete' | translate }}</button>
                       </div>
                     </div>
                   </div>
                   <ng-template #loadingAttachments>
-                    <div class="empty-state">読み込み中…</div>
+                    <div class="empty-state">{{ 'common.loading' | translate }}</div>
                   </ng-template>
                 </section>
               </div>

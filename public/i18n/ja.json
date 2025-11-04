@@ -3,7 +3,68 @@
     "title": "ホーム",
     "lead": "ここで 問題（Problem） を選んで、その配下の 課題（Issue） / タスク（Task） を編集します。",
     "needSignIn": "編集にはサインインが必要です。右上の「サインイン」からログインしてください。",
-    "viewOnlyHint": "閲覧は ツリー / ボード / スケジュール で可能です。"
+    "viewOnlyHint": "閲覧は ツリー / ボード / スケジュール で可能です。",
+    "notifications": {
+      "title": "最新通知",
+      "lead": "フォアグラウンドの通知履歴をチェックできます。",
+      "enabled": "有効",
+      "disabled": "未設定",
+      "error": "エラー",
+      "enableBtn": "通知を有効化",
+      "itemTitle": "通知",
+      "noneYet": "（まだありません）",
+      "enabledSnack": "通知を有効化しました",
+      "failedSnack": "通知の有効化に失敗しました"
+    },
+    "problemSelectTitle": "問題（Problem）を選択",
+    "problemSelectLead": "ここで選んだ Problem の配下を管理します。",
+    "problemSelectLabel": "Problem を選択",
+    "noProblemsYet": "まだ Problem がありません。「新規作成」から追加してください。",
+    "confirm": {
+      "deleteProblemAndChildren": "この Problem（配下の Issue と Task を含む）を削除しますか？"
+    }
+  },
+
+  "draft": {
+    "restoreIssueTitle": "Issue タイトルの下書きがあります。復元しますか？",
+    "restoreNewProblem": "未投稿の Problem 作成ドラフトがあります。復元しますか？",
+    "restoreEditProblem": "Problem 編集の下書きがあります。復元しますか？",
+    "restoreComment": "未投稿のコメント下書きが見つかりました。復元しますか？"
+  },
+  "attach": {
+    "confirm": {
+      "deleteFile": "「{{name}}」を削除しますか？"
+    }
+  },
+  "files": {
+    "title": "添付ファイル",
+    "uploading": "アップロード中…",
+    "open": "開く",
+    "pick": "ファイルを選択"
+  },
+  "priority": {
+    "changeAria": "優先度を変更",
+    "high": "高",
+    "mid": "中",
+    "low": "低"
+  },
+  "error": {
+    "offlineActionBlocked": "オフラインのため、この操作は実行できません。接続を確認してください。"
+  },
+  "toast": {
+    "deleted": "「{{name}}」を削除しました"
+  },
+  "validation": {
+    "titleRequired": "タイトルは必須です",
+    "phenomenonRequired": "現象は必須です",
+    "goalRequired": "目標は必須です",
+    "max": {
+      "title": "タイトルは{{n}}文字以内にしてください",
+      "phenomenon": "現象は{{n}}文字以内にしてください",
+      "cause": "原因は{{n}}文字以内にしてください",
+      "solution": "解決策は{{n}}文字以内にしてください",
+      "goal": "目標は{{n}}文字以内にしてください"
+    }
   },
   "auth": {
     "signedIn": "サインイン済み",
@@ -92,7 +153,8 @@
     }
   },
   "label": {
-    "problem": "問題"
+    "problem": "問題",
+    "tasks": "タスク"
   },
   "common": {
     "selectPrompt": "-- 選択してください --",
@@ -110,7 +172,12 @@
     "loading": "読み込み中…",
     "projectNotSelected": "プロジェクト未選択",
     "none": "（なし）",
-    "filter": "フィルター"
+    "filter": "フィルター",
+    "undo": "元に戻す",
+    "createNew": "新規作成",
+    "uploadDone": "アップロードしました",
+    "uploadFailed": "アップロードに失敗しました",
+    "deleteFailed": "削除に失敗しました"
   },
   "template": {
     "bug": "バグ/不具合",
@@ -134,7 +201,8 @@
   },
   "problemDef": {
     "edit": "問題定義を編集",
-    "title": "問題定義"
+    "title": "問題定義",
+    "lead": "選択中の課題の定義を確認します。"
   },
   "hint": {
     "phenomenon": "何が起きている？再現手順・ユーザー影響・発生率 など",
@@ -145,7 +213,8 @@
     "placeholderNewTitle": "新しい課題のタイトル",
     "add": "課題を追加",
     "noneYet": "（課題はまだありません）",
-    "loading": "課題を読み込み中…"
+    "loading": "課題を読み込み中…",
+    "lead": "課題とタスクをまとめて管理します。"
   },
   "link": {
     "title": "リンク",
@@ -161,7 +230,9 @@
     "editDue": "期限",
     "editTags": "タグ",
     "noneYet": "（タスクはまだありません）",
-    "duePlaceholder": "YYYY-MM-DD"
+    "duePlaceholder": "YYYY-MM-DD",
+    "promptDue": "期日 (YYYY-MM-DD、空で解除)",
+    "promptTags": "タグ（カンマ/スペース区切り）\n例: バグ, UI  または  バグ UI"
   },
   "recurrence": {
     "title": "繰り返しタスク機能",
@@ -169,7 +240,13 @@
     "freq": {
       "daily": "毎日",
       "weekly": "毎週",
-      "monthly": "毎月"
+      "monthly": "毎月",
+      "start": "開始",
+      "end": "終了",
+      "repeat": "繰り返し",
+      "everyDays": "{{n}}日ごと",
+      "everyWeeks": "{{n}}週ごと",
+      "everyMonths": "{{n}}か月ごと"
     },
     "interval": "間隔",
     "intervalSuffix": "ごと",
@@ -191,7 +268,8 @@
   "invite": {
     "byEmailTitle": "メールで招待",
     "createLink": "招待リンクを作成",
-    "helpText": "生成されたURLをメールで送ってください。相手は開いてログイン→「参加する」でメンバーになります。"
+    "helpText": "生成されたURLをメールで送ってください。相手は開いてログイン→「参加する」でメンバーになります。",
+    "lead": "メールでチームメンバーを招待します。"
   },
   "role": {
     "adminLabel": "管理者（admin）",
@@ -213,6 +291,16 @@
   },
   "tree": {
     "title": "ツリー",
+    "subtitle": "問題→課題→タスクの構造と簡単な進捗を一覧できます",
+    "treeTitle": "課題ツリー",
+    "kpi": {
+      "overall": "全体の進捗",
+      "open": "未完了タスク数",
+      "thisWeek": "今週期限",
+      "overdue": "期限切れ",
+      "overallMeta": "{{done}} / {{total}} 完了",
+      "todayAndWeek": "今日 {{today}} / 今週 {{week}}"
+    },
     "showDashboard": "ダッシュボードを表示",
     "hideDashboard": "ダッシュボードを隠す",
     "overallStatus": "全体の進捗",

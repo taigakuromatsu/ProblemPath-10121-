@@ -245,6 +245,8 @@
   color: var(--muted);
 }
 
+.date-field { min-width: 160px; }
+
 .task-form__recurrence-hint {
   margin-left: auto;               /* 右端に寄せる */
   min-width: 280px;
@@ -429,6 +431,79 @@
   }
   .section-actions, .actions { justify-content: flex-start; }
 }
+
+/* 既存の幅を少しタイトに */
+.date-field { min-width: 140px; }
+
+/* ===== Angular Material v17+（MDC）で効くCSS変数 ===== */
+.date-field--sm.mat-mdc-form-field {
+  /* 入力枠の高さ・上下パディング・文字サイズを圧縮 */
+  --mat-form-field-container-height: 36px;        /* ← デフォ56pxを36pxに */
+  --mat-form-field-container-vertical-padding: 30px;
+  --mat-form-field-container-text-size: 30px;
+  margin-top: 20px; /* 入力枠を少し下にずらす */
+}
+
+/* トグルアイコンも小さく */
+.date-field--sm .mat-mdc-form-field-icon-suffix {
+  display: flex;
+  align-items: center; /* アイコンを垂直方向に中央揃え */
+  align-self: flex-start; /* コンテナ自体を上に配置 */
+  margin-top: -2px; /* さらに少し上にずらす */
+}
+.date-field--sm .mat-mdc-form-field-icon-suffix .mat-mdc-icon-button {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  transform: translateY(-2px); /* アイコン自体も少し上にずらす */
+}
+.date-field--sm .mat-mdc-icon-button .mat-mdc-button-touch-target {
+  width: 40px;
+  height: 40px;
+}
+
+/* Materialのデフォルトスタイルを強制的にオーバーライド */
+:host ::ng-deep .date-field--sm .mat-mdc-form-field-icon-suffix {
+  display: flex !important;
+  align-items: center !important;
+  align-self: flex-start !important;
+  margin-top: 0px !important; /* アイコンを上にずらす */
+  position: relative !important;
+  top: -5px !important; /* さらに上にずらす */
+}
+
+:host ::ng-deep .date-field--sm .mat-mdc-form-field-icon-suffix .mat-mdc-icon-button {
+  width: 40px !important;
+  height: 40px !important;
+  padding: 0 !important;
+  transform: translateY(1px) !important; /* アイコン自体も上にずらす */
+  position: relative !important;
+}
+
+:host ::ng-deep .date-field--sm mat-datepicker-toggle {
+  display: flex !important;
+  align-items: center !important;
+  transform: translateY(1px) !important; /* 日付ピッカートグル全体を上にずらす */
+}
+
+
+
+/* ===== フォールバック（古いMDCや一部テーマ向け） ===== */
+:host ::ng-deep .date-field--sm .mdc-text-field {
+  min-height: 26px; height: 26px;
+}
+:host ::ng-deep .date-field--sm .mdc-text-field__input {
+  height: 36px; padding-top: 6px; padding-bottom: 6px; font-size: 13px;
+}
+:host ::ng-deep .date-field--sm .mat-mdc-form-field-infix {
+  padding-top: 0; padding-bottom: 0;
+}
+
+/* （任意）ポップアップカレンダーも少しコンパクトにしたいとき */
+:host ::ng-deep .mat-datepicker-content .mat-calendar {
+  font-size: 12px; /* 既定より一段小さく */
+}
+
 
 @media (max-width: 720px) {
   .home-page {

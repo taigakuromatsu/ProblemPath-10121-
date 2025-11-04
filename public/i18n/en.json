@@ -3,7 +3,68 @@
     "title": "Home",
     "lead": "Select a Problem and edit its child Issues / Tasks.",
     "needSignIn": "Sign-in is required to edit. Use the “Sign in” button above.",
-    "viewOnlyHint": "You can view via Tree / Board / Schedule."
+    "viewOnlyHint": "You can view via Tree / Board / Schedule.",
+    "notifications": {
+      "title": "Latest notifications",
+      "lead": "Check the history of foreground notifications.",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "error": "Error",
+      "enableBtn": "Enable notifications",
+      "itemTitle": "Notification",
+      "noneYet": "(No notifications yet)",
+      "enabledSnack": "Notifications enabled",
+      "failedSnack": "Failed to enable notifications"
+    },
+      "problemSelectTitle": "Select a Problem",
+      "problemSelectLead": "Manage Issues/Tasks under the selected Problem.",
+      "problemSelectLabel": "Select a Problem",
+      "noProblemsYet": "No Problems yet. Create one from “New”.",
+      "confirm": {
+        "deleteProblemAndChildren": "Delete this Problem and all its children (Issues/Tasks)?"
+      }
+  },
+
+  "draft": {
+    "restoreIssueTitle": "A draft for Issue title was found. Restore?",
+    "restoreNewProblem": "A draft for creating a Problem was found. Restore?",
+    "restoreEditProblem": "A draft for editing the Problem was found. Restore?",
+    "restoreComment": "A draft for a comment was found. Restore?"
+  },
+  "attach": {
+    "confirm": {
+      "deleteFile": "Delete \"{{name}}\"?"
+    }
+  },
+  "files": {
+    "title": "Attachments",
+    "pick": "Choose files",
+    "uploading": "Uploading…",
+    "open": "Open"
+  },
+  "priority": {
+    "changeAria": "Change priority",
+    "high": "High",
+    "mid": "Medium",
+    "low": "Low"
+  },
+  "error": {
+    "offlineActionBlocked": "You are offline. Please check your connection and try again."
+  },
+  "toast": {
+    "deleted": "Deleted “{{name}}”."
+  },
+  "validation": {
+    "titleRequired": "Title is required",
+    "phenomenonRequired": "Phenomenon is required",
+    "goalRequired": "Goal is required",
+    "max": {
+      "title": "Title must be at most {{n}} characters",
+      "phenomenon": "Phenomenon must be at most {{n}} characters",
+      "cause": "Cause must be at most {{n}} characters",
+      "solution": "Solution must be at most {{n}} characters",
+      "goal": "Goal must be at most {{n}} characters"
+    }
   },
   "auth": {
     "signedIn": "signed in",
@@ -92,7 +153,8 @@
     }
   },
   "label": {
-    "problem": "Problem"
+    "problem": "Problem",
+    "tasks": "Tasks"
   },
   "common": {
     "selectPrompt": "-- Please select --",
@@ -110,7 +172,12 @@
     "loading": "Loading…",
     "projectNotSelected": "Project is not selected",
     "none": "(None)",
-    "filter": "Filter"
+    "filter": "Filter",
+    "undo": "Undo",
+    "createNew": "New",
+    "uploadDone": "Uploaded",
+    "uploadFailed": "Upload failed",
+    "deleteFailed": "Delete failed"
   },
   "template": {
     "bug": "Bug/Issue",
@@ -134,7 +201,8 @@
   },
   "problemDef": {
     "edit": "Edit Problem Definition",
-    "title": "Problem Definition"
+    "title": "Problem Definition",
+    "lead": "Review the definition of the selected Problem."
   },
   "hint": {
     "phenomenon": "What happens? Repro steps, user impact, frequency, etc.",
@@ -145,7 +213,8 @@
     "placeholderNewTitle": "New issue title",
     "add": "Add Issue",
     "noneYet": "(No issues yet)",
-    "loading": "Loading issues..."
+    "loading": "Loading issues...",
+    "lead": "Manage Issues and Tasks together."
   },
   "link": {
     "title": "Links",
@@ -161,7 +230,9 @@
     "editDue": "Due",
     "editTags": "Tags",
     "noneYet": "(No tasks yet)",
-    "duePlaceholder": "YYYY-MM-DD"
+    "duePlaceholder": "MM/DD/YYYY",
+    "promptDue": "Due (YYYY-MM-DD, empty to clear)",
+    "promptTags": "Tags (comma/space separated)\nEx: bug, UI  or  bug UI"
   },
   "recurrence": {
     "title": "Recurrence Task Function",
@@ -169,7 +240,13 @@
     "freq": {
       "daily": "Daily",
       "weekly": "Weekly",
-      "monthly": "Monthly"
+      "monthly": "Monthly",
+      "start": "Start",
+      "end": "End",
+      "repeat": "Repeat",
+      "everyDays": "Every {{n}} day(s)",
+      "everyWeeks": "Every {{n}} week(s)",
+      "everyMonths": "Every {{n}} month(s)"
     },
     "interval": "Interval",
     "intervalSuffix": "apart",
@@ -191,7 +268,8 @@
   "invite": {
     "byEmailTitle": "Invite by Email",
     "createLink": "Create invite link",
-    "helpText": "Send the generated URL by email. The recipient opens it, signs in, and joins the project."
+    "helpText": "Send the generated URL by email. The recipient opens it, signs in, and joins the project.",
+    "lead": "Invite teammates by email."
   },
   "role": {
     "adminLabel": "admin",
@@ -213,6 +291,16 @@
   },
   "tree": {
     "title": "Tree",
+    "subtitle": "Problem → Issue → Task structure and simple progress",
+    "treeTitle": "Task Tree",
+    "kpi": {
+      "overall": "Overall progress",
+      "open": "Open tasks",
+      "thisWeek": "This week",
+      "overdue": "Overdue",
+      "overallMeta": "{{done}} / {{total}} done",
+      "todayAndWeek": "Today {{today}} / This week {{week}}"
+    },
     "showDashboard": "Show Dashboard",
     "hideDashboard": "Hide Dashboard",
     "overallStatus": "Overall Status",

@@ -1,8 +1,7 @@
-// src/app/pages/board.page.ts
 import { Component, DestroyRef } from '@angular/core';
 import { AsyncPipe, DatePipe, NgFor, NgIf, NgClass } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Observable, BehaviorSubject, of, combineLatest, firstValueFrom } from 'rxjs';
+import { Observable, BehaviorSubject, of, combineLatest, firstValueFrom, from } from 'rxjs';
 import { switchMap, shareReplay, take, tap, map, distinctUntilChanged } from 'rxjs/operators';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -11,7 +10,9 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
-import { MatMenuModule } from '@angular/material/menu'; // ← 追加
+import { MatMenuModule } from '@angular/material/menu';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { ProblemsService } from '../services/problems.service';
 import { IssuesService } from '../services/issues.service';
@@ -27,8 +28,13 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AuthService } from '../services/auth.service';
 import { MembersService } from '../services/members.service';
 import { NetworkService } from '../services/network.service';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+
+// メンバー名解決用（スケジュールと同等）
+import { Firestore } from '@angular/fire/firestore';
+import { collection, getDocs } from 'firebase/firestore';
+
+type MemberOption = { uid: string; label: string };
 
 @Component({
   standalone: true,
@@ -38,7 +44,8 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
     FormsModule,
     MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule, MatCardModule, MatChipsModule,
     DragDropModule, MatSnackBarModule, TranslateModule, MatDialogModule,
-    MatMenuModule, // ← 追加
+    MatMenuModule,
+    MatTooltipModule, // ← 追加（ツールチップ）
   ],
   templateUrl: './board.page.html',
   styleUrls: ['./board.page.scss']
@@ -50,7 +57,6 @@ export class BoardPage {
   private isRealTask(t: Task | null | undefined): t is Task {
     return !!t && (t as any).recurrenceTemplate !== true;
   }
-
 
   readonly categoryAccent: Record<BoardColumn['categoryHint'], string> = {
     not_started: '#9ca3af',
@@ -69,16 +75,23 @@ export class BoardPage {
     return this.columnTotals.get(columnId) ?? 0;
   }
 
+  // 権限/オンライン
   isEditor$!: Observable<boolean>;
   isOnline$!: Observable<boolean>;
   canEdit$!: Observable<boolean>;
 
+  // busy
   busyTaskIds = new Set<string>();
   isBusy(id: string | undefined | null): boolean { return !!id && this.busyTaskIds.has(id); }
 
+  // タスク購読
   tasksMap: Record<string, Observable<Task[]>> = {};
   private taskCountSubs = new Map<string, import('rxjs').Subscription>();
   private tasksSnapshot: Record<string, Task[]> = {};
+
+  // ツールチップ用メンバーディレクトリ
+  memberOptions$!: Observable<MemberOption[]>;
+  memberDirectory$!: Observable<Record<string, string>>;
 
   constructor(
     private problems: ProblemsService,
@@ -95,6 +108,7 @@ export class BoardPage {
     private snack: MatSnackBar,
     private tr: TranslateService,
     private dialog: MatDialog,
+    private fs: Firestore, // ← 追加
   ) {
     this.isEditor$ = this.members.isEditor$;
     this.isOnline$ = this.network.isOnline$;
@@ -229,10 +243,12 @@ export class BoardPage {
   allowDnD = false;
 
   ngOnInit() {
+    // プロジェクト/問題
     this.problems$ = this.currentProject.projectId$.pipe(
       switchMap(pid => (pid && pid !== 'default') ? this.problems.list(pid) : of([]))
     );
 
+    // 列の購読
     this.currentProject.projectId$
       .pipe(
         switchMap(pid =>
@@ -244,12 +260,9 @@ export class BoardPage {
       )
       .subscribe(cols => {
         console.log('[BoardPage] received columns =', cols);
-
-        // デバッグ用ログ（直近のpid確認）
         this.currentProject.projectId$.pipe(take(1)).subscribe(latestPid => {
           console.log('[BoardPage] latestPid =', latestPid);
         });
-
         this.columns = cols;
         this.resetColumnTotals();
         this.recalcTotals();
@@ -259,6 +272,7 @@ export class BoardPage {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(v => this.allowDnD = !!v);
 
+    // Issue → Task ストリーム
     this.issues$ = this.selectedProblem$.pipe(
       distinctUntilChanged(),
       switchMap(problemId => this.currentProject.projectId$.pipe(
@@ -267,6 +281,7 @@ export class BoardPage {
       ))
     );
 
+    // URLパラメータ
     this.route.queryParamMap
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(m => {
@@ -274,6 +289,37 @@ export class BoardPage {
         this.selectedProblemId = pid;
         this.selectedProblem$.next(pid);
       });
+
+    // ▼ 担当者名ディレクトリ（スケジュールと同様のロジック）
+    this.memberOptions$ = this.currentProject.projectId$.pipe(
+      switchMap(pid => {
+        if (!pid || pid === 'default') return of<MemberOption[]>([]);
+        const col = collection(this.fs as any, `projects/${pid}/members`);
+        return from(getDocs(col)).pipe(
+          map(snapshot =>
+            snapshot.docs.map(docSnap => {
+              const d: any = docSnap.data();
+              return {
+                uid: docSnap.id,
+                label: d?.displayName || d?.email || docSnap.id,
+              } as MemberOption;
+            })
+          ),
+          // Firestore失敗時は空配列
+          map(list => list ?? []),
+        );
+      }),
+      shareReplay({ bufferSize: 1, refCount: true })
+    );
+
+    this.memberDirectory$ = this.memberOptions$.pipe(
+      map(list => {
+        const dir: Record<string, string> = {};
+        for (const m of list) dir[m.uid] = m.label;
+        return dir;
+      }),
+      shareReplay({ bufferSize: 1, refCount: true })
+    );
   }
 
   onSelectProblem(problemId: string | null) {
@@ -304,7 +350,6 @@ export class BoardPage {
       if (!this.tasksMap[k]) {
         this.tasksMap[k] = this.currentProject.projectId$.pipe(
           switchMap(pid => (pid && pid !== 'default') ? this.tasks.listByIssue(pid, problemId, i.id!) : of([])),
-          // ← ここでテンプレートを除外
           map(rows => (rows ?? []).filter(t => this.isRealTask(t))),
           shareReplay(1)
         );
@@ -448,7 +493,7 @@ export class BoardPage {
     });
   }
 
-  // 優先度更新ボタン（low/mid/high 選択用）
+  // 優先度更新
   async setTaskPriority(
     problemId: string,
     issueId: string,
@@ -459,7 +504,7 @@ export class BoardPage {
     if (!t.id || this.isBusy(t.id)) return;
 
     const prevPriority = t.priority;
-    t.priority = newPriority; // 楽観的にUIを先に更新
+    t.priority = newPriority;
 
     this.busyTaskIds.add(t.id);
     this.withPid(async pid => {
@@ -469,7 +514,6 @@ export class BoardPage {
         });
       } catch (e) {
         console.error(e);
-        // 失敗したらロールバック
         t.priority = prevPriority;
         this.snack.open(this.tr.instant('board.err.update'), 'OK', { duration: 3000 });
       } finally {
@@ -646,13 +690,11 @@ export class BoardPage {
   }
 
   currentColumnTitle(t: Task): string {
-    // 1) タスクが覚えている boardColumnId 優先
-    const colId = this.columnIdForTask(t); // 既存のヘルパーで安全に列IDを求める
+    const colId = this.columnIdForTask(t);
     const col = this.columnById(colId);
     if (col) {
-      return this.columnTitle(col); // ユーザーが付けた列名 (review / waiting 等)
+      return this.columnTitle(col);
     }
-    // 2) 見つからなければカテゴリからフォールバック
     return this.tr.instant(`board.col.${this.bucket(t.status)}`);
   }
 
@@ -662,14 +704,19 @@ export class BoardPage {
     t: Task,
     col: BoardColumn
   ) {
-    // 編集権限とオンラインチェック
     if (!(await this.requireCanEdit())) return;
     if (!t.id || this.isBusy(t.id)) return;
-
-    // その列の columnId をそのまま渡して、既存ロジックで更新
     await this.setTaskStatus(problemId, issueId, t, col.columnId);
   }
 
+  /** 担当者ツールチップ用：UID配列→表示名のCSV */
+  assigneesTooltip(uids: string[] | null | undefined, dir: Record<string, string> | null | undefined): string {
+    const xs = Array.isArray(uids) ? uids : [];
+    if (!xs.length) return '';
+    const map = dir ?? {};
+    return xs.map(u => map[u] ?? u).join(', ');
+  }
 }
+
 
 

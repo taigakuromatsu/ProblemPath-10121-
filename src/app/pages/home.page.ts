@@ -32,6 +32,9 @@ import { MatDividerModule } from '@angular/material/divider';
 import { AiService } from '../services/ai.service';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AiIssueSuggestComponent } from '../components/ai-issue-suggest.component';
+import { MatInputModule } from '@angular/material/input';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatNativeDateModule, DateAdapter } from '@angular/material/core';
 
 // ---- このページ専用の拡張型 ----
 type ProblemWithDef = Problem & {
@@ -53,7 +56,7 @@ type EditProblemField = 'phenomenon' | 'cause' | 'solution' | 'goal';
     RouterLink, AsyncPipe, NgFor, NgIf, JsonPipe, DatePipe, CommonModule, FormsModule,
     MatButtonModule, MatSelectModule, MatFormFieldModule, MatIconModule, 
     MatCardModule, MatChipsModule, MatSnackBarModule, TranslateModule,
-    MatDividerModule, AiIssueSuggestComponent
+    MatDividerModule, AiIssueSuggestComponent, MatInputModule, MatDatepickerModule, MatNativeDateModule
   ],
   templateUrl: './home.page.html',
   styleUrls: ['./home.page.scss']
@@ -97,8 +100,6 @@ export class HomePage implements OnInit, OnDestroy {
   // --- FCM 状態（users/{uid}/fcmStatus/app） ---
   fcmStatus$!: Observable<{ enabled?: boolean; lastTokenSavedAt?: any; lastError?: string } | null>;
 
-
-
   constructor(
     public prefs: PrefsService,
     private theme: ThemeService,
@@ -117,6 +118,7 @@ export class HomePage implements OnInit, OnDestroy {
     private fs: Firestore,
     private i18n: TranslateService,
     private ai: AiService,
+    private dateAdapter: DateAdapter<Date>
   ) {
     this.isOnline$ = this.network.isOnline$;
     this.canEdit$ = combineLatest([this.members.isEditor$, this.network.isOnline$]).pipe(
@@ -124,7 +126,7 @@ export class HomePage implements OnInit, OnDestroy {
     );
   }
 
-  /** 翻訳キーが未登録の時に fallback を返す */
+  /** 翻訳キーが未登録の時に fallback を返す（テンプレ用） */
   t(key: string, fallback: string): string {
     const v = this.i18n.instant(key);
     return v === key ? fallback : v;
@@ -132,6 +134,7 @@ export class HomePage implements OnInit, OnDestroy {
 
   onLangChange(next: 'ja' | 'en') {
     this.prefs.update({ lang: next });
+    this.dateAdapter.setLocale(next === 'en' ? 'en-US' : 'ja-JP');
   }
 
   lang: 'ja' | 'en' = 'ja';
@@ -139,12 +142,14 @@ export class HomePage implements OnInit, OnDestroy {
   themeMode: 'light' | 'dark' | 'system' = 'system';
 
   async ngOnInit() {
-    // テーマ反映
+    // テーマと言語
     this.prefs.prefs$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(p => {
         this.themeMode = (p?.theme ?? 'system') as any;
         this.lang = (p?.lang === 'en' ? 'en' : 'ja');
+        document.documentElement.setAttribute('lang', this.lang === 'en' ? 'en-US' : 'ja-JP');
+        this.dateAdapter.setLocale(this.lang === 'en' ? 'en-US' : 'ja-JP');
       });
 
     // サインアウト時の掃除
@@ -181,7 +186,7 @@ export class HomePage implements OnInit, OnDestroy {
       )
     );
 
-    // Issue → Task購読 + ドラフト復元 + Link UI 初期化
+    // Issue → Task購読 + ドラフト復元
     this.issues$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(issues => {
@@ -216,10 +221,31 @@ export class HomePage implements OnInit, OnDestroy {
       this.fgMessages = [{ title: n?.title, body: n?.body }, ...this.fgMessages].slice(0, 20);
     });
 
-    // FCM 状態の購読（enabled / lastError など） — AngularFireの doc() を使用（警告回避）
+    // FCM 状態
     this.fcmStatus$ = this.auth.uid$.pipe(
       switchMap(uid => uid ? docData(doc(this.fs, `users/${uid}/fcmStatus/app`)) : of(null))
     ) as any;
+  }
+
+  // HomePage クラス内のどこかに追加
+  toDate(s?: string | null): Date | null {
+    if (!s) return null;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+    if (!m) return null;
+    return new Date(+m[1], +m[2] - 1, +m[3]);
+  }
+  toYmd(d?: Date | null): string {
+    if (!d) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+  onDuePicked(issueId: string, date: Date | null) {
+    this.taskDueDate[issueId] = date ? this.toYmd(date) : '';
+  }
+  onRecurEndPicked(issueId: string, date: Date | null) {
+    this.taskRecurrenceEndDate[issueId] = date ? this.toYmd(date) : '';
   }
 
   // 通知の権限リクエスト → トークン取得 → Firestore 保存
@@ -227,10 +253,10 @@ export class HomePage implements OnInit, OnDestroy {
     try {
       const t = await this.msg.requestPermissionAndGetToken();
       this.fcmToken = t; // UIは出さないが状態保持のみ
-      this.snack.open('通知を有効化しました', undefined, { duration: 2000 });
+      this.snack.open(this.i18n.instant('home.notifications.enabledSnack'), undefined, { duration: 2000 });
     } catch (e: any) {
       console.error('[FCM] permission/token error', e);
-      this.snack.open('通知の有効化に失敗しました', undefined, { duration: 2500 });
+      this.snack.open(this.i18n.instant('home.notifications.failedSnack'), undefined, { duration: 2500 });
     }
   }
 
@@ -249,7 +275,7 @@ export class HomePage implements OnInit, OnDestroy {
     if (!(await this.requireOnline())) return;
     if (!this.inviteEmail.trim()) return;
     const pid = this.currentProject.getSync();
-    if (!pid) { alert('プロジェクト未選択'); return; }
+    if (!pid) { alert(this.i18n.instant('common.projectNotSelected')); return; }
     this.isCreatingInvite = true;
     try {
       const url = await this.invites.create(pid, this.inviteEmail.trim(), this.inviteRole);
@@ -300,7 +326,7 @@ export class HomePage implements OnInit, OnDestroy {
     if (key) {
       const rec = this.drafts.get<string>(key);
       if (rec && !this.issueTitle) {
-        const ok = confirm('Issue タイトルの下書きがあります。復元しますか？');
+        const ok = confirm(this.i18n.instant('draft.restoreIssueTitle'));
         if (ok) this.issueTitle = rec.value || '';
       }
     }
@@ -310,7 +336,7 @@ export class HomePage implements OnInit, OnDestroy {
   private withPid(run: (pid: string) => void) {
     this.currentProject.projectId$.pipe(take(1)).subscribe(pid => {
       if (!pid || pid === 'default') {
-        alert('プロジェクト未選択');
+        alert(this.i18n.instant('common.projectNotSelected'));
         return;
       }
       run(pid);
@@ -321,7 +347,7 @@ export class HomePage implements OnInit, OnDestroy {
   private async requireOnline(): Promise<boolean> {
     const online = await firstValueFrom(this.isOnline$);
     if (!online) {
-      alert('オフラインのため、この操作は実行できません。接続を確認してください。');
+      alert(this.i18n.instant('error.offlineActionBlocked'));
       return false;
     }
     return true;
@@ -345,14 +371,14 @@ export class HomePage implements OnInit, OnDestroy {
   async renameSelected() {
     if (!this.selectedProblemId) return;
     if (!(await this.requireOnline())) return;
-    const t = prompt('New Problem title');
+    const t = prompt(this.i18n.instant('tree.prompt.renameProblem'));
     if (!t?.trim()) return;
     this.withPid(pid => this.problems.update(pid, this.selectedProblemId!, { title: t.trim() }));
   }
   async removeSelected() {
     if (!this.selectedProblemId) return;
     if (!(await this.requireOnline())) return;
-    if (!confirm('Delete this Problem (and all children)?')) return;
+    if (!confirm(this.i18n.instant('home.confirm.deleteProblemAndChildren'))) return;
     const problemId = this.selectedProblemId!;
     this.withPid(async pid => {
       await this.softDeleteWithUndo('problem', { projectId: pid, problemId }, '(Problem)');
@@ -374,13 +400,13 @@ export class HomePage implements OnInit, OnDestroy {
   }
   async renameIssue(problemId: string, i: Issue) {
     if (!(await this.requireOnline())) return;
-    const t = prompt('New Issue title', i.title);
+    const t = prompt(this.i18n.instant('tree.prompt.renameIssue'), i.title);
     if (!t?.trim()) return;
     this.withPid(pid => this.issues.update(pid, problemId, i.id!, { title: t.trim() }));
   }
   async removeIssue(problemId: string, i: Issue) {
     if (!(await this.requireOnline())) return;
-    if (!confirm(`Delete Issue "${i.title}"?`)) return;
+    if (!confirm(this.i18n.instant('tree.confirm.deleteIssue', { name: i.title }))) return;
     this.withPid(async pid => {
       await this.softDeleteWithUndo('issue', { projectId: pid, problemId, issueId: i.id! }, i.title);
     });
@@ -442,13 +468,10 @@ export class HomePage implements OnInit, OnDestroy {
     }
 
     this.withPid(async pid => {
-            // 1) 親テンプレ保存
-            await this.tasks.create(pid, problemId, issueId, payload);
-            // 2) 初回ぶんを即時に1件だけ明示作成（CFとは競合しない）
-            if (recurrenceEnabled && dueRaw) {
-              await this.tasks.create(pid, problemId, issueId, { title: t, dueDate: dueRaw });
-            }
-            // 3) 入力欄リセット
+      await this.tasks.create(pid, problemId, issueId, payload);
+      if (recurrenceEnabled && dueRaw) {
+        await this.tasks.create(pid, problemId, issueId, { title: t, dueDate: dueRaw });
+      }
       this.taskTitle[issueId] = '';
       this.taskDueDate[issueId] = '';
       this.taskRecurrenceEnabled[issueId] = false;
@@ -467,19 +490,21 @@ export class HomePage implements OnInit, OnDestroy {
       if (!this.taskRecurrenceFreq[issueId]) this.taskRecurrenceFreq[issueId] = 'WEEKLY';
     }
   }
+
   async renameTask(problemId: string, issueId: string, task: Task) {
     if (!(await this.requireOnline())) return;
-    const t = prompt('New Task title', task.title);
+    const t = prompt(this.i18n.instant('tree.prompt.renameTask'), task.title);
     if (!t?.trim()) return;
     this.withPid(pid => this.tasks.update(pid, problemId, issueId, task.id!, { title: t.trim() }));
   }
+
   async removeTask(problemId: string, issueId: string, t: Task) {
     if (!(await this.requireOnline())) return;
     if (t.recurrenceTemplate) {
       alert(this.t('recurrence.stopHint', '繰り返しテンプレートは停止後に削除できます'));
       return;
     }
-    if (!confirm(`Delete Task "${t.title}"?`)) return;
+    if (!confirm(this.i18n.instant('tree.confirm.deleteTask', { name: t.title }))) return;
     this.withPid(async pid => {
       await this.softDeleteWithUndo('task', { projectId: pid, problemId, issueId, taskId: t.id! }, t.title);
     });
@@ -493,7 +518,7 @@ export class HomePage implements OnInit, OnDestroy {
       return;
     }
     const cur = t.dueDate ?? '';
-    const nxt = prompt('Due (YYYY-MM-DD、空で解除)', cur ?? '');
+    const nxt = prompt(this.i18n.instant('task.promptDue'), cur ?? '');
     if (nxt === null) return;
     const dueDate = (nxt.trim() === '') ? null : nxt.trim();
     if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
@@ -502,6 +527,7 @@ export class HomePage implements OnInit, OnDestroy {
     }
     this.withPid(pid => this.tasks.update(pid, problemId, issueId, t.id!, { dueDate }));
   }
+
   async editTaskTags(problemId: string, issueId: string, t: Task) {
     if (!(await this.requireOnline())) return;
     if (t.recurrenceTemplate) {
@@ -509,33 +535,31 @@ export class HomePage implements OnInit, OnDestroy {
       return;
     }
     const current = (t.tags ?? []).join(', ');
-    const input = prompt('Tags (カンマ/スペース区切り)\n例: バグ, UI  または  バグ UI', current ?? '');
+    const input = prompt(this.i18n.instant('task.promptTags'), current ?? '');
     if (input == null) return;
     const tags = input.split(/[, \s]+/).map(s => s.replace(/^#/, '').trim()).filter(Boolean);
     this.withPid(pid => this.tasks.update(pid, problemId, issueId, t.id!, { tags }));
   }
 
-  // 置き換え：HomePage クラス内
-async stopRecurrence(problemId: string, issueId: string, task: Task) {
-  if (!(await this.requireOnline())) return;
-  if (!task?.id) return;
+  // 繰り返し停止（テンプレ削除）
+  async stopRecurrence(problemId: string, issueId: string, task: Task) {
+    if (!(await this.requireOnline())) return;
+    if (!task?.id) return;
 
-  // 文言は必要なら i18n に載せ替えOK
-  const ok = confirm(this.t(
-    'recurrence.stopAndDeleteConfirm',
-    '繰り返しを停止し、テンプレートを削除します。既存のタスクは残ります。'
-  ));
-  if (!ok) return;
+    const ok = confirm(this.t(
+      'recurrence.stopAndDeleteConfirm',
+      '繰り返しを停止し、テンプレートを削除します。既存のタスクは残ります。'
+    ));
+    if (!ok) return;
 
-  // 停止＝テンプレートを削除（ソフトデリート、Undo可）
-  this.withPid(async pid => {
-    await this.softDeleteWithUndo(
-      'task',
-      { projectId: pid, problemId, issueId, taskId: task.id! },
-      task.title || '(template)'
-    );
-  });
-}
+    this.withPid(async pid => {
+      await this.softDeleteWithUndo(
+        'task',
+        { projectId: pid, problemId, issueId, taskId: task.id! },
+        task.title || '(template)'
+      );
+    });
+  }
 
   // --- Problem 作成/編集ドラフト: キー関数 ---
   private draftKeyNewProblem(): string | null {
@@ -567,16 +591,13 @@ async stopRecurrence(problemId: string, issueId: string, task: Task) {
     }, 600);
   }
 
-  // → リンク機能は廃止
-  
-  /** 共通：ソフトデリート → Undo 5秒 */
+  /** 共通：ソフトデリート → Undo 5秒（トースト文言i18n） */
   private async softDeleteWithUndo(
     kind: 'problem'|'issue'|'task',
     path: { projectId: string; problemId?: string; issueId?: string; taskId?: string },
     title: string
   ){
     const uid = await firstValueFrom(this.auth.uid$);
-
     const patch = { softDeleted: true, deletedAt: serverTimestamp(), updatedBy: uid || '' } as any;
 
     if (kind === 'problem') {
@@ -587,7 +608,11 @@ async stopRecurrence(problemId: string, issueId: string, task: Task) {
       await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, patch);
     }
 
-    const ref = this.snack.open(`「${title}」を削除しました`, '元に戻す', { duration: 5000 });
+    const ref = this.snack.open(
+      this.i18n.instant('toast.deleted', { name: title }),
+      this.i18n.instant('common.undo'),
+      { duration: 5000 }
+    );
     ref.onAction().subscribe(async () => {
       const unpatch = { softDeleted: false, deletedAt: null, updatedBy: uid || '' } as any;
       if (kind === 'problem') {
@@ -641,7 +666,7 @@ async stopRecurrence(problemId: string, issueId: string, task: Task) {
     if (key) {
       const rec = this.drafts.get<string>(key);
       if (rec) {
-        const ok = confirm('未投稿の Problem 作成ドラフトがあります。復元しますか？');
+        const ok = confirm(this.i18n.instant('draft.restoreNewProblem'));
         if (ok) {
           try { this.newProblem = { ...this.newProblem, ...JSON.parse(rec.value || '{}') }; } catch {}
         }
@@ -653,25 +678,25 @@ async stopRecurrence(problemId: string, issueId: string, task: Task) {
     this.newProblem = { title: '', phenomenon: '', cause: '', solution: '', goal: '', template: 'bug' };
   }
 
-  // 作成保存
+  // 作成保存（バリデーション文言 i18n）
   async createProblemWithDefinition() {
     if (!(await this.requireOnline())) return;
 
     const p = this.newProblem;
     const errs: string[] = [];
-    if (!p.title.trim()) errs.push('タイトルは必須です');
-    if (!p.phenomenon.trim()) errs.push('現象は必須です');
-    if (!p.goal.trim()) errs.push('目標は必須です');
+    if (!p.title.trim()) errs.push(this.i18n.instant('validation.titleRequired'));
+    if (!p.phenomenon.trim()) errs.push(this.i18n.instant('validation.phenomenonRequired'));
+    if (!p.goal.trim()) errs.push(this.i18n.instant('validation.goalRequired'));
     const over = (s: string, n: number) => s && s.length > n;
-    if (over(p.title, 200)) errs.push('タイトルは200文字以内にしてください');
-    if (over(p.phenomenon, 1000)) errs.push('現象は1000文字以内にしてください');
-    if (over(p.cause, 1000)) errs.push('原因は1000文字以内にしてください');
-    if (over(p.solution, 1000)) errs.push('解決策は1000文字以内にしてください');
-    if (over(p.goal, 500)) errs.push('目標は500文字以内にしてください');
+    if (over(p.title, 200)) errs.push(this.i18n.instant('validation.max.title', { n: 200 }));
+    if (over(p.phenomenon, 1000)) errs.push(this.i18n.instant('validation.max.phenomenon', { n: 1000 }));
+    if (over(p.cause, 1000)) errs.push(this.i18n.instant('validation.max.cause', { n: 1000 }));
+    if (over(p.solution, 1000)) errs.push(this.i18n.instant('validation.max.solution', { n: 1000 }));
+    if (over(p.goal, 500)) errs.push(this.i18n.instant('validation.max.goal', { n: 500 }));
     if (errs.length) { alert(errs.join('\n')); return; }
 
     const pid = this.currentProject.getSync();
-    if (!pid) { alert('プロジェクト未選択'); return; }
+    if (!pid) { alert(this.i18n.instant('common.projectNotSelected')); return; }
 
     const uid = await firstValueFrom(this.auth.uid$);
     const payload: any = {
@@ -724,7 +749,7 @@ async stopRecurrence(problemId: string, issueId: string, task: Task) {
     if (key) {
       const rec = this.drafts.get<string>(key);
       if (rec) {
-        const ok = confirm('Problem 編集の下書きがあります。復元しますか？');
+        const ok = confirm(this.i18n.instant('draft.restoreEditProblem'));
         if (ok) {
           try { this.editProblem = { ...this.editProblem, ...JSON.parse(rec.value || '{}') }; } catch {}
         }
@@ -733,22 +758,22 @@ async stopRecurrence(problemId: string, issueId: string, task: Task) {
   }
   closeEditProblemDialog() { this.editProblemOpen = false; }
 
-  // 編集保存
+  // 編集保存（バリデーション文言 i18n）
   async saveEditedProblemDef() {
     if (!(await this.requireOnline())) return;
 
     const pid = this.currentProject.getSync();
-    if (!pid || !this.selectedProblemId) { alert('プロジェクト/Problem未選択'); return; }
+    if (!pid || !this.selectedProblemId) { alert(this.i18n.instant('common.projectNotSelected')); return; }
 
     const d = this.editProblem;
     const errs: string[] = [];
-    if (!d.phenomenon.trim()) errs.push('現象は必須です');
-    if (!d.goal.trim()) errs.push('目標は必須です');
+    if (!d.phenomenon.trim()) errs.push(this.i18n.instant('validation.phenomenonRequired'));
+    if (!d.goal.trim()) errs.push(this.i18n.instant('validation.goalRequired'));
     const over = (s: string, n: number) => s && s.length > n;
-    if (over(d.phenomenon, 1000)) errs.push('現象は1000文字以内にしてください');
-    if (over(d.cause, 1000)) errs.push('原因は1000文字以内にしてください');
-    if (over(d.solution, 1000)) errs.push('解決策は1000文字以内にしてください');
-    if (over(d.goal, 500)) errs.push('目標は500文字以内にしてください');
+    if (over(d.phenomenon, 1000)) errs.push(this.i18n.instant('validation.max.phenomenon', { n: 1000 }));
+    if (over(d.cause, 1000)) errs.push(this.i18n.instant('validation.max.cause', { n: 1000 }));
+    if (over(d.solution, 1000)) errs.push(this.i18n.instant('validation.max.solution', { n: 1000 }));
+    if (over(d.goal, 500)) errs.push(this.i18n.instant('validation.max.goal', { n: 500 }));
     if (errs.length) { alert(errs.join('\n')); return; }
 
     const uid = await firstValueFrom(this.auth.uid$);
@@ -782,8 +807,8 @@ async stopRecurrence(problemId: string, issueId: string, task: Task) {
 
     this.fgSub?.unsubscribe();
   }
-
 }
+
 
 
 

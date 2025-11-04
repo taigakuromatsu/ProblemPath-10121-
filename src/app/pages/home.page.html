@@ -9,23 +9,24 @@
       <div class="section-header">
         <div>
           <h2 class="section-title section-title--info no-truncate">
-            <mat-icon aria-hidden="true">notifications</mat-icon> {{ t('home.notifications.title','最新通知') }}
+            <mat-icon aria-hidden="true">notifications</mat-icon>
+            {{ 'home.notifications.title' | translate }}
           </h2>
-          <p class="section-subtitle text-2line">{{ t('home.notifications.lead','フォアグラウンドの通知履歴をチェックできます。') }}</p>
+          <p class="section-subtitle text-2line">{{ 'home.notifications.lead' | translate }}</p>
         </div>
 
         <div class="section-actions">
           <ng-container *ngIf="fcmStatus$ | async as s">
             <span class="chip" [class.chip--ok]="s?.enabled === true" [class.chip--ng]="s?.enabled === false">
-              {{ s?.enabled ? t('home.notifications.enabled','有効') : t('home.notifications.disabled','未設定') }}
+              {{ s?.enabled ? ('home.notifications.enabled' | translate) : ('home.notifications.disabled' | translate) }}
             </span>
             <span class="chip chip--warn" *ngIf="s?.lastError">
-              {{ t('home.notifications.error','エラー') }}: {{ s.lastError }}
+              {{ 'home.notifications.error' | translate }}: {{ s.lastError }}
             </span>
           </ng-container>
 
           <button mat-raised-button color="primary" type="button" (click)="askNotificationPermission()">
-            {{ t('home.notifications.enableBtn','通知を有効化') }}
+            {{ 'home.notifications.enableBtn' | translate }}
           </button>
         </div>
       </div>
@@ -35,12 +36,12 @@
       <div class="section-body">
         <div class="notification-list" *ngIf="fgMessages.length > 0; else noMessages">
           <div class="notification-item" *ngFor="let m of fgMessages">
-            <strong class="no-truncate">{{ m.title || t('home.notifications.itemTitle','通知') }}</strong>
+            <strong class="no-truncate">{{ m.title || ('home.notifications.itemTitle' | translate) }}</strong>
             <span class="muted">{{ m.body || '' }}</span>
           </div>
         </div>
         <ng-template #noMessages>
-          <div class="empty-state">（まだありません）</div>
+          <div class="empty-state">{{ 'home.notifications.noneYet' | translate }}</div>
         </ng-template>
       </div>
     </mat-card>
@@ -68,7 +69,7 @@
               <h2 class="section-title section-title--info no-truncate">
                 <mat-icon aria-hidden="true">person_add</mat-icon> {{ 'invite.byEmailTitle' | translate }}
               </h2>
-              <p class="section-subtitle">メールでチームメンバーを招待します。</p>
+              <p class="section-subtitle">{{ 'invite.lead' | translate }}</p>
             </div>
           </div>
 
@@ -165,25 +166,27 @@
         <div class="section-header problem-card__header">
           <div>
             <h2 class="section-title section-title--info no-truncate">
-              <mat-icon aria-hidden="true">topic</mat-icon> 問題（Problem）を選択
+              <mat-icon aria-hidden="true">topic</mat-icon> {{ 'home.problemSelectTitle' | translate }}
             </h2>
-            <p class="section-subtitle text-2line">ここで選んだ Problem の配下を管理します。</p>
+            <p class="section-subtitle text-2line">{{ 'home.problemSelectLead' | translate }}</p>
           </div>
           <div class="section-actions">
-            <button mat-stroked-button type="button" (click)="openNewProblemDialog()" [disabled]="!(canEdit$ | async)">＋ 新規作成</button>
+            <button mat-stroked-button type="button" (click)="openNewProblemDialog()" [disabled]="!(canEdit$ | async)">
+              ＋ {{ 'common.createNew' | translate }}
+            </button>
           </div>
         </div>
 
         <div class="section-body problem-card__section">
           <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Problem を選択</mat-label>
+            <mat-label>{{ 'home.problemSelectLabel' | translate }}</mat-label>
             <mat-select [ngModel]="selectedProblemId" (ngModelChange)="onSelectProblem($event)">
-              <mat-option [value]="NEW_OPTION_VALUE">＋ 新規作成…</mat-option>
+              <mat-option [value]="NEW_OPTION_VALUE">＋ {{ 'common.createNewEllipsis' | translate }}</mat-option>
               <mat-option *ngFor="let p of (problems$ | async)" [value]="p.id">{{ p.title }}</mat-option>
             </mat-select>
             <mat-icon matSuffix>expand_more</mat-icon>
           </mat-form-field>
-          <p class="empty-state" *ngIf="!(problems$ | async)?.length">まだ Problem がありません。「新規作成」から追加してください。</p>
+          <p class="empty-state" *ngIf="!(problems$ | async)?.length">{{ 'home.noProblemsYet' | translate }}</p>
         </div>
 
         <ng-container *ngIf="selectedProblemId as pid">
@@ -195,7 +198,7 @@
                 <h3 class="section-title section-title--info no-truncate">
                   <mat-icon aria-hidden="true">assignment</mat-icon> {{ 'problemDef.title' | translate }}
                 </h3>
-                <p class="section-subtitle text-2line">選択中の課題の定義を確認します。</p>
+                <p class="section-subtitle text-2line">{{ 'problemDef.lead' | translate }}</p>
               </div>
 
               <ng-container *ngIf="members.isEditor$ | async">
@@ -240,7 +243,7 @@
                 <h3 class="section-title section-title--info no-truncate">
                   <mat-icon aria-hidden="true">playlist_add_check</mat-icon> {{ 'issue.listTitle' | translate }}
                 </h3>
-                <p class="section-subtitle text-2line">課題とタスクをまとめて管理します。</p>
+                <p class="section-subtitle text-2line">{{ 'issue.lead' | translate }}</p>
               </div>
             </div>
 
@@ -273,18 +276,24 @@
 
                     <!-- → リンク機能は廃止 -->
 
-
                     <section class="issue-tasks">
                       <header class="tasks-header">
                         <h4 class="section-title section-title--info no-truncate">
-                          <mat-icon aria-hidden="true">checklist</mat-icon> タスク
+                          <mat-icon aria-hidden="true">checklist</mat-icon> {{ 'label.tasks' | translate }}
                         </h4>
                       </header>
 
                       <form class="task-form" *ngIf="members.isEditor$ | async" (ngSubmit)="createTask(pid, i.id!)">
                         <div class="task-form__row">
                           <input [(ngModel)]="taskTitle[i.id!]" name="taskTitle-{{ i.id }}" [placeholder]="'task.placeholderNewTitle' | translate" required (ngModelChange)="onTaskTitleChange(i.id!, taskTitle[i.id!])" />
-                          <input type="date" [(ngModel)]="taskDueDate[i.id!]" name="taskDueDate-{{ i.id }}" [attr.placeholder]="t('task.duePlaceholder','YYYY-MM-DD')" />
+                          <mat-form-field appearance="outline" class="date-field date-field--sm">
+                            <input matInput [matDatepicker]="duePicker"
+                                   [value]="taskDueDate[i.id!] ? toDate(taskDueDate[i.id!]) : null"
+                                   (dateChange)="onDuePicked(i.id!, $event.value)"
+                                   [placeholder]="'task.duePlaceholder' | translate">
+                            <mat-datepicker-toggle matSuffix [for]="duePicker"></mat-datepicker-toggle>
+                            <mat-datepicker #duePicker></mat-datepicker>
+                          </mat-form-field>
                           <button mat-stroked-button type="submit" [disabled]="!(canEdit$ | async)">＋ {{ 'task.add' | translate }}</button>
                         </div>
                         <div class="task-form__recurrence">
@@ -307,12 +316,18 @@
                               <span class="task-form__recurrence-suffix">{{ 'recurrence.intervalSuffix' | translate }}</span>
                             </span>
                             <span class="task-form__recurrence-field">
-                                  <label>{{ 'recurrence.endDate' | translate }}</label>
-                                  <input type="date" [(ngModel)]="taskRecurrenceEndDate[i.id!]" name="taskRecurrenceEndDate-{{ i.id }}" />
-                                </span>
-                                <span class="task-form__recurrence-hint">
-                                  {{ 'recurrence.hintShort' | translate }}
-                                </span>
+                              <label>{{ 'recurrence.endDate' | translate }}</label>
+                              <mat-form-field appearance="outline" class="date-field date-field--sm">
+                                <input matInput [matDatepicker]="endPicker"
+                                       [value]="taskRecurrenceEndDate[i.id!] ? toDate(taskRecurrenceEndDate[i.id!]) : null"
+                                       (dateChange)="onRecurEndPicked(i.id!, $event.value)">
+                                <mat-datepicker-toggle matSuffix [for]="endPicker"></mat-datepicker-toggle>
+                                <mat-datepicker #endPicker></mat-datepicker>
+                              </mat-form-field>
+                            </span>
+                            <span class="task-form__recurrence-hint">
+                              {{ 'recurrence.hintShort' | translate }}
+                            </span>
                           </div>
                         </div>
                       </form>
@@ -326,18 +341,17 @@
                             </div>
                             <!-- テンプレの設定を見える化 -->
                             <div class="task-recur-meta" *ngIf="t.recurrenceTemplate">
-                                <small>
-                                  開始: {{ t.recurrenceAnchorDate || '—' }}
-                                  <span *ngIf="t.recurrenceEndDate"> / 終了: {{ t.recurrenceEndDate }}</span>
-                                  /
-                                  繰り返し:
-                                  <ng-container [ngSwitch]="t.recurrenceRule?.freq">
-                                    <span *ngSwitchCase="'DAILY'">{{ t.recurrenceRule?.interval || 1 }}日ごと</span>
-                                    <span *ngSwitchCase="'WEEKLY'">{{ t.recurrenceRule?.interval || 1 }}週ごと</span>
-                                    <span *ngSwitchCase="'MONTHLY'">{{ t.recurrenceRule?.interval || 1 }}か月ごと</span>
-                                  </ng-container>
-                                </small>
-                              </div>
+                              <small>
+                                {{ 'recurrence.start' | translate }}: {{ t.recurrenceAnchorDate || '—' }}
+                                <span *ngIf="t.recurrenceEndDate"> / {{ 'recurrence.end' | translate }}: {{ t.recurrenceEndDate }}</span>
+                                / {{ 'recurrence.repeat' | translate }}:
+                                <ng-container [ngSwitch]="t.recurrenceRule?.freq">
+                                  <span *ngSwitchCase="'DAILY'">{{ 'recurrence.everyDays' | translate:{ n: (t.recurrenceRule?.interval || 1) } }}</span>
+                                  <span *ngSwitchCase="'WEEKLY'">{{ 'recurrence.everyWeeks' | translate:{ n: (t.recurrenceRule?.interval || 1) } }}</span>
+                                  <span *ngSwitchCase="'MONTHLY'">{{ 'recurrence.everyMonths' | translate:{ n: (t.recurrenceRule?.interval || 1) } }}</span>
+                                </ng-container>
+                              </small>
+                            </div>
                             <span class="task-meta" *ngIf="t.dueDate">{{ 'task.dueShort' | translate:{ date: t.dueDate } }}</span>
                             <span class="task-tags">
                               <ng-container *ngIf="(t.tags?.length ?? 0) > 0; else noTags">
@@ -467,4 +481,5 @@
     </mat-card>
   </ng-template>
 </section>
+
 

@@ -62,219 +62,221 @@
         >
           <section
             class="board-column board-list"
-          [ngClass]="col.columnId"
-          *ngFor="let col of columns; trackBy: trackColumn"
-          [style.--col-accent]="accentFor(col)"
-          cdkDrag
-          [cdkDragData]="col"
-          [cdkDragDisabled]="!(canEdit$ | async)"
-        >
-          <header class="column-header" [ngClass]="col.columnId">
-            <div class="column-header__main">
-              <button
-                mat-icon-button
-                type="button"
-                class="column-header__drag"
-                cdkDragHandle
-                [disabled]="!(canEdit$ | async)"
-                aria-label="列を並べ替え"
-              >
-                <mat-icon>drag_indicator</mat-icon>
-              </button>
-              <div class="column-title text-1line no-truncate">{{ columnTitle(col) }}</div>
-            </div>
-            <div class="column-header__actions">
-              <span class="column-count count-badge">{{ totalFor(col.columnId) }}</span>
-              <button
-                mat-icon-button
-                type="button"
-                (click)="onEditColumn(col)"
-                [disabled]="!(canEdit$ | async)"
-                aria-label="列を編集"
-              >
-                <mat-icon>edit</mat-icon>
-              </button>
-              <button
-                mat-icon-button
-                type="button"
-                (click)="onDeleteColumn(col)"
-                [disabled]="!(canEdit$ | async)"
-                aria-label="列を削除"
-              >
-                <mat-icon>delete</mat-icon>
-              </button>
-            </div>
-          </header>
+            [ngClass]="col.columnId"
+            *ngFor="let col of columns; trackBy: trackColumn"
+            [style.--col-accent]="accentFor(col)"
+            cdkDrag
+            [cdkDragData]="col"
+            [cdkDragDisabled]="!(canEdit$ | async)"
+          >
+            <header class="column-header" [ngClass]="col.columnId">
+              <div class="column-header__main">
+                <button
+                  mat-icon-button
+                  type="button"
+                  class="column-header__drag"
+                  cdkDragHandle
+                  [disabled]="!(canEdit$ | async)"
+                  aria-label="列を並べ替え"
+                >
+                  <mat-icon>drag_indicator</mat-icon>
+                </button>
+                <div class="column-title text-1line no-truncate">{{ columnTitle(col) }}</div>
+              </div>
+              <div class="column-header__actions">
+                <span class="column-count count-badge">{{ totalFor(col.columnId) }}</span>
+                <button
+                  mat-icon-button
+                  type="button"
+                  (click)="onEditColumn(col)"
+                  [disabled]="!(canEdit$ | async)"
+                  aria-label="列を編集"
+                >
+                  <mat-icon>edit</mat-icon>
+                </button>
+                <button
+                  mat-icon-button
+                  type="button"
+                  (click)="onDeleteColumn(col)"
+                  [disabled]="!(canEdit$ | async)"
+                  aria-label="列を削除"
+                >
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </div>
+            </header>
 
-          <div class="column-body">
-            <ng-container *ngFor="let issue of issues">
-              <ng-container *ngIf="tasksMap[key(pid, issue.id!)] | async as tasks">
-                <ng-container *ngIf="tasksForColumn(tasks, col) as ts">
-                  <section
-                    class="issue-stack list-section"
-                    cdkDropList
-                    [cdkDropListData]="ts"
-                    [cdkDropListConnectedTo]="listIds(issue.id!)"
-                    [id]="listId(col, issue.id!)"
-                    (cdkDropListDropped)="onListDrop($event, pid, issue.id!)"
-                    [cdkDropListEnterPredicate]="canEnter"
-                    [cdkDropListDisabled]="!(canEdit$ | async)"
-                    cdkDropListOrientation="vertical"
-                  >
-                    <div class="issue-stack__header list-section__header">
-                      <div class="issue-title text-1line no-truncate">{{ issue.title }}</div>
-                      <span class="issue-count count-badge">{{ ts.length }} {{ 'board.items' | translate }}</span>
-                    </div>
-
-                    <mat-card
-                      class="task-card task-card--interactive"
-                      *ngFor="let t of ts; trackBy: trackTask"
-                      cdkDrag
-                      [cdkDragData]="{ task: t, issueId: issue.id }"
-                      [cdkDragDisabled]="isBusy(t.id!) || !(canEdit$ | async)"
-                      [class.task-card--disabled]="isBusy(t.id!) || !(canEdit$ | async)"
+            <div class="column-body">
+              <ng-container *ngFor="let issue of issues">
+                <ng-container *ngIf="tasksMap[key(pid, issue.id!)] | async as tasks">
+                  <ng-container *ngIf="tasksForColumn(tasks, col) as ts">
+                    <section
+                      class="issue-stack list-section"
+                      cdkDropList
+                      [cdkDropListData]="ts"
+                      [cdkDropListConnectedTo]="listIds(issue.id!)"
+                      [id]="listId(col, issue.id!)"
+                      (cdkDropListDropped)="onListDrop($event, pid, issue.id!)"
+                      [cdkDropListEnterPredicate]="canEnter"
+                      [cdkDropListDisabled]="!(canEdit$ | async)"
+                      cdkDropListOrientation="vertical"
                     >
-                      <ng-template cdkDragPreview>
-                        <mat-card class="task-card task-card--preview">
-                          <div class="task-card__title">{{ t.title }}</div>
-                        </mat-card>
-                      </ng-template>
-                      <ng-template cdkDragPlaceholder>
-                        <div class="task-card task-card--placeholder"></div>
-                      </ng-template>
-
-                      <!-- 上: ID / 担当者数 -->
-                      <div class="task-card__meta">
-                        <span class="task-assignees meta-chip" *ngIf="(t.assignees?.length || 0) > 0">
-                          <mat-icon>group</mat-icon>
-                          {{ t.assignees?.length || 0 }}
-                        </span>
+                      <div class="issue-stack__header list-section__header">
+                        <div class="issue-title text-1line no-truncate">{{ issue.title }}</div>
+                        <span class="issue-count count-badge">{{ ts.length }} {{ 'board.items' | translate }}</span>
                       </div>
 
-                      <!-- タイトル・説明 -->
-                      <div class="task-card__title">{{ t.title }}</div>
-                      <p class="task-card__description text-2line" *ngIf="t.description">{{ t.description }}</p>
+                      <mat-card
+                        class="task-card task-card--interactive"
+                        *ngFor="let t of ts; trackBy: trackTask"
+                        cdkDrag
+                        [cdkDragData]="{ task: t, issueId: issue.id }"
+                        [cdkDragDisabled]="isBusy(t.id!) || !(canEdit$ | async)"
+                        [class.task-card--disabled]="isBusy(t.id!) || !(canEdit$ | async)"
+                      >
+                        <ng-template cdkDragPreview>
+                          <mat-card class="task-card task-card--preview">
+                            <div class="task-card__title">{{ t.title }}</div>
+                          </mat-card>
+                        </ng-template>
+                        <ng-template cdkDragPlaceholder>
+                          <div class="task-card task-card--placeholder"></div>
+                        </ng-template>
 
-                      <!-- チップ列 -->
-                      <div class="task-card__chips">
-                        <mat-chip-set class="task-chip-set">
-
-                          <!-- 優先度 (既に導入済みのやつ) -->
-                          <mat-chip
-                            appearance="outlined"
-                            class="chip chip-priority"
-                            [matMenuTriggerFor]="priorityMenu"
-                            [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
+                        <!-- 上: ID / 担当者数（ここにツールチップを追加） -->
+                        <div class="task-card__meta">
+                          <span
+                            class="task-assignees meta-chip"
+                            *ngIf="(t.assignees?.length || 0) > 0"
+                            [matTooltip]="assigneesTooltip(t.assignees, memberDirectory$ | async)"
+                            matTooltipPosition="above"
                           >
-                            <mat-icon matChipAvatar>flag</mat-icon>
-                            <span>{{ t.priority || ('common.none' | translate) }}</span>
-                            <mat-icon>arrow_drop_down</mat-icon>
-                          </mat-chip>
+                            <mat-icon>group</mat-icon>
+                            {{ t.assignees?.length || 0 }}
+                          </span>
+                        </div>
 
-                          <mat-menu #priorityMenu="matMenu">
-                            <button
-                              mat-menu-item
-                              (click)="setTaskPriority(pid, issue.id!, t, 'high')"
+                        <!-- タイトル・説明 -->
+                        <div class="task-card__title">{{ t.title }}</div>
+                        <p class="task-card__description text-2line" *ngIf="t.description">{{ t.description }}</p>
+
+                        <!-- チップ列 -->
+                        <div class="task-card__chips">
+                          <mat-chip-set class="task-chip-set">
+
+                            <!-- 優先度 -->
+                            <mat-chip
+                              appearance="outlined"
+                              class="chip chip-priority"
+                              [matMenuTriggerFor]="priorityMenu"
                               [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
                             >
-                              <mat-icon>priority_high</mat-icon>
-                              <span>high</span>
-                            </button>
-                            <button
-                              mat-menu-item
-                              (click)="setTaskPriority(pid, issue.id!, t, 'mid')"
-                              [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
-                            >
-                              <mat-icon>flag</mat-icon>
-                              <span>mid</span>
-                            </button>
-                            <button
-                              mat-menu-item
-                              (click)="setTaskPriority(pid, issue.id!, t, 'low')"
-                              [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
-                            >
-                              <mat-icon>south</mat-icon>
-                              <span>low</span>
-                            </button>
-                          </mat-menu>
+                              <mat-icon matChipAvatar>flag</mat-icon>
+                              <span>{{ t.priority || ('common.none' | translate) }}</span>
+                              <mat-icon>arrow_drop_down</mat-icon>
+                            </mat-chip>
 
-                          <!-- ステータス (列を直接選べるようにする) -->
-                          <mat-chip
-                            appearance="outlined"
-                            class="chip chip-status"
-                            [matMenuTriggerFor]="statusMenu"
-                            [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
-                          >
-                            <mat-icon matChipAvatar>timeline</mat-icon>
-                            <!-- いま属してる列の名前を表示 -->
-                            <span>{{ currentColumnTitle(t) }}</span>
-                            <mat-icon>arrow_drop_down</mat-icon>
-                          </mat-chip>
-
-                          <mat-menu #statusMenu="matMenu">
-                            <button
-                              mat-menu-item
-                              *ngFor="let colOpt of columns; trackBy: trackColumn"
-                              (click)="moveTaskToColumn(pid, issue.id!, t, colOpt)"
-                              [disabled]="isBusy(t.id!) || !(canEdit$ | async) || isTaskInColumn(t, colOpt)"
-                            >
-                              <!-- アイコンは列のカテゴリヒントで軽く出し分けてもいい -->
-                              <mat-icon *ngIf="colOpt.categoryHint === 'done'">check_circle</mat-icon>
-                              <mat-icon *ngIf="colOpt.categoryHint === 'in_progress'">sync</mat-icon>
-                              <mat-icon *ngIf="colOpt.categoryHint === 'not_started'">play_disabled</mat-icon>
-                              <mat-icon
-                                *ngIf="colOpt.categoryHint !== 'done' && colOpt.categoryHint !== 'in_progress' && colOpt.categoryHint !== 'not_started'"
+                            <mat-menu #priorityMenu="matMenu">
+                              <button
+                                mat-menu-item
+                                (click)="setTaskPriority(pid, issue.id!, t, 'high')"
+                                [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
                               >
-                                more_horiz
-                              </mat-icon>
+                                <mat-icon>priority_high</mat-icon>
+                                <span>high</span>
+                              </button>
+                              <button
+                                mat-menu-item
+                                (click)="setTaskPriority(pid, issue.id!, t, 'mid')"
+                                [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
+                              >
+                                <mat-icon>flag</mat-icon>
+                                <span>mid</span>
+                              </button>
+                              <button
+                                mat-menu-item
+                                (click)="setTaskPriority(pid, issue.id!, t, 'low')"
+                                [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
+                              >
+                                <mat-icon>south</mat-icon>
+                                <span>low</span>
+                              </button>
+                            </mat-menu>
 
-                              <span>{{ columnTitle(colOpt) }}</span>
-                            </button>
-                          </mat-menu>
+                            <!-- ステータス（列選択） -->
+                            <mat-chip
+                              appearance="outlined"
+                              class="chip chip-status"
+                              [matMenuTriggerFor]="statusMenu"
+                              [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
+                            >
+                              <mat-icon matChipAvatar>timeline</mat-icon>
+                              <span>{{ currentColumnTitle(t) }}</span>
+                              <mat-icon>arrow_drop_down</mat-icon>
+                            </mat-chip>
 
-                          <!-- 期限 -->
-                          <mat-chip appearance="outlined" class="chip chip-due">
-                            <mat-icon matChipAvatar>event</mat-icon>
-                            <ng-container *ngIf="t.dueDate; else noDue">
-                              {{ t.dueDate | date:'yyyy/MM/dd' }}
-                            </ng-container>
-                            <ng-template #noDue>{{ 'common.none' | translate }}</ng-template>
-                          </mat-chip>
+                            <mat-menu #statusMenu="matMenu">
+                              <button
+                                mat-menu-item
+                                *ngFor="let colOpt of columns; trackBy: trackColumn"
+                                (click)="moveTaskToColumn(pid, issue.id!, t, colOpt)"
+                                [disabled]="isBusy(t.id!) || !(canEdit$ | async) || isTaskInColumn(t, colOpt)"
+                              >
+                                <mat-icon *ngIf="colOpt.categoryHint === 'done'">check_circle</mat-icon>
+                                <mat-icon *ngIf="colOpt.categoryHint === 'in_progress'">sync</mat-icon>
+                                <mat-icon *ngIf="colOpt.categoryHint === 'not_started'">play_disabled</mat-icon>
+                                <mat-icon
+                                  *ngIf="colOpt.categoryHint !== 'done' && colOpt.categoryHint !== 'in_progress' && colOpt.categoryHint !== 'not_started'">
+                                  more_horiz
+                                </mat-icon>
+                                <span>{{ columnTitle(colOpt) }}</span>
+                              </button>
+                            </mat-menu>
 
-                        </mat-chip-set>
+                            <!-- 期限 -->
+                            <mat-chip appearance="outlined" class="chip chip-due">
+                              <mat-icon matChipAvatar>event</mat-icon>
+                              <ng-container *ngIf="t.dueDate; else noDue">
+                                {{ t.dueDate | date:'yyyy/MM/dd' }}
+                              </ng-container>
+                              <ng-template #noDue>{{ 'common.none' | translate }}</ng-template>
+                            </mat-chip>
+
+                          </mat-chip-set>
+                        </div>
+
+                        <div class="task-card__assign" *ngIf="auth.loggedIn$ | async">
+                          <button
+                            mat-stroked-button
+                            *ngIf="(members.isEditor$ | async) && !(t.assignees || []).includes((auth.uid$ | async) || '')"
+                            [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
+                            (click)="assignToMe(pid, issue.id!, t)"
+                          >
+                            {{ 'board.assignToMe' | translate }}
+                          </button>
+                          <button
+                            mat-stroked-button
+                            *ngIf="(members.isEditor$ | async) && (t.assignees || []).includes((auth.uid$ | async) || '')"
+                            [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
+                            (click)="unassignMe(pid, issue.id!, t)"
+                          >
+                            {{ 'board.unassign' | translate }}
+                          </button>
+                        </div>
+                      </mat-card>
+
+                      <div class="issue-placeholder" *ngIf="ts.length === 0">
+                        {{ 'board.dropHere' | translate }}
                       </div>
-
-                      <div class="task-card__assign" *ngIf="auth.loggedIn$ | async">
-                        <button
-                          mat-stroked-button
-                          *ngIf="(members.isEditor$ | async) && !(t.assignees || []).includes((auth.uid$ | async) || '')"
-                          [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
-                          (click)="assignToMe(pid, issue.id!, t)"
-                        >
-                          {{ 'board.assignToMe' | translate }}
-                        </button>
-                        <button
-                          mat-stroked-button
-                          *ngIf="(members.isEditor$ | async) && (t.assignees || []).includes((auth.uid$ | async) || '')"
-                          [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
-                          (click)="unassignMe(pid, issue.id!, t)"
-                        >
-                          {{ 'board.unassign' | translate }}
-                        </button>
-                      </div>
-                    </mat-card>
-
-                    <div class="issue-placeholder" *ngIf="ts.length === 0">
-                      {{ 'board.dropHere' | translate }}
-                    </div>
-                  </section>
+                    </section>
+                  </ng-container>
                 </ng-container>
               </ng-container>
-            </ng-container>
-          </div>
-        </section>
+            </div>
+          </section>
         </div>
       </div>
     </ng-container>
   </ng-container>
 </section>
+

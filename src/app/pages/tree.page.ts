@@ -108,16 +108,16 @@ export class TreePage {
 
   private categoryHintLabel(h: BoardColumn['categoryHint']): string {
     switch (h) {
-      case 'not_started': return '未着手';
-      case 'in_progress': return '進行中';
-      case 'done':        return '完了';
-      default:            return '進行中';
+      case 'not_started': return this.tr.instant('status.notStarted');
+      case 'in_progress': return this.tr.instant('status.inProgress');
+      case 'done':        return this.tr.instant('status.done');
+      default:            return this.tr.instant('status.inProgress');
     }
   }
-
+  
   tooltipForColumn(col?: BoardColumn): string {
-    if (!col) return '進行中扱い / 進捗50%';
-    return `${this.categoryHintLabel(col.categoryHint)}扱い / 進捗${col.progressHint}%`;
+    if (!col) return `${this.tr.instant('status.inProgress')} / ${this.tr.instant('tree.progress')} 50%`;
+    return `${this.categoryHintLabel(col.categoryHint)} / ${this.tr.instant('tree.progress')} ${col.progressHint}%`;
   }
 
   statusClassForColumn(col?: BoardColumn): string {
@@ -228,6 +228,14 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
     return { ok: false, reason: `「${file.name}」は対応していない形式です（画像 or PDF）` };
   }
   return { ok: true };
+}
+
+lastPickedNames: string[] = [];
+
+// 追加: 選択名を保持（UI表示用。アップロード処理そのものは onPickFiles が担当）
+rememberPickedNames(ev: Event) {
+  const input = ev.target as HTMLInputElement;
+  this.lastPickedNames = Array.from(input.files || []).map(f => f.name);
 }
 
 
@@ -708,7 +716,7 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
   private withPid(run: (pid: string) => void) {
     this.currentProject.projectId$.pipe(take(1)).subscribe(pid => {
       if (!pid || pid === 'default') {
-        alert('プロジェクト未選択');
+        alert(this.tr.instant('common.projectNotSelected'));
         return;
       }
       run(pid);
@@ -828,7 +836,7 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
     if (key) {
       const rec = this.drafts.get<string>(key);
       if (rec && (!this.newBody || this.newBody.trim() === '')) {
-        const ok = confirm('未投稿の下書きが見つかりました。復元しますか？');
+        const ok = confirm(this.tr.instant('draft.restoreComment'));
         if (ok) this.newBody = rec.value || '';
       }
     }
@@ -887,7 +895,11 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
       await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, patch);
     }
 
-    const ref = this.snack.open(`「${titleForToast}」を削除しました`, '元に戻す', { duration: 5000 });
+    const ref = this.snack.open(
+      this.tr.instant('toast.deleted', { name: titleForToast }),
+      this.tr.instant('common.undo'),
+      { duration: 5000 }
+    );
     ref.onAction().subscribe(async () => {
       const unpatch = { softDeleted: false, deletedAt: null, updatedBy: uid || '' } as any;
       if (kind === 'problem') {
@@ -970,6 +982,7 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
     } finally {
       this.uploadBusy = false;
       if (input) input.value = '';
+      this.lastPickedNames = []; // アップロード完了で一旦クリア
     }
   }
   
@@ -977,7 +990,7 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
   async removeAttachment(a: AttachmentDoc) {
     if (!(await this.requireCanEdit())) return;
     if (!this.selectedNode) return;
-    const ok = confirm(`「${a.name}」を削除しますか？`);
+    const ok = confirm(this.tr.instant('attach.confirm.deleteFile', { name: a.name }));
     if (!ok) return;
   
     const t = await this.toAttachmentTarget(this.selectedNode);
@@ -987,7 +1000,7 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
       this.bumpAttachCount(this.selectedNode, -1);
     } catch (e) {
       console.error(e);
-      this.snack.open(this.tr.instant('common.deleteFailed') || '削除に失敗しました', 'OK', { duration: 3000 });
+      this.snack.open(this.tr.instant('common.deleteFailed'), 'OK', { duration: 3000 });
     }
   }
   
