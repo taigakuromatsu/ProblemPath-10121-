@@ -548,7 +548,7 @@ export class HomePage implements OnInit, OnDestroy {
     const ok = confirm(this.t('recurrence.stopConfirm', '繰り返しを停止しますか？既存のタスクはそのまま残ります。'));
     if (!ok) return;
     this.withPid(pid => this.tasks.update(pid, problemId, issueId, task.id!, {
-      recurrenceRule: null,
+      recurrenceRule: undefined,
       recurrenceTemplate: false,
       recurrenceAnchorDate: null,
     }));

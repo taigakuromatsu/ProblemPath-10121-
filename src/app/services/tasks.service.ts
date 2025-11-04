@@ -42,7 +42,13 @@ export class TasksService {
   }
 
   private filterVisible(list: Task[]): Task[] {
-    return list.filter(t => !(t as any)?.softDeleted).filter(t => !((t as any)?.recurrenceTemplate));
+    // ← テンプレートは除外しない（Home/Issue一覧で見えるように）
+    return list.filter(t => !(t as any)?.softDeleted);
+  }
+  
+  /** スケジュール系など「テンプレートを出したくない」時に使う */
+  private filterNoTemplates(list: Task[]): Task[] {
+    return this.filterVisible(list).filter(t => !((t as any)?.recurrenceTemplate));
   }
 
   // ===== リアルタイム一覧 =====
@@ -172,8 +178,12 @@ export class TasksService {
     const id = legacy ? (arg3 as string) : (arg4 as string);
     const patch = legacy ? (arg4 as Partial<Task>) : (arg5 ?? {});
     const ref = nativeDoc(this.fs as any, `${this.base(pid)}/${problemId}/issues/${issueId}/tasks/${id}`);
+    // Firestoreではundefinedを設定できないため、undefinedの値を除外
+    const cleanPatch = Object.fromEntries(
+      Object.entries(patch).filter(([_, v]) => v !== undefined)
+    );
     return nativeUpdateDoc(ref, {
-      ...patch,
+      ...cleanPatch,
       // TODO: このメタ情報はCloud Functionsの集計(refreshAnalyticsSummary)で使うので必須
       projectId: pid,
       problemId,
@@ -254,7 +264,7 @@ export class TasksService {
     );
 
     return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>)
-    .pipe(map((xs: Task[]) => this.filterVisible(xs)));
+    .pipe(map((xs: Task[]) => this.filterNoTemplates(xs)));
   }
 
   listAllOverdue(
@@ -295,7 +305,7 @@ export class TasksService {
       nativeOrderBy('dueDate', 'asc')
     );
     return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>)
-    .pipe(map((xs: Task[]) => this.filterVisible(xs)));
+    .pipe(map((xs: Task[]) => this.filterNoTemplates(xs)));
   }
 
   // --- listAllNoDue: オーバーロード2本 + 実装1本だけ ---
@@ -334,7 +344,7 @@ export class TasksService {
     );
 
     return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>)
-    .pipe(map((xs: Task[]) => this.filterVisible(xs)));
+    .pipe(map((xs: Task[]) => this.filterNoTemplates(xs)));
   }
 
     listAllInProject(
@@ -361,7 +371,7 @@ export class TasksService {
       return stream.pipe(
         map(items => {
           // 念のためsoftDeleted二重フィルタ
-          let ys = this.filterVisible(items);
+          let ys = this.filterNoTemplates(items);
 
           // openOnly が true の場合は done を除外
           if (openOnly) {
@@ -423,7 +433,7 @@ export class TasksService {
   return stream.pipe(
     map(items => {
       // openOnly はクライアント側で
-      items = this.filterVisible(items);
+      items = this.filterNoTemplates(items);
       if (openOnly) {
         const open = new Set(OPEN_STATUSES);
         items = items.filter(x => open.has(x.status as Status));
@@ -465,7 +475,7 @@ listMineNoDue(
 
   return stream.pipe(
     map(xs => {
-      let ys = this.filterVisible(xs);
+      let ys = this.filterNoTemplates(xs);
       if (openOnly) ys = ys.filter(t => t.status !== 'done');
       if (tags.length) {
         const set = new Set(tags.slice(0, 10).map(s => s.trim()));
