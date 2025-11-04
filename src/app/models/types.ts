@@ -51,6 +51,10 @@ export interface Task extends BaseNode {
     freq: 'DAILY' | 'WEEKLY' | 'MONTHLY';
     interval?: number;
   };
+  recurrenceTemplate?: boolean; // recurrence 親テンプレ判定（未設定時は false とみなす）
+  recurrenceParentId?: string | null;
+  recurrenceInstanceIndex?: number | null;
+  recurrenceAnchorDate?: string | null;
   // スケジュール横断表示のための親参照
   problemId?: string;
   issueId?: string;

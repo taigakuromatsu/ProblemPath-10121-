@@ -160,7 +160,27 @@
     "dueShort": "（期限: {{ date }}）",
     "editDue": "期限",
     "editTags": "タグ",
-    "noneYet": "（タスクはまだありません）"
+    "noneYet": "（タスクはまだありません）",
+    "duePlaceholder": "YYYY-MM-DD"
+  },
+  "recurrence": {
+    "title": "繰り返し",
+    "freqLabel": "頻度",
+    "freq": {
+      "daily": "毎日",
+      "weekly": "毎週",
+      "monthly": "毎月"
+    },
+    "interval": "間隔",
+    "intervalSuffix": "ごと",
+    "templateChip": "繰り返し（テンプレート）",
+    "stop": "繰り返しを停止",
+    "stopConfirm": "繰り返しを停止しますか？既存のタスクはそのまま残ります。",
+    "anchorRequired": "繰り返しを設定するには初回期日が必要です",
+    "invalidDate": "日付は YYYY-MM-DD 形式で入力してください",
+    "stopHint": "繰り返しテンプレートは停止後に削除できます",
+    "dueDisabled": "繰り返しテンプレートの期限は自動で管理されます",
+    "tagDisabled": "繰り返しテンプレートは将来のタスク作成時にコピーされます"
   },
   "tag": {
     "none": "（タグなし）"

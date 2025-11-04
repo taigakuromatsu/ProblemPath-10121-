@@ -82,6 +82,10 @@ export class HomePage implements OnInit, OnDestroy {
 
   issueTitle = '';
   taskTitle: Record<string, string> = {}; // key = issueId
+  taskDueDate: Record<string, string> = {};
+  taskRecurrenceEnabled: Record<string, boolean> = {};
+  taskRecurrenceFreq: Record<string, 'DAILY' | 'WEEKLY' | 'MONTHLY'> = {};
+  taskRecurrenceInterval: Record<string, number> = {};
   tasksMap: Record<string, Observable<Task[]>> = {};
 
   // Link UI state
@@ -446,11 +450,49 @@ export class HomePage implements OnInit, OnDestroy {
     if (!(await this.requireOnline())) return;
     const t = (this.taskTitle[issueId] ?? '').trim();
     if (!t) return;
-    this.withPid(pid => this.tasks.create(pid, problemId, issueId, { title: t }).then(() => {
+    const dueRaw = (this.taskDueDate[issueId] ?? '').trim();
+    if (dueRaw && !/^\d{4}-\d{2}-\d{2}$/.test(dueRaw)) {
+      alert(this.t('recurrence.invalidDate', '日付は YYYY-MM-DD 形式で入力してください'));
+      return;
+    }
+
+    const recurrenceEnabled = !!this.taskRecurrenceEnabled[issueId];
+    const freq = this.taskRecurrenceFreq[issueId] ?? 'WEEKLY';
+    let interval = Number(this.taskRecurrenceInterval[issueId] ?? 1);
+    if (!Number.isFinite(interval) || interval < 1) interval = 1;
+
+    if (recurrenceEnabled && !dueRaw) {
+      alert(this.t('recurrence.anchorRequired', '繰り返しを設定するには初回期日が必要です'));
+      return;
+    }
+
+    const payload: Partial<Task> = {
+      title: t,
+      dueDate: dueRaw ? dueRaw : null,
+    };
+
+    if (recurrenceEnabled && dueRaw) {
+      payload.recurrenceRule = { freq, interval };
+      payload.recurrenceAnchorDate = dueRaw;
+    }
+
+    this.withPid(pid => this.tasks.create(pid, problemId, issueId, payload).then(() => {
       this.taskTitle[issueId] = '';
+      this.taskDueDate[issueId] = '';
+      this.taskRecurrenceEnabled[issueId] = false;
+      this.taskRecurrenceInterval[issueId] = 1;
+      this.taskRecurrenceFreq[issueId] = freq;
       const key = this.draftKeyTaskTitle(this.selectedProblemId, issueId);
       if (key) this.drafts.clear(key);
     }));
+  }
+
+  onRecurrenceToggle(issueId: string, enabled: boolean) {
+    this.taskRecurrenceEnabled[issueId] = enabled;
+    if (enabled) {
+      if (!this.taskRecurrenceInterval[issueId]) this.taskRecurrenceInterval[issueId] = 1;
+      if (!this.taskRecurrenceFreq[issueId]) this.taskRecurrenceFreq[issueId] = 'WEEKLY';
+    }
   }
   async renameTask(problemId: string, issueId: string, task: Task) {
     if (!(await this.requireOnline())) return;
@@ -460,6 +502,10 @@ export class HomePage implements OnInit, OnDestroy {
   }
   async removeTask(problemId: string, issueId: string, t: Task) {
     if (!(await this.requireOnline())) return;
+    if (t.recurrenceTemplate) {
+      alert(this.t('recurrence.stopHint', '繰り返しテンプレートは停止後に削除できます'));
+      return;
+    }
     if (!confirm(`Delete Task "${t.title}"?`)) return;
     this.withPid(async pid => {
       await this.softDeleteWithUndo('task', { projectId: pid, problemId, issueId, taskId: t.id! }, t.title);
@@ -469,23 +515,43 @@ export class HomePage implements OnInit, OnDestroy {
   // 期日・タグ編集
   async editTaskDue(problemId: string, issueId: string, t: Task) {
     if (!(await this.requireOnline())) return;
+    if (t.recurrenceTemplate) {
+      alert(this.t('recurrence.dueDisabled', '繰り返しテンプレートの期限は自動で管理されます'));
+      return;
+    }
     const cur = t.dueDate ?? '';
     const nxt = prompt('Due (YYYY-MM-DD、空で解除)', cur ?? '');
     if (nxt === null) return;
     const dueDate = (nxt.trim() === '') ? null : nxt.trim();
     if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
-      alert('日付は YYYY-MM-DD 形式で入力してください');
+      alert(this.t('recurrence.invalidDate', '日付は YYYY-MM-DD 形式で入力してください'));
       return;
     }
     this.withPid(pid => this.tasks.update(pid, problemId, issueId, t.id!, { dueDate }));
   }
   async editTaskTags(problemId: string, issueId: string, t: Task) {
     if (!(await this.requireOnline())) return;
+    if (t.recurrenceTemplate) {
+      alert(this.t('recurrence.tagDisabled', '繰り返しテンプレートは将来のタスク作成時にコピーされます'));
+      return;
+    }
     const current = (t.tags ?? []).join(', ');
     const input = prompt('Tags (カンマ/スペース区切り)\n例: バグ, UI  または  バグ UI', current ?? '');
     if (input == null) return;
     const tags = input.split(/[, \s]+/).map(s => s.replace(/^#/, '').trim()).filter(Boolean);
     this.withPid(pid => this.tasks.update(pid, problemId, issueId, t.id!, { tags }));
+  }
+
+  async stopRecurrence(problemId: string, issueId: string, task: Task) {
+    if (!(await this.requireOnline())) return;
+    if (!task.id) return;
+    const ok = confirm(this.t('recurrence.stopConfirm', '繰り返しを停止しますか？既存のタスクはそのまま残ります。'));
+    if (!ok) return;
+    this.withPid(pid => this.tasks.update(pid, problemId, issueId, task.id!, {
+      recurrenceRule: null,
+      recurrenceTemplate: false,
+      recurrenceAnchorDate: null,
+    }));
   }
 
   // --- Problem 作成/編集ドラフト: キー関数 ---

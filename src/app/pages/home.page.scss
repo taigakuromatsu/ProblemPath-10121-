@@ -196,6 +196,82 @@
   min-width: 0;
 }
 
+.task-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-1);
+}
+
+.task-form__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-1);
+  align-items: center;
+}
+
+.task-form__row input[type='date'] {
+  min-width: 150px;
+}
+
+.task-form__recurrence {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--gap-1) * 0.75);
+  padding-left: 4px;
+}
+
+.task-form__recurrence-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.95em;
+}
+
+.task-form__recurrence-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-1);
+  padding-left: 18px;
+}
+
+.task-form__recurrence-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.task-form__recurrence-field label {
+  font-size: 0.85em;
+  color: var(--muted);
+}
+
+.task-form__recurrence-field select,
+.task-form__recurrence-field input {
+  padding: calc(8px * var(--m)) calc(10px * var(--m));
+}
+
+.task-form__recurrence-suffix {
+  font-size: 0.85em;
+  color: var(--muted);
+}
+
+.task-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.task-template-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-blue) 18%, var(--surface) 82%);
+  color: color-mix(in srgb, var(--accent-blue) 70%, #0f172a 30%);
+}
+
 /* 通知 */
 .notif-card { border-color: color-mix(in srgb, var(--accent-blue) 28%, #e6e8ef 72%); }
 .notif-card .chip { margin-right: 6px; }

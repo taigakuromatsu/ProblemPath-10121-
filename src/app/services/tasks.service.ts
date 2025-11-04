@@ -41,6 +41,10 @@ export class TasksService {
     return Array.from(m.values());
   }
 
+  private filterVisible(list: Task[]): Task[] {
+    return list.filter(t => !(t as any)?.softDeleted).filter(t => !((t as any)?.recurrenceTemplate));
+  }
+
   // ===== リアルタイム一覧 =====
   // 互換: listByIssue(problemId, issueId) は 'default' を使用
   listByIssue(problemId: string, issueId: string): Observable<Task[]>;
@@ -59,7 +63,7 @@ export class TasksService {
       nativeOrderBy('createdAt', 'asc')
     );
     return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>)
-      .pipe(map((xs: any[]) => xs.filter((t: any) => !t?.softDeleted)));
+      .pipe(map((xs: Task[]) => this.filterVisible(xs)));
   }
 
   // ===== 作成 =====
@@ -74,6 +78,16 @@ export class TasksService {
     const t = legacy ? (arg3 as Partial<Task>) : (arg4 ?? {});
     const colRef = nativeCollection(this.fs as any, `${this.base(pid)}/${problemId}/issues/${issueId}/tasks`);
     const order = t.order ?? await this.nextOrder(pid, problemId, issueId);
+    const isTemplate = !!t.recurrenceRule?.freq;
+    const interval = Math.max(1, Number(t.recurrenceRule?.interval ?? 1));
+    const normalizedRule = isTemplate
+      ? { freq: t.recurrenceRule!.freq, interval }
+      : null;
+    const anchorDate = isTemplate
+      ? (t.recurrenceAnchorDate ?? t.dueDate ?? null)
+      : (t.recurrenceAnchorDate ?? null);
+    const recurrenceTemplate = isTemplate ? true : t.recurrenceTemplate === true;
+
     return nativeAddDoc(colRef, {
       title: t.title ?? 'Untitled Task',
       description: t.description ?? '',
@@ -83,11 +97,15 @@ export class TasksService {
       tags: t.tags ?? [],
       assignees: t.assignees ?? [],
       order,
-      dueDate: t.dueDate ?? null,
+      dueDate: isTemplate ? null : (t.dueDate ?? null),
       priority: t.priority ?? 'mid',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      recurrenceRule: t.recurrenceRule ?? null,
+      recurrenceRule: normalizedRule,
+      recurrenceTemplate,
+      recurrenceParentId: t.recurrenceParentId ?? null,
+      recurrenceInstanceIndex: t.recurrenceInstanceIndex ?? null,
+      recurrenceAnchorDate: anchorDate,
       // TODO: このメタ情報はCloud Functionsの集計(refreshAnalyticsSummary)で使うので必須
       projectId: pid,
       problemId,
@@ -236,7 +254,7 @@ export class TasksService {
     );
 
     return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>)
-    .pipe(map((xs: any[]) => xs.filter((t: any) => !t?.softDeleted)));  
+    .pipe(map((xs: Task[]) => this.filterVisible(xs)));
   }
 
   listAllOverdue(
@@ -277,7 +295,7 @@ export class TasksService {
       nativeOrderBy('dueDate', 'asc')
     );
     return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>)
-    .pipe(map((xs: any[]) => xs.filter((t: any) => !t?.softDeleted)));  
+    .pipe(map((xs: Task[]) => this.filterVisible(xs)));
   }
 
   // --- listAllNoDue: オーバーロード2本 + 実装1本だけ ---
@@ -316,7 +334,7 @@ export class TasksService {
     );
 
     return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>)
-    .pipe(map((xs: any[]) => xs.filter((t: any) => !t?.softDeleted)));  
+    .pipe(map((xs: Task[]) => this.filterVisible(xs)));
   }
 
     listAllInProject(
@@ -343,8 +361,8 @@ export class TasksService {
       return stream.pipe(
         map(items => {
           // 念のためsoftDeleted二重フィルタ
-          let ys = items.filter(t => !(t as any)?.softDeleted);
-  
+          let ys = this.filterVisible(items);
+
           // openOnly が true の場合は done を除外
           if (openOnly) {
             const openSet = new Set(OPEN_STATUSES);
@@ -405,7 +423,7 @@ export class TasksService {
   return stream.pipe(
     map(items => {
       // openOnly はクライアント側で
-      items = items.filter(t => !(t as any)?.softDeleted); 
+      items = this.filterVisible(items);
       if (openOnly) {
         const open = new Set(OPEN_STATUSES);
         items = items.filter(x => open.has(x.status as Status));
@@ -447,7 +465,7 @@ listMineNoDue(
 
   return stream.pipe(
     map(xs => {
-      let ys = xs.filter(t => !(t as any)?.softDeleted);
+      let ys = this.filterVisible(xs);
       if (openOnly) ys = ys.filter(t => t.status !== 'done');
       if (tags.length) {
         const set = new Set(tags.slice(0, 10).map(s => s.trim()));
