@@ -1,6 +1,6 @@
 import { Component, DestroyRef, OnInit, OnDestroy, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { AsyncPipe, NgFor, NgIf, JsonPipe, DatePipe } from '@angular/common';
+import { AsyncPipe, NgFor, NgIf, JsonPipe, DatePipe, CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSelectModule } from '@angular/material/select';
@@ -60,7 +60,7 @@ const LINK_TYPE_LABEL: Record<LinkType, string> = {
   standalone: true,
   selector: 'pp-home',
   imports: [
-    RouterLink, AsyncPipe, NgFor, NgIf, JsonPipe, DatePipe, FormsModule,
+    RouterLink, AsyncPipe, NgFor, NgIf, JsonPipe, DatePipe, CommonModule, FormsModule,
     MatButtonModule, MatSelectModule, MatFormFieldModule, MatIconModule, 
     MatCardModule, MatChipsModule, MatSnackBarModule, TranslateModule,
     MatDividerModule, AiIssueSuggestComponent
@@ -86,6 +86,7 @@ export class HomePage implements OnInit, OnDestroy {
   taskRecurrenceEnabled: Record<string, boolean> = {};
   taskRecurrenceFreq: Record<string, 'DAILY' | 'WEEKLY' | 'MONTHLY'> = {};
   taskRecurrenceInterval: Record<string, number> = {};
+  taskRecurrenceEndDate: Record<string, string> = {};
   tasksMap: Record<string, Observable<Task[]>> = {};
 
   // Link UI state
@@ -460,12 +461,21 @@ export class HomePage implements OnInit, OnDestroy {
     const freq = this.taskRecurrenceFreq[issueId] ?? 'WEEKLY';
     let interval = Number(this.taskRecurrenceInterval[issueId] ?? 1);
     if (!Number.isFinite(interval) || interval < 1) interval = 1;
+    const endRaw = (this.taskRecurrenceEndDate[issueId] ?? '').trim();
+    if (recurrenceEnabled && endRaw && !/^\d{4}-\d{2}-\d{2}$/.test(endRaw)) {
+      alert(this.t('recurrence.invalidDate', '日付は YYYY-MM-DD 形式で入力してください'));
+      return;
+    }
+    if (recurrenceEnabled && dueRaw && endRaw && endRaw < dueRaw) {
+      alert(this.t('recurrence.endAfterStart', '終了日は開始日（初回期日）以降を指定してください'));
+      return;
+    }
 
     if (recurrenceEnabled && !dueRaw) {
       alert(this.t('recurrence.anchorRequired', '繰り返しを設定するには初回期日が必要です'));
       return;
     }
-
+    
     const payload: Partial<Task> = {
       title: t,
       dueDate: dueRaw ? dueRaw : null,
@@ -474,17 +484,26 @@ export class HomePage implements OnInit, OnDestroy {
     if (recurrenceEnabled && dueRaw) {
       payload.recurrenceRule = { freq, interval };
       payload.recurrenceAnchorDate = dueRaw;
+      if (endRaw) payload.recurrenceEndDate = endRaw;
     }
 
-    this.withPid(pid => this.tasks.create(pid, problemId, issueId, payload).then(() => {
+    this.withPid(async pid => {
+            // 1) 親テンプレ保存
+            await this.tasks.create(pid, problemId, issueId, payload);
+            // 2) 初回ぶんを即時に1件だけ明示作成（CFとは競合しない）
+            if (recurrenceEnabled && dueRaw) {
+              await this.tasks.create(pid, problemId, issueId, { title: t, dueDate: dueRaw });
+            }
+            // 3) 入力欄リセット
       this.taskTitle[issueId] = '';
       this.taskDueDate[issueId] = '';
       this.taskRecurrenceEnabled[issueId] = false;
       this.taskRecurrenceInterval[issueId] = 1;
       this.taskRecurrenceFreq[issueId] = freq;
+      this.taskRecurrenceEndDate[issueId] = '';
       const key = this.draftKeyTaskTitle(this.selectedProblemId, issueId);
       if (key) this.drafts.clear(key);
-    }));
+    });
   }
 
   onRecurrenceToggle(issueId: string, enabled: boolean) {
@@ -542,17 +561,27 @@ export class HomePage implements OnInit, OnDestroy {
     this.withPid(pid => this.tasks.update(pid, problemId, issueId, t.id!, { tags }));
   }
 
-  async stopRecurrence(problemId: string, issueId: string, task: Task) {
-    if (!(await this.requireOnline())) return;
-    if (!task.id) return;
-    const ok = confirm(this.t('recurrence.stopConfirm', '繰り返しを停止しますか？既存のタスクはそのまま残ります。'));
-    if (!ok) return;
-    this.withPid(pid => this.tasks.update(pid, problemId, issueId, task.id!, {
-      recurrenceRule: undefined,
-      recurrenceTemplate: false,
-      recurrenceAnchorDate: null,
-    }));
-  }
+  // 置き換え：HomePage クラス内
+async stopRecurrence(problemId: string, issueId: string, task: Task) {
+  if (!(await this.requireOnline())) return;
+  if (!task?.id) return;
+
+  // 文言は必要なら i18n に載せ替えOK
+  const ok = confirm(this.t(
+    'recurrence.stopAndDeleteConfirm',
+    '繰り返しを停止し、テンプレートを削除します。既存のタスクは残ります。'
+  ));
+  if (!ok) return;
+
+  // 停止＝テンプレートを削除（ソフトデリート、Undo可）
+  this.withPid(async pid => {
+    await this.softDeleteWithUndo(
+      'task',
+      { projectId: pid, problemId, issueId, taskId: task.id! },
+      task.title || '(template)'
+    );
+  });
+}
 
   // --- Problem 作成/編集ドラフト: キー関数 ---
   private draftKeyNewProblem(): string | null {

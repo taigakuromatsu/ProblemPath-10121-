@@ -335,6 +335,13 @@
                               <input type="number" min="1" step="1" [(ngModel)]="taskRecurrenceInterval[i.id!]" name="taskRecurrenceInterval-{{ i.id }}" />
                               <span class="task-form__recurrence-suffix">{{ 'recurrence.intervalSuffix' | translate }}</span>
                             </span>
+                            <span class="task-form__recurrence-field">
+                                  <label>{{ 'recurrence.endDate' | translate }}</label>
+                                  <input type="date" [(ngModel)]="taskRecurrenceEndDate[i.id!]" name="taskRecurrenceEndDate-{{ i.id }}" />
+                                </span>
+                                <span class="task-form__recurrence-hint">
+                                  {{ 'recurrence.hintShort' | translate }}
+                                </span>
                           </div>
                         </div>
                       </form>
@@ -346,6 +353,20 @@
                               <span class="task-title text-1line no-truncate">{{ t.title }}</span>
                               <span class="task-template-chip" *ngIf="t.recurrenceTemplate">{{ 'recurrence.templateChip' | translate }}</span>
                             </div>
+                            <!-- テンプレの設定を見える化 -->
+                            <div class="task-recur-meta" *ngIf="t.recurrenceTemplate">
+                                <small>
+                                  開始: {{ t.recurrenceAnchorDate || '—' }}
+                                  <span *ngIf="t.recurrenceEndDate"> / 終了: {{ t.recurrenceEndDate }}</span>
+                                  /
+                                  繰り返し:
+                                  <ng-container [ngSwitch]="t.recurrenceRule?.freq">
+                                    <span *ngSwitchCase="'DAILY'">{{ t.recurrenceRule?.interval || 1 }}日ごと</span>
+                                    <span *ngSwitchCase="'WEEKLY'">{{ t.recurrenceRule?.interval || 1 }}週ごと</span>
+                                    <span *ngSwitchCase="'MONTHLY'">{{ t.recurrenceRule?.interval || 1 }}か月ごと</span>
+                                  </ng-container>
+                                </small>
+                              </div>
                             <span class="task-meta" *ngIf="t.dueDate">{{ 'task.dueShort' | translate:{ date: t.dueDate } }}</span>
                             <span class="task-tags">
                               <ng-container *ngIf="(t.tags?.length ?? 0) > 0; else noTags">

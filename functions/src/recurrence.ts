@@ -46,6 +46,7 @@ export const generateRecurringTasks = onSchedule(
         const parent = (parentDoc.data() ?? {}) as FirebaseFirestore.DocumentData;
         const rule = (parent.recurrenceRule ?? null) as RecurrenceRule | null;
         const anchorYmd = (parent.recurrenceAnchorDate ?? parent.dueDate ?? null) as string | null;
+        const endYmd = (parent.recurrenceEndDate ?? null) as string | null;
 
         if (!rule || !anchorYmd) {
           console.warn('[recurrence] skip parent - missing rule/anchor', parentDoc.ref.path);
@@ -67,6 +68,20 @@ export const generateRecurringTasks = onSchedule(
           // 今日は生成なし
           continue;
         }
+
+         // --- 終了日チェック（inclusive） ---
+         if (endYmd) {
+            const endDate = parseYmdToUtc(endYmd);
+            const occDate = parseYmdToUtc(occ.dueDate);
+            if (!endDate || !occDate) {
+              console.warn('[recurrence] skip parent - bad end/occ date', parentDoc.ref.path, { endYmd, occ });
+              continue;
+            }
+            // occ.dueDate が終了日を「超える」場合は作らない（終了日は含む）
+            if (compareDate(occDate, endDate) > 0) {
+              continue;
+            }
+          }
 
         // パス情報（projectId / problemId / issueId）
         const pathInfo = extractPath(parentDoc.ref.path);
@@ -307,6 +322,7 @@ function buildChildPayload(args: {
     recurrenceParentId: parentId,
     recurrenceInstanceIndex: occurrence.index,
     recurrenceAnchorDate: anchorYmd,
+    recurrenceEndDate: null,
     // 所属
     projectId,
     problemId,

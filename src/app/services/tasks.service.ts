@@ -249,7 +249,7 @@ export class TasksService {
 
     const base = nativeCollectionGroup(this.fs as any, 'tasks');
     const tagFilter = (tags && tags.length > 0)
-      ? [nativeWhere('tags', 'array-contains-any', tags.slice(0, 10))]
+      ? []
       : [];
 
     const q = nativeQuery(
@@ -258,13 +258,23 @@ export class TasksService {
       nativeWhere('softDeleted','==', false),
       nativeWhere('dueDate', '>=', startYmd),
       nativeWhere('dueDate', '<=', endYmd),
-      ...(openOnly ? [nativeWhere('status', 'in', OPEN_STATUSES)] : []),
-      ...tagFilter,
+      // status/tags はクライアント側でフィルタ
       nativeOrderBy('dueDate', 'asc')
     );
 
     return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>)
-    .pipe(map((xs: Task[]) => this.filterNoTemplates(xs)));
+    .pipe(map((xs: Task[]) => {
+            let ys = this.filterNoTemplates(xs);
+            if (openOnly) {
+              const set = new Set(OPEN_STATUSES);
+              ys = ys.filter(t => set.has(t.status as Status));
+            }
+            if (tags.length) {
+              const tagSet = new Set(tags.slice(0, 10).map(s => s.trim()));
+              ys = ys.filter(t => (t.tags ?? []).some(tag => tagSet.has(tag)));
+            }
+            return ys;
+          }));
   }
 
   listAllOverdue(
@@ -291,21 +301,29 @@ export class TasksService {
     const tags     = (legacy ? (arg3 as string[]) : (arg4 as string[])) ?? [];
 
     const base = nativeCollectionGroup(this.fs as any, 'tasks');
-    const tagFilter = (tags && tags.length > 0)
-      ? [nativeWhere('tags', 'array-contains-any', tags.slice(0, 10))]
-      : [];
+    const tagFilter: any[] = []; // ← クエリ条件から外す（クライアントで）
 
     const q = nativeQuery(
       base,
       nativeWhere('projectId', '==', pid),
       nativeWhere('softDeleted','==', false),
       nativeWhere('dueDate', '<', todayYmd),
-      ...(openOnly ? [nativeWhere('status', 'in', OPEN_STATUSES)] : []),
-      ...tagFilter,
+      // status/tags はクライアントで
       nativeOrderBy('dueDate', 'asc')
     );
     return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>)
-    .pipe(map((xs: Task[]) => this.filterNoTemplates(xs)));
+    .pipe(map((xs: Task[]) => {
+      let ys = this.filterNoTemplates(xs);
+      if (openOnly) {
+        const set = new Set(OPEN_STATUSES);
+        ys = ys.filter(t => set.has(t.status as Status));
+      }
+      if (tags.length) {
+        const tagSet = new Set(tags.slice(0, 10).map(s => s.trim()));
+        ys = ys.filter(t => (t.tags ?? []).some(tag => tagSet.has(tag)));
+      }
+      return ys;
+    }));
   }
 
   // --- listAllNoDue: オーバーロード2本 + 実装1本だけ ---

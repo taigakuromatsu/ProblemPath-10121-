@@ -66,6 +66,13 @@ export class TreePage {
 
   columns: BoardColumn[] = DEFAULT_BOARD_COLUMNS;
 
+
+  /** 繰り返しテンプレートでない実体タスクだけ通す */
+  private isRealTask(t: Task | null | undefined): t is Task {
+      // Task 型にプロパティが無くても通るよう any 経由で判定
+      return !!t && (t as any).recurrenceTemplate !== true;
+    }
+
   busyIds = new Set<string>();
   isBusyId(id?: string|null){ return !!id && this.busyIds.has(id); }
 
@@ -492,7 +499,9 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
         return (isIn && safePid) ? this.tasks.listByIssue(safePid, problemId, issueNode.id) : of([]);
       })
     ).subscribe(async tasks => {
-      const kids: TreeNode[] = tasks.map(t => ({
+            // ← ここでテンプレートを除外
+            const visible = (tasks ?? []).filter(t => this.isRealTask(t));
+            const kids: TreeNode[] = visible.map(t => ({
         id: t.id!,
         name: t.title,
         kind: 'task',

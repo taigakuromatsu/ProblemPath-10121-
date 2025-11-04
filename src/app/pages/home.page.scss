@@ -245,12 +245,24 @@
   color: var(--muted);
 }
 
+.task-form__recurrence-hint {
+  margin-left: auto;               /* 右端に寄せる */
+  min-width: 280px;
+  max-width: 520px;
+  font-size: 12px;
+  line-height: 1.4;
+  opacity: .75;
+}
+
 .task-form__recurrence-field select,
 .task-form__recurrence-field input {
   padding: calc(8px * var(--m)) calc(10px * var(--m));
 }
 
 .task-form__recurrence-suffix {
+  margin-right: 10px;   /* お好みで 10〜16px に */
+  margin-left: 4px;     /* 数値入力との間も少しだけ */
+  white-space: nowrap;
   font-size: 0.85em;
   color: var(--muted);
 }

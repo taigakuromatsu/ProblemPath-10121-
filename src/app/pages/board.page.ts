@@ -46,6 +46,12 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 export class BoardPage {
   columns: BoardColumn[] = DEFAULT_BOARD_COLUMNS;
 
+  /** 繰り返しテンプレートでない実体タスクだけ通す */
+  private isRealTask(t: Task | null | undefined): t is Task {
+    return !!t && (t as any).recurrenceTemplate !== true;
+  }
+
+
   readonly categoryAccent: Record<BoardColumn['categoryHint'], string> = {
     not_started: '#9ca3af',
     in_progress: '#0ea5e9',
@@ -298,6 +304,8 @@ export class BoardPage {
       if (!this.tasksMap[k]) {
         this.tasksMap[k] = this.currentProject.projectId$.pipe(
           switchMap(pid => (pid && pid !== 'default') ? this.tasks.listByIssue(pid, problemId, i.id!) : of([])),
+          // ← ここでテンプレートを除外
+          map(rows => (rows ?? []).filter(t => this.isRealTask(t))),
           shareReplay(1)
         );
       }

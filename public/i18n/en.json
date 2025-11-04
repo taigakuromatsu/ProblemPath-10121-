@@ -164,7 +164,7 @@
     "duePlaceholder": "YYYY-MM-DD"
   },
   "recurrence": {
-    "title": "Recurrence",
+    "title": "Recurrence Task Function",
     "freqLabel": "Frequency",
     "freq": {
       "daily": "Daily",
@@ -180,7 +180,10 @@
     "invalidDate": "Please enter the date in YYYY-MM-DD format.",
     "stopHint": "Stop the recurrence before deleting the template.",
     "dueDisabled": "The due date is managed automatically for recurrence templates.",
-    "tagDisabled": "Tags are copied to future instances from the template."
+    "tagDisabled": "Tags are copied to future instances from the template.",
+    "stopAndDeleteConfirm": "Stop recurrence and delete the template. Existing tasks will remain.",
+    "endDate": "End date",
+    "hintShort": "Creation rules: Daily=create on the same day at 0:05, Weekly=create on the next day after the previous due date, Monthly (1-6 months)=create on the next day after the previous due date, Monthly (7 months or more)=create 6 months before the next due date. Tasks after the end date are not created."
   },
   "tag": {
     "none": "(No tags)"
