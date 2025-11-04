@@ -127,6 +127,46 @@
                         —
                       </span>
                     </ng-template>
+
+                      <!-- ▼ 追加: 優先度の表示＆変更（メニュー） -->
+                        <button
+                        mat-stroked-button
+                        type="button"
+                        class="chip-button chip-priority"
+                        [matMenuTriggerFor]="priorityMenu"
+                        [disabled]="isBusyId(node.id) || !(canEdit$ | async)"
+                        *ngIf="node.task"
+                        aria-label="優先度を変更"
+                      >
+                        <mat-icon>flag</mat-icon>
+                        <span>{{ node.task?.priority || ('common.none' | translate) }}</span>
+                        <mat-icon>arrow_drop_down</mat-icon>
+                      </button>
+
+                      <!-- このメニューは各タスク行ごとにインスタンス化されます -->
+                      <mat-menu #priorityMenu="matMenu">
+                        <button
+                          mat-menu-item
+                          (click)="setTaskPriority(node, 'high')"
+                          [disabled]="isBusyId(node.id) || !(canEdit$ | async)">
+                          <mat-icon>priority_high</mat-icon>
+                          <span>high</span>
+                        </button>
+                        <button
+                          mat-menu-item
+                          (click)="setTaskPriority(node, 'mid')"
+                          [disabled]="isBusyId(node.id) || !(canEdit$ | async)">
+                          <mat-icon>flag</mat-icon>
+                          <span>mid</span>
+                        </button>
+                        <button
+                          mat-menu-item
+                          (click)="setTaskPriority(node, 'low')"
+                          [disabled]="isBusyId(node.id) || !(canEdit$ | async)">
+                          <mat-icon>south</mat-icon>
+                          <span>low</span>
+                        </button>
+                      </mat-menu>
                   </div>
                   <div class="node-chips">
                     <button mat-stroked-button type="button" class="chip-button" (click)="openComments(node)">

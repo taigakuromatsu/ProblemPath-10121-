@@ -42,8 +42,7 @@ export interface Problem extends BaseNode {
 }
 
 // 先行定義（次ステップ以降で使う）
-export interface Issue extends BaseNode {
-  links?: IssueLink[];               // 関連課題リンク
+export interface Issue extends BaseNode {              // 関連課題リンク
 }
 
 export interface Task extends BaseNode {
@@ -187,14 +186,4 @@ export interface UserMembership {
   joinedAt: any;       // Firestore Timestamp
 }
 
-// 追加：リンクの種類
-export type LinkType = 'relates' | 'duplicate' | 'blocks' | 'depends_on' | 'same_cause';
-
-// 追加：リンクオブジェクト
-export interface IssueLink {
-  issueId: string;      // 相手の Issue の id
-  type: LinkType;
-  createdAt?: any;      // Firestore Timestamp
-  createdBy?: string;   // uid
-}
 

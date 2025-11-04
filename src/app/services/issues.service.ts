@@ -1,18 +1,11 @@
 import { Injectable } from '@angular/core';
 import { Firestore } from '@angular/fire/firestore';
 import { Observable, map } from 'rxjs';
-import { Issue, IssueLink, LinkType } from '../models/types';
+import { Issue } from '../models/types';
 
 const DEBUG_ISSUES = false; // ← 必要な時だけ true に
 
-
-function commitIfAny(batch: ReturnType<typeof nativeWriteBatch>) {
-  // Firestore の batched writes は 0 件 commit を許容しないケースがあるため
-  // try/catch で包むより「何も積まれてなければ return」しておく。
-  // @ts-ignore（内部APIに依存しないため単純に呼ぶだけ）
-  if ((batch as any)._mutations?.length === 0) return Promise.resolve();
-  return batch.commit();
-}
+// （リンク機能廃止に伴い不要ユーティリティ削除
 
 // Firebase SDK (native) ＋ rxfire
 import {
@@ -25,12 +18,9 @@ import {
   query as nativeQuery,
   orderBy as nativeOrderBy,
   getDocs as nativeGetDocs,
-  getDoc as nativeGetDoc,
   limit as nativeLimit,
   where as nativeWhere,
   writeBatch as nativeWriteBatch,
-  arrayUnion,
-  arrayRemove,
 } from 'firebase/firestore';
 import { collectionData as rxCollectionData } from 'rxfire/firestore';
 
@@ -67,10 +57,6 @@ export class IssuesService {
     const colRef = nativeCollection(this.fs as any, `${this.base(projectId)}/${problemId}/issues`);
     const order = i.order ?? await this.nextOrder(projectId, problemId);
 
-    // links は最小構成 { issueId, type } のみに正規化して保存
-    const normLinks: IssueLink[] = Array.isArray(i.links)
-      ? i.links.map(l => ({ issueId: (l as any).issueId, type: (l as any).type })).filter(l => l.issueId && l.type)
-      : [];
 
     return nativeAddDoc(colRef, {
       title: i.title ?? 'Untitled Issue',
@@ -83,7 +69,6 @@ export class IssuesService {
       visible:true,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      links: normLinks,
     });
   }
 
@@ -119,14 +104,7 @@ export class IssuesService {
   // update
   async update(projectId: string, problemId: string, id: string, patch: Partial<Issue>): Promise<void> {
     const ref = nativeDoc(this.fs as any, this.issueDocPath(projectId, problemId, id));
-
-    // links が入ってきた場合は安全のため最小構成へ正規化
-    let body: any = { ...patch, updatedAt: serverTimestamp() };
-    if (patch.links) {
-      body.links = (patch.links as any[]).map(l => ({ issueId: (l as any).issueId, type: (l as any).type }))
-        .filter(l => l.issueId && l.type);
-    }
-
+    const body: any = { ...patch, updatedAt: serverTimestamp() };
     return nativeUpdateDoc(ref, body) as any;
   }
 
@@ -152,78 +130,8 @@ export class IssuesService {
     return nativeDeleteDoc(issueRef) as any;
   }
   
+  // （リンク機能は廃止）
 
-  // 相互リンク（同一 Problem 内）: 追加 / 削除
-
-  // 逆方向マップ
-  private static readonly INVERSE: Record<LinkType, LinkType> = {
-    relates: 'relates',
-    duplicate: 'duplicate',
-    blocks: 'depends_on',
-    depends_on: 'blocks',
-    same_cause: 'same_cause',
-  };
-
-  /**
-   * 相互リンクを追加（同一 Problem 内）
-   * createdBy は MVP では保存しない（arrayUnion/arrayRemove の一意性を保つため）。
-   */
-  async addLink(
-    projectId: string,
-    problemId: string,
-    fromIssueId: string,
-    toIssueId: string,
-    type: LinkType,
-    _createdBy: string
-  ): Promise<void> {
-    if (fromIssueId === toIssueId) return;
-  
-    const fromRef = nativeDoc(this.fs as any, this.issueDocPath(projectId, problemId, fromIssueId));
-    const toRef   = nativeDoc(this.fs as any, this.issueDocPath(projectId, problemId, toIssueId));
-  
-    // どちらかが無ければ対称性を保つため何もしない（レース対策）
-    const [fromSnap, toSnap] = await Promise.all([nativeGetDoc(fromRef), nativeGetDoc(toRef)]);
-    if (!fromSnap.exists() || !toSnap.exists()) return;
-  
-    const batch = nativeWriteBatch(this.fs as any);
-    const now = serverTimestamp();
-  
-    const fwd: IssueLink = { issueId: toIssueId, type };
-    const rev: IssueLink = { issueId: fromIssueId, type: IssuesService.INVERSE[type] };
-  
-    batch.update(fromRef, { links: arrayUnion(fwd), updatedAt: now } as any);
-    batch.update(toRef,   { links: arrayUnion(rev), updatedAt: now } as any);
-  
-    await commitIfAny(batch);
-  }
-  
-  /** 相互リンクを削除（同一 Problem 内・片側だけでも必ず外す） */
-  async removeLink(
-    projectId: string,
-    problemId: string,
-    fromIssueId: string,
-    toIssueId: string,
-    type: LinkType
-  ): Promise<void> {
-    const fromRef = nativeDoc(this.fs as any, this.issueDocPath(projectId, problemId, fromIssueId));
-    const toRef   = nativeDoc(this.fs as any, this.issueDocPath(projectId, problemId, toIssueId));
-  
-    const [fromSnap, toSnap] = await Promise.all([nativeGetDoc(fromRef), nativeGetDoc(toRef)]);
-  
-    // どちらも無ければ何もしない
-    if (!fromSnap.exists() && !toSnap.exists()) return;
-  
-    const batch = nativeWriteBatch(this.fs as any);
-    const now = serverTimestamp();
-  
-    const fwd: IssueLink = { issueId: toIssueId, type };
-    const rev: IssueLink = { issueId: fromIssueId, type: IssuesService.INVERSE[type] };
-  
-    if (fromSnap.exists()) batch.update(fromRef, { links: arrayRemove(fwd), updatedAt: now } as any);
-    if (toSnap.exists())   batch.update(toRef,   { links: arrayRemove(rev), updatedAt: now } as any);
-  
-    await commitIfAny(batch);
-  }
 
   // 内部ユーティリティ
   private async nextOrder(projectId: string, problemId: string): Promise<number> {

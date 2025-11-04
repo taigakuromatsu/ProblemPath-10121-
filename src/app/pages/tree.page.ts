@@ -1,6 +1,6 @@
 // src/app/pages/tree.page.ts
 import { Component } from '@angular/core';
-import { NgIf, NgFor, AsyncPipe, DatePipe, DecimalPipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ProblemsService } from '../services/problems.service';
 import { IssuesService } from '../services/issues.service';
@@ -26,10 +26,9 @@ import { DraftsService } from '../services/drafts.service';
 import { NetworkService } from '../services/network.service';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AttachmentsService, AttachmentDoc, AttachmentTarget } from '../services/attachments.service';
-import { NgClass } from '@angular/common';
 import { BoardColumnsService } from '../services/board-columns.service';
 import { BoardColumn, DEFAULT_BOARD_COLUMNS, Task } from '../models/types';
-import { CommonModule } from '@angular/common';
+import { MatMenuModule } from '@angular/material/menu';
 
 type Status = BoardColumn['categoryHint'];
 
@@ -54,9 +53,9 @@ function dlog(...args: any[]) {
   standalone: true,
   selector: 'pp-tree',
   imports: [
-    NgIf, NgFor, AsyncPipe, DatePipe, DecimalPipe, FormsModule,
+    CommonModule, FormsModule,
     MatButtonModule, MatTreeModule, MatIconModule, MatTooltipModule, MatCardModule,
-    NgChartsModule, MatSnackBarModule, TranslateModule, NgClass, CommonModule
+    NgChartsModule, MatSnackBarModule, TranslateModule, MatMenuModule
   ],
   templateUrl: './tree.page.html',
   styleUrls: ['./tree.page.scss']
@@ -1021,6 +1020,35 @@ private async attachBadgeStreams(node: TreeNode) {
     }
   } catch {}
 }
+
+  /**
+   * Treeのタスク行から優先度を更新（high / mid / low）
+   * - 編集権限/オンラインをガード
+   * - 楽観的UI更新 → 失敗時ロールバック
+   */
+  async setTaskPriority(node: TreeNode, newPriority: 'low'|'mid'|'high') {
+    if (node.kind !== 'task' || !node.parentProblemId || !node.parentIssueId || !node.id) return;
+    if (!(await this.requireCanEdit())) return;
+    if (this.isBusyId(node.id)) return;
+
+    const prev = node.task?.priority;
+    if (node.task) node.task.priority = newPriority; // 楽観的更新
+
+    this.busyIds.add(node.id);
+    this.withPid(async pid => {
+      try {
+        await this.tasks.update(pid, node.parentProblemId!, node.parentIssueId!, node.id!, {
+          priority: newPriority,
+        });
+      } catch (e) {
+        console.error('[TreePage] setTaskPriority failed', e);
+        if (node.task) node.task.priority = prev as any; // ロールバック
+        this.snack.open(this.tr.instant('board.err.update') || '更新に失敗しました', 'OK', { duration: 3000 });
+      } finally {
+        this.busyIds.delete(node.id);
+      }
+    });
+  }
 
 }
 

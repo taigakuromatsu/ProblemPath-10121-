@@ -46,16 +46,6 @@ type ProblemWithDef = Problem & {
 };
 type EditProblemField = 'phenomenon' | 'cause' | 'solution' | 'goal';
 
-// ---- リンク種別 ----
-type LinkType = 'relates' | 'duplicate' | 'blocks' | 'depends_on' | 'same_cause';
-const LINK_TYPE_LABEL: Record<LinkType, string> = {
-  relates: '関連',
-  duplicate: '重複',
-  blocks: 'ブロック',
-  depends_on: '依存',
-  same_cause: '同一原因',
-};
-
 @Component({
   standalone: true,
   selector: 'pp-home',
@@ -88,11 +78,6 @@ export class HomePage implements OnInit, OnDestroy {
   taskRecurrenceInterval: Record<string, number> = {};
   taskRecurrenceEndDate: Record<string, string> = {};
   tasksMap: Record<string, Observable<Task[]>> = {};
-
-  // Link UI state
-  linkTypes: LinkType[] = ['relates','duplicate','blocks','depends_on','same_cause'];
-  linkTarget: Record<string, string | null> = {};
-  linkTypeSel: Record<string, LinkType> = {};
 
   // Draft timers
   private issueTitleTimer: any = null;
@@ -217,10 +202,6 @@ export class HomePage implements OnInit, OnDestroy {
           if (recT && !this.taskTitle[id]) {
             this.taskTitle[id] = recT.value || '';
           }
-
-          // Link UI 初期値
-          if (!this.linkTypeSel[id]) this.linkTypeSel[id] = 'relates';
-          if (!(id in this.linkTarget)) this.linkTarget[id] = null;
         }
         this.tasksMap = nextMap;
       });
@@ -405,33 +386,6 @@ export class HomePage implements OnInit, OnDestroy {
     });
   }
 
-  // === Link 操作 ===
-  linkLabel(t: LinkType) { return LINK_TYPE_LABEL[t] || t; }
-  titleByIssueId(all: Issue[], id?: string | null): string | null {
-    if (!id) return null;
-    const hit = all?.find(x => x.id === id);
-    return hit?.title ?? null;
-  }
-  async onAddLink(problemId: string, fromIssueId: string) {
-    if (!(await this.requireOnline())) return;
-    const toIssueId = this.linkTarget[fromIssueId];
-    const type = this.linkTypeSel[fromIssueId] || 'relates';
-    if (!toIssueId) { alert('対象 Issue を選んでください'); return; }
-    if (toIssueId === fromIssueId) { alert('同一 Issue にはリンクできません'); return; }
-    const pid = this.currentProject.getSync();
-    if (!pid) { alert('プロジェクト未選択'); return; }
-    const uid = await firstValueFrom(this.auth.uid$);
-    await this.issues.addLink(pid, problemId, fromIssueId, toIssueId, type, uid || '');
-    this.linkTarget[fromIssueId] = null;
-    this.linkTypeSel[fromIssueId] = 'relates';
-  }
-  async onRemoveLink(problemId: string, fromIssueId: string, toIssueId: string, type: LinkType) {
-    if (!(await this.requireOnline())) return;
-    const pid = this.currentProject.getSync();
-    if (!pid) { alert('プロジェクト未選択'); return; }
-    await this.issues.removeLink(pid, problemId, fromIssueId, toIssueId, type);
-  }
-
   // --- Task タイトルのドラフト ---
   private draftKeyTaskTitle(problemId: string | null, issueId: string): string | null {
     const pid = this.currentProject.getSync();
@@ -613,15 +567,8 @@ async stopRecurrence(problemId: string, issueId: string, task: Task) {
     }, 600);
   }
 
-  visibleLinks(raw: any, all: Issue[] | null | undefined): { issueId: string, type: LinkType }[] {
-    if (!Array.isArray(raw) || !Array.isArray(all)) return [];
-    const set = new Set(all.map(i => i.id));
-    return raw
-      .filter((v: any) => v && typeof v === 'object' && v.issueId && v.type)
-      .filter((v: any) => set.has(String(v.issueId)))
-      .map((v: any) => ({ issueId: String(v.issueId), type: v.type as LinkType }));
-  }
-
+  // → リンク機能は廃止
+  
   /** 共通：ソフトデリート → Undo 5秒 */
   private async softDeleteWithUndo(
     kind: 'problem'|'issue'|'task',

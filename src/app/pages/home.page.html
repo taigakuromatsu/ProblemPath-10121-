@@ -240,7 +240,7 @@
                 <h3 class="section-title section-title--info no-truncate">
                   <mat-icon aria-hidden="true">playlist_add_check</mat-icon> {{ 'issue.listTitle' | translate }}
                 </h3>
-                <p class="section-subtitle text-2line">課題とリンク、タスクをまとめて管理します。</p>
+                <p class="section-subtitle text-2line">課題とタスクをまとめて管理します。</p>
               </div>
             </div>
 
@@ -271,37 +271,8 @@
                       </div>
                     </header>
 
-                    <section class="issue-links">
-                      <h4 class="section-title section-title--info no-truncate">
-                        <mat-icon aria-hidden="true">share</mat-icon> {{ 'link.title' | translate }}
-                      </h4>
+                    <!-- → リンク機能は廃止 -->
 
-                      <div class="link-chips" *ngIf="visibleLinks(i.links, issues).length > 0; else noLinks">
-                        <mat-chip-set>
-                          <mat-chip *ngFor="let lk of visibleLinks(i.links, issues)" appearance="outlined">
-                            <span class="link-type">[{{ linkLabel(lk.type) }}]</span>
-                            <span class="link-target">{{ titleByIssueId(issues, lk.issueId) }}</span>
-                            <button mat-icon-button type="button" *ngIf="members.isEditor$ | async" aria-label="{{ 'link.removeAria' | translate }}" (click)="onRemoveLink(pid, i.id!, lk.issueId, lk.type)" [disabled]="!(canEdit$ | async)">
-                              <mat-icon fontIcon="close"></mat-icon>
-                            </button>
-                          </mat-chip>
-                        </mat-chip-set>
-                      </div>
-                      <ng-template #noLinks>
-                        <div class="empty-state">{{ 'link.none' | translate }}</div>
-                      </ng-template>
-
-                      <form class="inline-form inline-form--compact" *ngIf="members.isEditor$ | async" (ngSubmit)="onAddLink(pid, i.id!)">
-                        <select [(ngModel)]="linkTarget[i.id!]" name="linkTarget-{{ i.id }}">
-                          <option [ngValue]="null">{{ 'link.selectIssuePrompt' | translate }}</option>
-                          <option *ngFor="let j of issues" [ngValue]="j.id" [disabled]="j.id === i.id">{{ j.title }}</option>
-                        </select>
-                        <select [(ngModel)]="linkTypeSel[i.id!]" name="linkType-{{ i.id }}">
-                          <option *ngFor="let t of linkTypes" [ngValue]="t">{{ linkLabel(t) }}</option>
-                        </select>
-                        <button mat-stroked-button type="submit" [disabled]="!(canEdit$ | async)">＋ {{ 'link.add' | translate }}</button>
-                      </form>
-                    </section>
 
                     <section class="issue-tasks">
                       <header class="tasks-header">

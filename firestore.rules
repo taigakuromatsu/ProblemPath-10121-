@@ -200,13 +200,8 @@ service cloud.firestore {
 
         match /issues/{issueId} {
           allow read: if isMember(projectId);
-
-          function validIssueLinks(arr) {
-            return arr is list && arr.size() <= 200;
-          }
-
-          allow create, update: if isEditor(projectId)
-            && (!('links' in request.resource.data) || validIssueLinks(request.resource.data.links));
+          // リンク機能を廃止したため、links の検証は削除
+          allow create, update: if isEditor(projectId);
 
           allow delete: if isEditor(projectId);
 
