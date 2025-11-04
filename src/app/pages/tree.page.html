@@ -108,7 +108,16 @@
                 <span class="node-line" aria-hidden="true"></span>
                 <div class="node-row node-row--task">
                   <div class="node-main">
-                    <span class="node-title" [matTooltip]="node.name" [attr.aria-label]="node.name">{{ node.name }}</span>
+                    <div class="node-title-row">
+                      <span class="node-title" [matTooltip]="node.name" [attr.aria-label]="node.name">{{ node.name }}</span>
+                      <span
+                        class="badge badge--outline"
+                        *ngIf="node.task?.recurrenceTemplate"
+                        [matTooltip]="recurrenceTooltip(node.task)"
+                      >
+                        {{ 'recurrence.templateChip' | translate }}
+                      </span>
+                    </div>
                   </div>
                   <div class="node-meta">
                     <ng-container *ngIf="findColumnForTask(node.task) as col; else fallbackColumn">

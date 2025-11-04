@@ -335,6 +335,10 @@
                               <input type="number" min="1" step="1" [(ngModel)]="taskRecurrenceInterval[i.id!]" name="taskRecurrenceInterval-{{ i.id }}" />
                               <span class="task-form__recurrence-suffix">{{ 'recurrence.intervalSuffix' | translate }}</span>
                             </span>
+                            <span class="task-form__recurrence-field">
+                              <label>{{ 'recurrence.endDateLabel' | translate }}</label>
+                              <input type="date" [(ngModel)]="taskRecurrenceEndDate[i.id!]" name="taskRecurrenceEndDate-{{ i.id }}" />
+                            </span>
                           </div>
                         </div>
                       </form>

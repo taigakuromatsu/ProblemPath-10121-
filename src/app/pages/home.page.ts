@@ -86,6 +86,7 @@ export class HomePage implements OnInit, OnDestroy {
   taskRecurrenceEnabled: Record<string, boolean> = {};
   taskRecurrenceFreq: Record<string, 'DAILY' | 'WEEKLY' | 'MONTHLY'> = {};
   taskRecurrenceInterval: Record<string, number> = {};
+  taskRecurrenceEndDate: Record<string, string> = {};
   tasksMap: Record<string, Observable<Task[]>> = {};
 
   // Link UI state
@@ -456,6 +457,12 @@ export class HomePage implements OnInit, OnDestroy {
       return;
     }
 
+    const endRaw = (this.taskRecurrenceEndDate[issueId] ?? '').trim();
+    if (endRaw && !/^\d{4}-\d{2}-\d{2}$/.test(endRaw)) {
+      alert(this.t('recurrence.invalidDate', '日付は YYYY-MM-DD 形式で入力してください'));
+      return;
+    }
+
     const recurrenceEnabled = !!this.taskRecurrenceEnabled[issueId];
     const freq = this.taskRecurrenceFreq[issueId] ?? 'WEEKLY';
     let interval = Number(this.taskRecurrenceInterval[issueId] ?? 1);
@@ -474,6 +481,7 @@ export class HomePage implements OnInit, OnDestroy {
     if (recurrenceEnabled && dueRaw) {
       payload.recurrenceRule = { freq, interval };
       payload.recurrenceAnchorDate = dueRaw;
+      payload.recurrenceEndDate = endRaw ? endRaw : null;
     }
 
     this.withPid(pid => this.tasks.create(pid, problemId, issueId, payload).then(() => {
@@ -482,6 +490,7 @@ export class HomePage implements OnInit, OnDestroy {
       this.taskRecurrenceEnabled[issueId] = false;
       this.taskRecurrenceInterval[issueId] = 1;
       this.taskRecurrenceFreq[issueId] = freq;
+      this.taskRecurrenceEndDate[issueId] = '';
       const key = this.draftKeyTaskTitle(this.selectedProblemId, issueId);
       if (key) this.drafts.clear(key);
     }));
@@ -492,6 +501,8 @@ export class HomePage implements OnInit, OnDestroy {
     if (enabled) {
       if (!this.taskRecurrenceInterval[issueId]) this.taskRecurrenceInterval[issueId] = 1;
       if (!this.taskRecurrenceFreq[issueId]) this.taskRecurrenceFreq[issueId] = 'WEEKLY';
+    } else {
+      this.taskRecurrenceEndDate[issueId] = '';
     }
   }
   async renameTask(problemId: string, issueId: string, task: Task) {
@@ -551,6 +562,7 @@ export class HomePage implements OnInit, OnDestroy {
       recurrenceRule: undefined,
       recurrenceTemplate: false,
       recurrenceAnchorDate: null,
+      recurrenceEndDate: null,
     }));
   }
 

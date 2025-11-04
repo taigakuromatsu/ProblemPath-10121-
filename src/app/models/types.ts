@@ -55,6 +55,8 @@ export interface Task extends BaseNode {
   recurrenceParentId?: string | null;
   recurrenceInstanceIndex?: number | null;
   recurrenceAnchorDate?: string | null;
+  recurrenceEndDate?: string | null;
+  nextDueYmd?: string | null;
   // スケジュール横断表示のための親参照
   problemId?: string;
   issueId?: string;

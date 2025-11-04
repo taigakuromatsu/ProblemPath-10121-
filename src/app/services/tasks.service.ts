@@ -112,12 +112,40 @@ export class TasksService {
       recurrenceParentId: t.recurrenceParentId ?? null,
       recurrenceInstanceIndex: t.recurrenceInstanceIndex ?? null,
       recurrenceAnchorDate: anchorDate,
+      recurrenceEndDate: t.recurrenceEndDate ?? null,
       // TODO: このメタ情報はCloud Functionsの集計(refreshAnalyticsSummary)で使うので必須
       projectId: pid,
       problemId,
       issueId,
       softDeleted: false,
     });
+  }
+
+  async enableRecurrence(taskPath: string, params: {
+    rule: { freq: 'DAILY' | 'WEEKLY' | 'MONTHLY'; interval: number };
+    anchorYmd: string;
+    endDateYmd?: string | null;
+  }): Promise<void> {
+    const interval = Math.max(1, Number(params.rule.interval ?? 1));
+    const docRef = nativeDoc(this.fs as any, taskPath);
+    await nativeUpdateDoc(docRef, {
+      recurrenceTemplate: true,
+      recurrenceRule: { freq: params.rule.freq, interval },
+      recurrenceAnchorDate: params.anchorYmd,
+      recurrenceEndDate: params.endDateYmd ?? null,
+      updatedAt: serverTimestamp(),
+    } as any);
+  }
+
+  async stopRecurrence(taskPath: string): Promise<void> {
+    const docRef = nativeDoc(this.fs as any, taskPath);
+    await nativeUpdateDoc(docRef, {
+      recurrenceTemplate: false,
+      recurrenceRule: null,
+      recurrenceAnchorDate: null,
+      recurrenceEndDate: null,
+      updatedAt: serverTimestamp(),
+    } as any);
   }
 
   // 並べ替え
@@ -256,6 +284,7 @@ export class TasksService {
       base,
       nativeWhere('projectId', '==', pid),
       nativeWhere('softDeleted','==', false),
+      nativeWhere('recurrenceTemplate', '==', false),
       nativeWhere('dueDate', '>=', startYmd),
       nativeWhere('dueDate', '<=', endYmd),
       ...(openOnly ? [nativeWhere('status', 'in', OPEN_STATUSES)] : []),
@@ -299,6 +328,7 @@ export class TasksService {
       base,
       nativeWhere('projectId', '==', pid),
       nativeWhere('softDeleted','==', false),
+      nativeWhere('recurrenceTemplate', '==', false),
       nativeWhere('dueDate', '<', todayYmd),
       ...(openOnly ? [nativeWhere('status', 'in', OPEN_STATUSES)] : []),
       ...tagFilter,
@@ -337,6 +367,7 @@ export class TasksService {
       base,
       nativeWhere('projectId', '==', pid),
       nativeWhere('softDeleted','==', false),
+      nativeWhere('recurrenceTemplate', '==', false),
       nativeWhere('dueDate', '==', null),
       ...(openOnly ? [nativeWhere('status', 'in', OPEN_STATUSES)] : []),
       ...tagFilter,
@@ -362,6 +393,7 @@ export class TasksService {
         base,
         nativeWhere('projectId', '==', projectId),
         nativeWhere('softDeleted', '==', false),
+        nativeWhere('recurrenceTemplate', '==', false),
         ...(openOnly ? [nativeWhere('status', 'in', OPEN_STATUSES)] : []),
         nativeOrderBy('createdAt', 'asc')
       );
@@ -423,6 +455,7 @@ export class TasksService {
     ...(openOnly ? [nativeWhere('status','in', OPEN_STATUSES)] : []),
 
     nativeWhere('softDeleted','==', false),
+    nativeWhere('recurrenceTemplate', '==', false),
     nativeWhere('dueDate', '>=', startYmd),
     nativeWhere('dueDate', '<=', endYmd),
     nativeOrderBy('dueDate', 'asc')
@@ -465,8 +498,9 @@ listMineNoDue(
     nativeWhere('assignees', 'array-contains', uid),
 
     ...(openOnly ? [nativeWhere('status','in', OPEN_STATUSES)] : []),
-    
+
     nativeWhere('softDeleted','==', false),
+    nativeWhere('recurrenceTemplate', '==', false),
     nativeWhere('dueDate', '==', null),
     nativeOrderBy('createdAt', 'desc')
   );

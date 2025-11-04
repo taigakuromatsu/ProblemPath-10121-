@@ -173,6 +173,7 @@
     },
     "interval": "Interval",
     "intervalSuffix": "apart",
+    "endDateLabel": "End date (optional)",
     "templateChip": "Recurring template",
     "stop": "Stop recurrence",
     "stopConfirm": "Stop generating future tasks? Existing ones will remain.",

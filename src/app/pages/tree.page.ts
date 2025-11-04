@@ -69,6 +69,8 @@ export class TreePage {
   busyIds = new Set<string>();
   isBusyId(id?: string|null){ return !!id && this.busyIds.has(id); }
 
+  private readonly MAX_RECURRENCE_ITERATIONS = 5000;
+
   private boardColumnsSub?: import('rxjs').Subscription;
 
   bucket(status: Task['status'] | undefined): BoardColumn['categoryHint'] {
@@ -492,7 +494,13 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
         return (isIn && safePid) ? this.tasks.listByIssue(safePid, problemId, issueNode.id) : of([]);
       })
     ).subscribe(async tasks => {
-      const kids: TreeNode[] = tasks.map(t => ({
+      const tasksWithNext = tasks.map(t => {
+        if (!t?.recurrenceTemplate) return t;
+        const nextDue = this.computeNextDueYmd(t);
+        return { ...t, nextDueYmd: nextDue } as Task;
+      });
+
+      const kids: TreeNode[] = tasksWithNext.map(t => ({
         id: t.id!,
         name: t.title,
         kind: 'task',
@@ -604,7 +612,136 @@ private isAllowedFile(file: File): { ok: boolean; reason?: string } {
       datasets: [{ data: [d.overdue, d.today, d.thisWeek, d.nextWeek, d.later, d.nodue], maxBarThickness: 22 }]
     } as ChartConfiguration<'bar'>['data'];
   }
-  
+
+  recurrenceTooltip(task: Task | null | undefined): string {
+    if (!task) return '';
+    const start = task.recurrenceAnchorDate || '—';
+    const end = task.recurrenceEndDate || '—';
+    const freq = task.recurrenceRule?.freq || '—';
+    const interval = task.recurrenceRule?.interval ?? 1;
+    const next = task.nextDueYmd || '—';
+    return `開始: ${start} / 終了: ${end} / 頻度: ${freq} × ${interval} / 次回: ${next}`;
+  }
+
+  private computeNextDueYmd(task: Task): string | null {
+    const rule = task.recurrenceRule;
+    const anchor = this.parseUtcYmd(task.recurrenceAnchorDate ?? null);
+    if (!rule?.freq || !anchor) return null;
+
+    const endDate = this.parseUtcYmd(task.recurrenceEndDate ?? null);
+    const interval = Math.max(1, Number(rule.interval ?? 1));
+    const anchorDay = anchor.getUTCDate();
+    const today = this.getJstTodayUtc();
+
+    let current = anchor;
+    let prev: Date | null = null;
+    let guard = 0;
+
+    while (guard < this.MAX_RECURRENCE_ITERATIONS) {
+      if (endDate && this.compareUtcDate(current, endDate) > 0) break;
+
+      const creation = this.creationDateForRule(rule.freq, interval, current, prev, anchorDay);
+      if (creation && this.compareUtcDate(creation, today) >= 0) {
+        return this.formatUtcYmd(current);
+      }
+
+      prev = current;
+      const next = this.advanceDue(rule.freq, interval, current, anchorDay);
+      if (this.compareUtcDate(next, current) <= 0) break;
+      current = next;
+      guard += 1;
+    }
+
+    return null;
+  }
+
+  private parseUtcYmd(ymd: string | null | undefined): Date | null {
+    if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null;
+    const [y, m, d] = ymd.split('-').map(Number);
+    if (!y || !m || !d) return null;
+    return new Date(Date.UTC(y, m - 1, d));
+  }
+
+  private formatUtcYmd(date: Date): string {
+    const y = date.getUTCFullYear();
+    const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(date.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  private compareUtcDate(a: Date, b: Date): number {
+    const aTime = Date.UTC(a.getUTCFullYear(), a.getUTCMonth(), a.getUTCDate());
+    const bTime = Date.UTC(b.getUTCFullYear(), b.getUTCMonth(), b.getUTCDate());
+    return Math.sign(aTime - bTime);
+  }
+
+  private addUtcDays(base: Date, days: number): Date {
+    return new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
+  }
+
+  private addMonthsKeepingDayUtc(base: Date, months: number, anchorDay: number): Date {
+    const year = base.getUTCFullYear();
+    const month = base.getUTCMonth();
+    const target = new Date(Date.UTC(year, month + months, 1));
+    const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+    const day = Math.min(anchorDay, lastDay);
+    return new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), day));
+  }
+
+  private subMonthsKeepingDayUtc(base: Date, months: number): Date {
+    const year = base.getUTCFullYear();
+    const month = base.getUTCMonth();
+    const baseDay = base.getUTCDate();
+    const target = new Date(Date.UTC(year, month - months, 1));
+    const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+    const day = Math.min(baseDay, lastDay);
+    return new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), day));
+  }
+
+  private advanceDue(freq: 'DAILY' | 'WEEKLY' | 'MONTHLY', interval: number, base: Date, anchorDay: number): Date {
+    if (freq === 'DAILY') {
+      return this.addUtcDays(base, interval);
+    }
+    if (freq === 'WEEKLY') {
+      return this.addUtcDays(base, 7 * interval);
+    }
+    if (freq === 'MONTHLY') {
+      return this.addMonthsKeepingDayUtc(base, interval, anchorDay);
+    }
+    return this.addUtcDays(base, interval);
+  }
+
+  private creationDateForRule(
+    freq: 'DAILY' | 'WEEKLY' | 'MONTHLY',
+    interval: number,
+    due: Date,
+    prevDue: Date | null,
+    anchorDay: number,
+  ): Date | null {
+    if (freq === 'DAILY') {
+      return this.addUtcDays(due, -1);
+    }
+    if (freq === 'WEEKLY') {
+      if (!prevDue) return null;
+      return this.addUtcDays(prevDue, 1);
+    }
+    if (freq === 'MONTHLY') {
+      if (interval <= 6) {
+        if (!prevDue) return null;
+        return this.addUtcDays(prevDue, 1);
+      }
+      return this.subMonthsKeepingDayUtc(due, 6);
+    }
+    return null;
+  }
+
+  private getJstTodayUtc(): Date {
+    const nowUtcMs = Date.now();
+    const jstMs = nowUtcMs + 9 * 60 * 60 * 1000;
+    const jstDate = new Date(jstMs);
+    return new Date(Date.UTC(jstDate.getUTCFullYear(), jstDate.getUTCMonth(), jstDate.getUTCDate()));
+  }
+
   // --- 日付ユーティリティ ---
   private ymd(d: Date): string {
     const y = d.getFullYear();
