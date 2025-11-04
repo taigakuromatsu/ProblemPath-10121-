@@ -24,6 +24,8 @@ import {
 export { issueSuggestHttp } from "./issue-suggest";
 export { refreshAnalyticsSummaryV2 } from "./analytics";
 export { generateProgressReportDraft } from "./ai";
+export { generateRecurringTasks } from "./recurrence";
+import { addDays, formatYmd, getJstToday } from "./time";
 
 if (!getApps().length) {
   initializeApp();
@@ -228,24 +230,6 @@ async function handleAttachmentCreated(
     result,
   });
   return result;
-}
-
-function getJstToday(): Date {
-  const nowUtcMs = Date.now();
-  const jstMs = nowUtcMs + 9 * 60 * 60 * 1000;
-  const jstDate = new Date(jstMs);
-  return new Date(Date.UTC(jstDate.getUTCFullYear(), jstDate.getUTCMonth(), jstDate.getUTCDate()));
-}
-
-function addDays(base: Date, days: number): Date {
-  return new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
-}
-
-function formatYmd(date: Date): string {
-  const year = date.getUTCFullYear();
-  const month = `${date.getUTCMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getUTCDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }
 
 function extractPathParams(ref: DocumentReference) {

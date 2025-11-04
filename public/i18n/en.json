@@ -160,7 +160,27 @@
     "dueShort": "(due: {{ date }})",
     "editDue": "Due",
     "editTags": "Tags",
-    "noneYet": "(No tasks yet)"
+    "noneYet": "(No tasks yet)",
+    "duePlaceholder": "YYYY-MM-DD"
+  },
+  "recurrence": {
+    "title": "Recurrence",
+    "freqLabel": "Frequency",
+    "freq": {
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly"
+    },
+    "interval": "Interval",
+    "intervalSuffix": "apart",
+    "templateChip": "Recurring template",
+    "stop": "Stop recurrence",
+    "stopConfirm": "Stop generating future tasks? Existing ones will remain.",
+    "anchorRequired": "A first due date is required when enabling recurrence.",
+    "invalidDate": "Please enter the date in YYYY-MM-DD format.",
+    "stopHint": "Stop the recurrence before deleting the template.",
+    "dueDisabled": "The due date is managed automatically for recurrence templates.",
+    "tagDisabled": "Tags are copied to future instances from the template."
   },
   "tag": {
     "none": "(No tags)"
