@@ -52,7 +52,9 @@
     "offlineActionBlocked": "You are offline. Please check your connection and try again."
   },
   "toast": {
-    "deleted": "Deleted “{{name}}”."
+    "deleted": "Deleted “{{name}}”.",
+    "onlineResume": "You are online again (you can resume operations).",
+    "offlineStop": "You are offline (saving and updating are stopped)."
   },
   "validation": {
     "titleRequired": "Title is required",
@@ -79,6 +81,12 @@
     "offlineComments": "You are offline. You cannot post, edit, or delete comments.",
     "noEditPermission": "You don't have edit permission (Viewer).",
     "offlineNoEdit": "You are offline and cannot edit."
+  },
+  "app": {
+    "offline": {
+      "title": "You are offline.",
+      "desc": "Changes are not saved and some operations are disabled. When the connection is restored, operations will automatically resume."
+    }
   },
   "nav": {
     "tree": "Tree",
@@ -282,11 +290,6 @@
     "helpText": "Send the generated URL by email. The recipient opens it, signs in, and joins the project.",
     "lead": "Invite teammates by email."
   },
-  "role": {
-    "adminLabel": "admin",
-    "memberLabel": "member",
-    "viewerLabel": "viewer"
-  },
   "settings": {
     "titlePreview": "Settings (preview only)",
     "lead": "You will edit personality / language / theme / accent color here in the future.",
@@ -343,6 +346,11 @@
     "notStarted": "Not started",
     "in_progress": "In progress",
     "not_started": "Not started"
+  },
+  "role": {
+    "adminLabel": "Admin",
+    "memberLabel": "Member",
+    "viewerLabel": "Viewer"
   },
   "comment": {
     "title": "Comments",
@@ -532,7 +540,20 @@
     "new": "New",
     "delete": "Delete",
     "leave": "Leave",
-    "offline": "You are offline. Switching and actions are disabled."
+    "offline": "Offline — some actions are disabled",
+    "prompt": { "createName": "Enter a new project name" },
+    "alert": {
+      "created": "Project created",
+      "deleteOnlyAdmin": "Only admins can delete the project",
+      "deleted": "Project deleted",
+      "adminCannotLeave": "Admins cannot leave from here",
+      "left": "Left the project"
+    },
+    "confirm": {
+      "delete": "This will permanently delete the project. Continue?",
+      "leave": "Leave this project? (Assigned tasks will be unassigned.)"
+    },
+    "cannotSwitchOffline": "Cannot switch projects while offline"
   },
   "cf": {
     "title": "Comments / Files",

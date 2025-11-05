@@ -52,7 +52,9 @@
     "offlineActionBlocked": "オフラインのため、この操作は実行できません。接続を確認してください。"
   },
   "toast": {
-    "deleted": "「{{name}}」を削除しました"
+    "deleted": "「{{name}}」を削除しました",
+    "onlineResume": "オンラインに復帰しました（操作を再開できます）",
+    "offlineStop": "オフラインです（保存や更新は停止します）"
   },
   "validation": {
     "titleRequired": "タイトルは必須です",
@@ -281,11 +283,6 @@
     "createLink": "招待リンクを作成",
     "helpText": "生成されたURLをメールで送ってください。相手は開いてログイン→「参加する」でメンバーになります。",
     "lead": "メールでチームメンバーを招待します。"
-  },
-  "role": {
-    "adminLabel": "管理者（admin）",
-    "memberLabel": "メンバー（member）",
-    "viewerLabel": "閲覧者（viewer）"
   },
   "settings": {
     "titlePreview": "設定（準備のみ／表示）",
@@ -525,15 +522,6 @@
     "willJoinAs": "このプロジェクトに {{role}} 権限で参加します。",
     "acceptFailed": "参加に失敗しました。"
   },
-  "projectSwitcher": {
-    "project": "プロジェクト",
-    "loading": "読み込み中…",
-    "noProjects": "プロジェクトがありません",
-    "new": "新規作成",
-    "delete": "削除",
-    "leave": "退出",
-    "offline": "オフラインのため操作できません"
-  },
   "cf": {
     "title": "コメント/ファイル",
     "header": "コメント / ファイル — {{name}}",
@@ -546,6 +534,39 @@
     "error": "AIエラー",
     "clear": "クリア",
     "noProblem": "問題を選択してください"
+  },
+  "app": {
+    "offline": {
+      "title": "オフラインです。",
+      "desc": "変更は保存されず、一部操作は無効化されます。接続が回復すると自動で再開します。"
+    }
+  },
+  "projectSwitcher": {
+    "project": "プロジェクト",
+    "loading": "読み込み中…",
+    "offline": "オフライン — 一部操作は無効です",
+    "noProjects": "プロジェクトがありません",
+    "new": "新規作成",
+    "delete": "削除",
+    "leave": "退出",
+    "prompt": { "createName": "新規プロジェクト名を入力してください" },
+    "alert": {
+      "created": "プロジェクトを作成しました",
+      "deleteOnlyAdmin": "削除できるのは管理者のみです",
+      "deleted": "プロジェクトを削除しました",
+      "adminCannotLeave": "管理者はここから退出できません",
+      "left": "退出しました"
+    },
+    "confirm": {
+      "delete": "このプロジェクトを完全に削除します。よろしいですか？（元に戻せません）",
+      "leave": "このプロジェクトから退出します。よろしいですか？（担当タスクの割り当ても外れます）"
+    },
+    "cannotSwitchOffline": "オフラインのためプロジェクトを切り替えられません"
+  },
+  "role": {
+    "adminLabel": "管理者",
+    "memberLabel": "メンバー",
+    "viewerLabel": "閲覧者"
   }
   
 }

@@ -266,10 +266,12 @@ service cloud.firestore {
         allow delete: if isSignedIn() && (request.auth.uid == uid || isAdmin(projectId));
       }
 
-      match /fcmTokens/{token} {
-        allow read: if false;
-        allow create, update, delete: if isSignedIn() && request.auth.uid == uid;
-      }
+       match /fcmTokens/{token} {
+          // 自分自身のみ読み取り可（get / list の両方を含む）
+          allow read: if isSignedIn() && request.auth.uid == uid;
+          // 作成・更新・削除も自分自身のみ
+          allow create, update, delete: if isSignedIn() && request.auth.uid == uid;
+        }
 
       match /fcmStatus/{docId} {
         allow read: if isSignedIn() && request.auth.uid == uid;

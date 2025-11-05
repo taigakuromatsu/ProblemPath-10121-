@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, ChangeDetectorRef, OnDestroy } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 
 import { ProjectDirectoryService, MyProject } from './services/project-directory.service';
 import { CurrentProjectService } from './services/current-project.service';
@@ -13,7 +13,10 @@ import { firstValueFrom, Observable } from 'rxjs';
 
 // Firestore
 import { Firestore } from '@angular/fire/firestore';
-import { collection, doc, getDoc, getDocs, addDoc, setDoc, deleteDoc, updateDoc, serverTimestamp, query, where, writeBatch, onSnapshot } from 'firebase/firestore';
+import {
+  collection, doc, getDoc, getDocs, addDoc, setDoc, deleteDoc, updateDoc,
+  serverTimestamp, query, where, writeBatch, onSnapshot
+} from 'firebase/firestore';
 import { arrayRemove } from 'firebase/firestore';
 
 @Component({
@@ -34,7 +37,6 @@ import { arrayRemove } from 'firebase/firestore';
 
     .switcher__list { display: flex; flex-direction: column; gap: var(--gap-1); overflow-y: auto; padding-right: calc(2px * var(--m)); }
 
-    /* プロジェクト = 押しやすい“ボタンUI” */
     .switcher__item {
       display: inline-flex; align-items: center; gap: var(--gap-1);
       width: 100%; border-radius: 999px; padding: calc(6px * var(--m)) calc(10px * var(--m));
@@ -112,7 +114,6 @@ import { arrayRemove } from 'firebase/firestore';
   `
 })
 export class ProjectSwitcher implements OnDestroy {
-  // （ロジックはそのまま）
   projects: MyProject[] = [];
   selected: string | null = null;
   private prevSelected: string | null = null;
@@ -134,7 +135,8 @@ export class ProjectSwitcher implements OnDestroy {
     private authSvc: AuthService,
     private fs: Firestore,
     private cdr: ChangeDetectorRef,
-    private network: NetworkService
+    private network: NetworkService,
+    private i18n: TranslateService,
   ) {}
 
   async ngOnInit() {
@@ -165,13 +167,13 @@ export class ProjectSwitcher implements OnDestroy {
 
   private async requireOnline(): Promise<boolean> {
     const ok = await firstValueFrom(this.isOnline$);
-    if (!ok) { alert('オフラインのため操作できません'); }
+    if (!ok) { alert(this.i18n.instant('error.offlineActionBlocked')); }
     return !!ok;
   }
 
   onChange(pid: string | null) {
     if (!this.onlineNow) {
-      alert('オフラインのためプロジェクトを切り替えられません');
+      alert(this.i18n.instant('projectSwitcher.cannotSwitchOffline'));
       this.selected = this.prevSelected;
       this.cdr.markForCheck();
       return;
@@ -241,7 +243,8 @@ export class ProjectSwitcher implements OnDestroy {
       const u = (this.authSvc as any).auth?.currentUser;
       if (!u) { await this.authSvc.signInWithGoogle(true); return; }
 
-      const name = prompt('新規プロジェクト名を入力してください', `${u.displayName || 'My'} Project`);
+      const placeholder = `${u.displayName || 'My'} Project`;
+      const name = prompt(this.i18n.instant('projectSwitcher.prompt.createName'), placeholder);
       if (!name) return;
 
       const projRef = await addDoc(collection(this.fs as any, 'projects'), {
@@ -267,7 +270,7 @@ export class ProjectSwitcher implements OnDestroy {
       this.current.set(pid);
       this.stopMembershipWatch?.();
       this.startMembershipWatch(pid, u.uid);
-      alert('プロジェクトを作成しました');
+      alert(this.i18n.instant('projectSwitcher.alert.created'));
     } finally {
       this.creating = false; this.cdr.markForCheck();
     }
@@ -307,9 +310,9 @@ export class ProjectSwitcher implements OnDestroy {
 
       const snap = await getDoc(doc(this.fs as any, `projects/${pid}/members/${u.uid}`));
       const myRole = snap.exists() ? (snap.data() as any).role : null;
-      if (myRole !== 'admin') { alert('管理者だけが削除できます'); return; }
+      if (myRole !== 'admin') { alert(this.i18n.instant('projectSwitcher.alert.deleteOnlyAdmin')); return; }
 
-      if (!confirm('このプロジェクトを完全に削除します。よろしいですか？（元に戻せません）')) return;
+      if (!confirm(this.i18n.instant('projectSwitcher.confirm.delete'))) return;
 
       this.current.set(null);
       this.selected = null; this.prevSelected = null; this.stopMembershipWatch?.(); this.cdr.markForCheck();
@@ -335,7 +338,7 @@ export class ProjectSwitcher implements OnDestroy {
       await this.deleteProjectCascade(pid, u.uid);
       await this.reload(u.uid);
 
-      alert('プロジェクトを削除しました');
+      alert(this.i18n.instant('projectSwitcher.alert.deleted'));
     } finally {
       this.deleting = false; this.cdr.markForCheck();
     }
@@ -373,9 +376,9 @@ export class ProjectSwitcher implements OnDestroy {
       if (!snap.exists()) return;
 
       const role = (snap.data() as any).role;
-      if (role === 'admin') { alert('管理者はここから退出できません'); return; }
+      if (role === 'admin') { alert(this.i18n.instant('projectSwitcher.alert.adminCannotLeave')); return; }
 
-      if (!confirm('このプロジェクトから退出します。よろしいですか？\n（担当タスクの割り当ても外れます）')) return;
+      if (!confirm(this.i18n.instant('projectSwitcher.confirm.leave'))) return;
 
       this.current.set(null);
       this.selected = null; this.prevSelected = null; this.stopMembershipWatch?.(); this.cdr.markForCheck();
@@ -385,7 +388,7 @@ export class ProjectSwitcher implements OnDestroy {
       await deleteDoc(memberRef).catch(() => {});
       await this.reload(u.uid);
 
-      alert('退出しました');
+      alert(this.i18n.instant('projectSwitcher.alert.left'));
     } finally {
       this.leaving = false; this.cdr.markForCheck();
     }
@@ -403,6 +406,7 @@ export class ProjectSwitcher implements OnDestroy {
     return items.filter(p => p.name !== '(deleted)');
   }
 }
+
 
 
 

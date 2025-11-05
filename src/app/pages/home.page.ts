@@ -35,6 +35,7 @@ import { AiIssueSuggestComponent } from '../components/ai-issue-suggest.componen
 import { MatInputModule } from '@angular/material/input';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule, DateAdapter } from '@angular/material/core';
+import { FcmTokensService } from '../services/fcm-tokens.service';
 
 // ---- このページ専用の拡張型 ----
 type ProblemWithDef = Problem & {
@@ -118,7 +119,8 @@ export class HomePage implements OnInit, OnDestroy {
     private fs: Firestore,
     private i18n: TranslateService,
     private ai: AiService,
-    private dateAdapter: DateAdapter<Date>
+    private dateAdapter: DateAdapter<Date>,
+    private fcmTokens: FcmTokensService
   ) {
     this.isOnline$ = this.network.isOnline$;
     this.canEdit$ = combineLatest([this.members.isEditor$, this.network.isOnline$]).pipe(
@@ -132,9 +134,12 @@ export class HomePage implements OnInit, OnDestroy {
     return v === key ? fallback : v;
   }
 
-  onLangChange(next: 'ja' | 'en') {
+  async onLangChange(next: 'ja' | 'en') {
     this.prefs.update({ lang: next });
+    this.i18n.use(next);
     this.dateAdapter.setLocale(next === 'en' ? 'en-US' : 'ja-JP');
+    await this.fcmTokens.updateLanguageForAllMyTokens(next);
+    await this.fcmTokens.ensureRegistered();
   }
 
   lang: 'ja' | 'en' = 'ja';
@@ -150,6 +155,7 @@ export class HomePage implements OnInit, OnDestroy {
         this.lang = (p?.lang === 'en' ? 'en' : 'ja');
         document.documentElement.setAttribute('lang', this.lang === 'en' ? 'en-US' : 'ja-JP');
         this.dateAdapter.setLocale(this.lang === 'en' ? 'en-US' : 'ja-JP');
+        this.i18n.use(this.lang);
       });
 
     // サインアウト時の掃除
@@ -214,6 +220,10 @@ export class HomePage implements OnInit, OnDestroy {
     // --- FCM: 既に権限があればトークン取得＆保存（UI表示はしない） ---
     try {
       this.fcmToken = await this.msg.getTokenIfGranted();
+     // ★ トークンが取れているなら、現在のアプリ言語で fcmTokens に upsert
+     if (this.fcmToken) {
+       await this.fcmTokens.ensureRegistered();
+     }
     } catch {}
 
     // フォアグラウンド通知の購読（最新20件）
@@ -253,6 +263,7 @@ export class HomePage implements OnInit, OnDestroy {
     try {
       const t = await this.msg.requestPermissionAndGetToken();
       this.fcmToken = t; // UIは出さないが状態保持のみ
+      await this.fcmTokens.ensureRegistered();
       this.snack.open(this.i18n.instant('home.notifications.enabledSnack'), undefined, { duration: 2000 });
     } catch (e: any) {
       console.error('[FCM] permission/token error', e);
