@@ -9,7 +9,7 @@ import { CurrentProjectService } from './services/current-project.service';
 import { AuthService } from './services/auth.service';
 import { NetworkService } from './services/network.service';
 
-import { firstValueFrom, Observable } from 'rxjs';
+import { Observable, Subscription, firstValueFrom } from 'rxjs';
 
 // Firestore
 import { Firestore } from '@angular/fire/firestore';
@@ -127,6 +127,7 @@ export class ProjectSwitcher implements OnDestroy {
   private onlineNow = true;
 
   private stopMembershipWatch?: () => void;
+  private authSub?: Subscription;
   private currentUid: string | null = null;
 
   constructor(
@@ -138,32 +139,70 @@ export class ProjectSwitcher implements OnDestroy {
     private network: NetworkService,
     private i18n: TranslateService,
   ) {}
+  private stopMembershipsListWatch?: () => void;
+  private reloadTimer?: any;
+  private scheduleReload(uid: string, ms = 150) {
+    clearTimeout(this.reloadTimer);
+    this.reloadTimer = setTimeout(() => this.reload(uid), ms);
+  }
 
-  async ngOnInit() {
+  private startMembershipsListWatch(uid: string) {
+    const colRef = collection(this.fs as any, `users/${uid}/memberships`);
+    this.stopMembershipsListWatch = onSnapshot(
+      colRef,
+      () => this.scheduleReload(uid),      // 変更を検知したら軽くデバウンスして再読込
+      () => this.scheduleReload(uid)
+    );
+  }
+
+  ngOnInit() {
+    // オンライン状態
     this.isOnline$ = this.network.isOnline$;
     this.isOnline$.subscribe(v => { this.onlineNow = !!v; });
 
-    const uid = await firstValueFrom(this.authSvc.uid$);
-    this.currentUid = uid ?? null;
-    if (!uid) { this.loading = false; this.cdr.markForCheck(); return; }
+    // ★ ここが核心：UID を常時監視してサインイン/アウトに追従
+    this.authSub = this.authSvc.uid$.subscribe(async (uid) => {
+      if (uid === this.currentUid) return;        // 変化なしは無視
+      this.currentUid = uid ?? null;
 
-    await this.reload(uid);
+      // 既存の membership watch は張り替える
+      this.stopMembershipWatch?.();
+      this.stopMembershipsListWatch = undefined; 
 
-    const curr = this.current.getSync();
-    if (curr && this.projects.some(p => p.pid === curr)) {
-      this.selected = curr;
-      this.prevSelected = curr;
-      this.startMembershipWatch(curr, uid);
-    } else {
-      this.selected = this.projects[0]?.pid ?? null;
+      if (!uid) {
+        // サインアウト時：一覧と選択をクリア
+        this.projects = [];
+        this.current.set(null);
+        this.selected = null;
+        this.prevSelected = null;
+        this.loading = false;
+        this.cdr.markForCheck();
+        return;
+      }
+
+      // サインイン時：プロジェクト一覧を取得して選択復元
+      this.startMembershipsListWatch(uid);
+      await this.reload(uid);
+
+      const curr = this.current.getSync();
+      if (curr && this.projects.some(p => p.pid === curr)) {
+        this.selected = curr;
+      } else {
+        this.selected = this.projects[0]?.pid ?? null;
+        this.current.set(this.selected);
+      }
       this.prevSelected = this.selected;
-      this.current.set(this.selected);
+
       if (this.selected) this.startMembershipWatch(this.selected, uid);
-    }
-    this.cdr.markForCheck();
+      this.cdr.markForCheck();
+    });
   }
 
-  ngOnDestroy(): void { this.stopMembershipWatch?.(); }
+  ngOnDestroy(): void {
+    this.stopMembershipWatch?.();
+    this.stopMembershipsListWatch?.();
+    this.authSub?.unsubscribe();
+  }
 
   private async requireOnline(): Promise<boolean> {
     const ok = await firstValueFrom(this.isOnline$);
@@ -241,7 +280,7 @@ export class ProjectSwitcher implements OnDestroy {
     try {
       this.creating = true; this.cdr.markForCheck();
       const u = (this.authSvc as any).auth?.currentUser;
-      if (!u) { await this.authSvc.signInWithGoogle(true); return; }
+      if (!u) { await this.authSvc.signInWithGoogle({ forceChoose: true }); return; }
 
       const placeholder = `${u.displayName || 'My'} Project`;
       const name = prompt(this.i18n.instant('projectSwitcher.prompt.createName'), placeholder);

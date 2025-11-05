@@ -273,7 +273,7 @@ export class HomePage implements OnInit, OnDestroy {
 
   async switchAccount() {
     await this.auth.signOut();
-    await this.auth.signInWithGoogle(true);
+    await this.auth.signInWithGoogle({ forceChoose: true });
   }
 
   // 招待

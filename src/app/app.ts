@@ -99,7 +99,12 @@ import { getAuth } from '@angular/fire/auth';
             </ng-container>
 
             <ng-template #signIn>
-              <button mat-flat-button color="accent" type="button" class="auth-button auth--compact" (click)="auth.signInWithGoogle()">
+              <button
+                mat-flat-button
+                color="accent"
+                type="button"
+                class="auth-button auth--compact"
+                (click)="auth.signInWithGoogle({ forceChoose: true })">
                 {{ 'auth.signIn' | translate }}
               </button>
             </ng-template>

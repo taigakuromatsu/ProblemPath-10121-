@@ -82,7 +82,7 @@ export class JoinPage {
   }
 
   async login() {
-    await this.auth.signInWithGoogle(true);
+    await this.auth.signInWithGoogle({ forceChoose: true });
     await this.ngOnInit(); // 再チェック
   }
 
