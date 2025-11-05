@@ -2,7 +2,7 @@
 import { Component, DestroyRef } from '@angular/core';
 import { AsyncPipe, DatePipe, NgFor, NgIf, NgClass } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Observable, BehaviorSubject, of, combineLatest, firstValueFrom, from } from 'rxjs';
+import { Observable, BehaviorSubject, of, combineLatest, firstValueFrom } from 'rxjs';
 import { switchMap, shareReplay, take, tap, map, distinctUntilChanged } from 'rxjs/operators';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -33,7 +33,9 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 
 // メンバー名解決用（スケジュールと同等）
 import { Firestore } from '@angular/fire/firestore';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, query as nativeQuery } from 'firebase/firestore';
+import { collectionData as rxCollectionData } from 'rxfire/firestore';
+import { safeFromProject$ } from '../utils/rx-safe';
 
 type MemberOption = { uid: string; label: string };
 
@@ -247,20 +249,19 @@ export class BoardPage {
 
   ngOnInit() {
     // プロジェクト/問題
-    this.problems$ = this.currentProject.projectId$.pipe(
-      switchMap(pid => (pid && pid !== 'default') ? this.problems.list(pid) : of([]))
+    this.problems$ = safeFromProject$(
+      this.currentProject.projectId$,
+      pid => this.problems.list$(pid),
+      [] as Problem[]
     );
 
     // 列の購読
-    this.currentProject.projectId$
-      .pipe(
-        switchMap(pid =>
-          (pid && pid !== 'default')
-            ? this.boardColumns.list(pid)
-            : of(DEFAULT_BOARD_COLUMNS)
-        ),
-        takeUntilDestroyed(this.destroyRef)
-      )
+    safeFromProject$(
+      this.currentProject.projectId$,
+      pid => this.boardColumns.list$(pid),
+      DEFAULT_BOARD_COLUMNS
+    )
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(cols => {
         console.log('[BoardPage] received columns =', cols);
         this.currentProject.projectId$.pipe(take(1)).subscribe(latestPid => {
@@ -278,10 +279,16 @@ export class BoardPage {
     // Issue → Task ストリーム
     this.issues$ = this.selectedProblem$.pipe(
       distinctUntilChanged(),
-      switchMap(problemId => this.currentProject.projectId$.pipe(
-        switchMap(pid => (pid && pid !== 'default' && problemId) ? this.issues.listByProblem(pid, problemId) : of([])),
-        tap(list => this.setupTaskStreams(problemId, list))
-      ))
+      switchMap(problemId => {
+        if (!problemId) return of([] as Issue[]);
+        return safeFromProject$(
+          this.currentProject.projectId$,
+          pid => this.issues.listByProblem$(pid, problemId).pipe(
+            tap(list => this.setupTaskStreams(problemId, list))
+          ),
+          [] as Issue[]
+        );
+      })
     );
 
     // URLパラメータ
@@ -294,24 +301,22 @@ export class BoardPage {
       });
 
     // ▼ 担当者名ディレクトリ
-    this.memberOptions$ = this.currentProject.projectId$.pipe(
-      switchMap(pid => {
-        if (!pid || pid === 'default') return of<MemberOption[]>([]);
+    this.memberOptions$ = safeFromProject$(
+      this.currentProject.projectId$,
+      pid => {
         const col = collection(this.fs as any, `projects/${pid}/members`);
-        return from(getDocs(col)).pipe(
-          map(snapshot =>
-            snapshot.docs.map(docSnap => {
-              const d: any = docSnap.data();
-              return {
-                uid: docSnap.id,
-                label: d?.displayName || d?.email || docSnap.id,
-              } as MemberOption;
-            })
-          ),
-          map(list => list ?? []),
+        const q = nativeQuery(col);
+        return (rxCollectionData(q, { idField: 'id' }) as Observable<any[]>).pipe(
+          map(docs => docs.map((docSnap: any) => {
+            const data: any = docSnap;
+            return {
+              uid: docSnap.id || '',
+              label: data?.displayName || data?.email || docSnap.id || '',
+            } as MemberOption;
+          }))
         );
-      }),
-      shareReplay({ bufferSize: 1, refCount: true })
+      },
+      [] as MemberOption[]
     );
 
     this.memberDirectory$ = this.memberOptions$.pipe(
@@ -350,8 +355,11 @@ export class BoardPage {
     for (const i of issues ?? []) {
       const k = this.key(problemId, i.id!);
       if (!this.tasksMap[k]) {
-        this.tasksMap[k] = this.currentProject.projectId$.pipe(
-          switchMap(pid => (pid && pid !== 'default') ? this.tasks.listByIssue(pid, problemId, i.id!) : of([])),
+        this.tasksMap[k] = safeFromProject$(
+          this.currentProject.projectId$,
+          pid => this.tasks.listByIssue$(pid, problemId, i.id!),
+          [] as Task[]
+        ).pipe(
           map(rows => (rows ?? []).filter(t => this.isRealTask(t))),
           shareReplay(1)
         );

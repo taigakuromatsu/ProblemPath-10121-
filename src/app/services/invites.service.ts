@@ -1,7 +1,10 @@
-// src/app/services/invites.service.ts
 import { Injectable, inject } from '@angular/core';
 import { Firestore } from '@angular/fire/firestore';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc as nativeDoc } from 'firebase/firestore';
+import { docData as rxDocData } from 'rxfire/firestore';
+import { Observable, of } from 'rxjs';
+import { map, catchError, take } from 'rxjs/operators';
 
 export type InviteRole = 'admin'|'member'|'viewer';
 
@@ -31,7 +34,24 @@ export class InvitesService {
     return `${origin}/join?pid=${encodeURIComponent(projectId)}&token=${encodeURIComponent(token)}`;
   }
 
-  /** 招待の検証（存在チェック） */
+  /** 招待の検証（存在チェック）- Observable版 */
+  get$(projectId: string, token: string): Observable<{ id: string; email: string; role: InviteRole; createdAt: any } | null> {
+    const ref = nativeDoc(this.fs as any, `projects/${projectId}/invites/${token}`);
+    return rxDocData(ref).pipe(
+      take(1),
+      map((data: any) => {
+        if (!data) return null;
+        if (data.redeemedBy) return null; // 使用済み扱い
+        return { id: token, ...data };
+      }),
+      catchError(err => {
+        console.warn('[InvitesService.get$]', { projectId, token }, err);
+        return of(null);
+      })
+    );
+  }
+
+  /** 招待の検証（存在チェック）- Promise版（互換性のため残す） */
   async get(projectId: string, token: string) {
     const ref = doc(this.fs as any, `projects/${projectId}/invites/${token}`);
     const snap = await getDoc(ref);

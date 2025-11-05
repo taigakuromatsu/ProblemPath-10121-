@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Firestore } from '@angular/fire/firestore';
-import { Observable, map } from 'rxjs';
+import { Observable, map, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { Issue } from '../models/types';
 
 const DEBUG_ISSUES = false; // ← 必要な時だけ true に
@@ -43,13 +44,18 @@ export class IssuesService {
     if (DEBUG_ISSUES) console.debug(...args);
   }
 
-  // listByProblem()
-  listByProblem(projectId: string, problemId: string): Observable<Issue[]> {
-    this.dlog('[IssuesService.listByProblem]', { pid: projectId, problemId, path: `${this.base(projectId)}/${problemId}/issues` });
-    const colRef = nativeCollection(this.fs as any, `${this.base(projectId)}/${problemId}/issues`);
-    const q = nativeQuery(colRef, nativeWhere('visible','==', true), nativeOrderBy('order', 'asc'), nativeOrderBy('createdAt', 'asc'));
-    return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Issue[]>)
-      .pipe(map((xs: any[]) => xs.filter((i: any) => !i?.softDeleted)));
+  // listByProblem$()
+  listByProblem$(projectId: string, problemId: string): Observable<Issue[]> {
+    this.dlog('[IssuesService.listByProblem$]', { pid: projectId, problemId, path: `${this.base(projectId)}/${problemId}/issues` });
+    const col = nativeCollection(this.fs as any, `${this.base(projectId)}/${problemId}/issues`);
+    const q = nativeQuery(col, nativeWhere('visible','==', true), nativeOrderBy('order', 'asc'), nativeOrderBy('createdAt', 'asc'));
+    return rxCollectionData(q, { idField: 'id' }).pipe(
+      map((xs: any[]) => xs.filter((i: any) => !i?.softDeleted) as Issue[]),
+      catchError(err => {
+        console.warn('[IssuesService.listByProblem$]', { projectId, problemId }, err);
+        return of([] as Issue[]);
+      })
+    ) as Observable<Issue[]>;
   }
 
   // create

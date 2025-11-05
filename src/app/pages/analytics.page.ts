@@ -7,9 +7,12 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { doc, docData, Firestore } from '@angular/fire/firestore';
+import { doc, Firestore } from '@angular/fire/firestore';
+import { docData as rxDocData } from 'rxfire/firestore';
+import { doc as nativeDoc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from '@angular/fire/functions';
-import { catchError, firstValueFrom, map, Observable, of, switchMap, combineLatest } from 'rxjs';
+import { firstValueFrom, map, Observable, of, switchMap, combineLatest } from 'rxjs';
+import { safeFromProject$ } from '../utils/rx-safe';
 
 import { CurrentProjectService } from '../services/current-project.service';
 import { AuthService } from '../services/auth.service';
@@ -107,27 +110,27 @@ export class AnalyticsPage {
 
   readonly projectId$: Observable<string | null> = this.currentProject.projectId$;
 
-  readonly projectName$: Observable<string | null> = this.projectId$.pipe(
-    switchMap(pid => {
-      if (!pid) return of<string | null>(null);
-      const ref = doc(this.firestore, `projects/${pid}`);
-      return docData(ref).pipe(
-        map((d: any) => (d?.meta?.name ?? d?.name ?? null) as string | null),
-        catchError(() => of<string | null>(null)),
+  readonly projectName$: Observable<string | null> = safeFromProject$(
+    this.currentProject.projectId$,
+    pid => {
+      const ref = nativeDoc(this.firestore as any, `projects/${pid}`);
+      return rxDocData(ref).pipe(
+        map((d: any) => (d?.meta?.name ?? d?.name ?? null) as string | null)
       );
-    })
+    },
+    null
   );
 
   /** プロジェクト全体サマリー（モックなし、空は EMPTY_*） */
-  readonly summary$: Observable<AnalyticsSummary> = this.projectId$.pipe(
-    switchMap(projectId => {
-      if (!projectId) return of(EMPTY_SUMMARY);
-      const summaryRef = doc(this.firestore, `projects/${projectId}/analytics/currentSummary`);
-      return docData(summaryRef).pipe(
-        map(data => (data ? coerceSummary(data) : EMPTY_SUMMARY)),
-        catchError(() => of(EMPTY_SUMMARY)),
+  readonly summary$: Observable<AnalyticsSummary> = safeFromProject$(
+    this.currentProject.projectId$,
+    pid => {
+      const summaryRef = nativeDoc(this.firestore as any, `projects/${pid}/analytics/currentSummary`);
+      return rxDocData(summaryRef).pipe(
+        map(data => (data ? coerceSummary(data) : EMPTY_SUMMARY))
       );
-    }),
+    },
+    EMPTY_SUMMARY
   );
 
   readonly statusEntries$ = this.summary$.pipe(
@@ -139,17 +142,22 @@ export class AnalyticsPage {
 
   /** ログインユーザー専用サマリー（モックなし） */
   readonly mySummary$: Observable<PersonalAnalyticsSummary> = combineLatest([
-    this.projectId$,
+    this.currentProject.projectId$,
     this.auth.uid$,
   ]).pipe(
     switchMap(([projectId, uid]) => {
       if (!projectId || !uid) return of(EMPTY_MY);
-      const ref = doc(this.firestore, `projects/${projectId}/analyticsPerUser/${uid}`);
-      return docData(ref).pipe(
-        map(data => (data ? coerceMySummary(data) : EMPTY_MY)),
-        catchError(() => of(EMPTY_MY)),
+      return safeFromProject$(
+        this.currentProject.projectId$,
+        pid => {
+          const ref = nativeDoc(this.firestore as any, `projects/${pid}/analyticsPerUser/${uid}`);
+          return rxDocData(ref).pipe(
+            map(data => (data ? coerceMySummary(data) : EMPTY_MY))
+          );
+        },
+        EMPTY_MY
       );
-    }),
+    })
   );
 
   readonly myStatusEntries$ = this.mySummary$.pipe(

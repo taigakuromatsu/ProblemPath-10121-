@@ -1,6 +1,9 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, docData } from '@angular/fire/firestore';
 import { collection, doc, getDocs, getDoc, query } from 'firebase/firestore';
+import { collectionData as rxCollectionData, docData as rxDocData } from 'rxfire/firestore';
+import { Observable, of, combineLatest } from 'rxjs';
+import { catchError, map, switchMap } from 'rxjs/operators';
 
 export type MyProject = { pid: string; name: string; role: 'admin'|'member'|'viewer' };
 
@@ -9,27 +12,45 @@ export class ProjectDirectoryService {
   private fs = inject(Firestore);
 
   /** 自分が所属するプロジェクト一覧（admin -> member -> viewer の順で並べ替え） */
-  async listMine(uid: string): Promise<MyProject[]> {
+  listMine$(uid: string): Observable<MyProject[]> {
     const col = collection(this.fs as any, `users/${uid}/memberships`);
-    const snap = await getDocs(query(col));
-    const roles = new Map<string, MyProject['role']>(
-      snap.docs.map(d => [d.id, (d.data() as any).role])
+    const q = query(col);
+    return rxCollectionData(q, { idField: 'id' }).pipe(
+      switchMap(memberships => {
+        const roles = new Map<string, MyProject['role']>(
+          memberships.map((d: any) => [d.id, d.role])
+        );
+        const projectIds = Array.from(roles.keys());
+        if (projectIds.length === 0) {
+          return of([] as MyProject[]);
+        }
+        // 各プロジェクトのメタデータを取得
+        const projectObservables = projectIds.map(pid => {
+          const metaRef = doc(this.fs as any, `projects/${pid}`);
+          return rxDocData(metaRef).pipe(
+            map((metaDoc: any) => {
+              const name = metaDoc?.meta?.name ?? '(no name)';
+              return { pid, name, role: roles.get(pid)! };
+            }),
+            catchError(() => {
+              return of({ pid, name: '(missing)', role: roles.get(pid)! });
+            })
+          );
+        });
+        return combineLatest(projectObservables).pipe(
+          map(items => {
+            // 任意: 管理しやすいように admin を先頭に
+            const order = { admin: 0, member: 1, viewer: 2 } as const;
+            items.sort((a, b) => order[a.role] - order[b.role] || a.name.localeCompare(b.name));
+            return items;
+          })
+        );
+      }),
+      catchError(err => {
+        console.warn('[ProjectDirectoryService.listMine$]', { uid }, err);
+        return of([] as MyProject[]);
+      })
     );
-
-    const items: MyProject[] = [];
-    for (const pid of Array.from(roles.keys())) {
-      const metaDoc = await getDoc(doc(this.fs as any, `projects/${pid}`));
-      const name = metaDoc.exists()
-        ? ((metaDoc.data() as any)?.meta?.name ?? '(no name)')
-        : '(missing)';
-      items.push({ pid, name, role: roles.get(pid)! });
-    }
-
-    // 任意: 管理しやすいように admin を先頭に
-    const order = { admin: 0, member: 1, viewer: 2 } as const;
-    items.sort((a, b) => order[a.role] - order[b.role] || a.name.localeCompare(b.name));
-
-    return items;
   }
 
   /** 退出/削除後のフォールバック用に、ユーザーのいずれか1つのプロジェクトIDを返す（無ければ null） */
@@ -51,9 +72,15 @@ export class ProjectDirectoryService {
   }
 
   /** （オプション）リアルタイムでロールを追従したい場合に使う Observable 版 */
-  roleDoc$(pid: string, uid: string) {
+  roleDoc$(pid: string, uid: string): Observable<{ role?: MyProject['role'] } | null> {
     const ref = doc(this.fs as any, `projects/${pid}/members/${uid}`);
-    return docData(ref as any) as any; // { role, ... } を購読
+    return rxDocData(ref).pipe(
+      map((v: any) => v ? { role: v.role } : null),
+      catchError(err => {
+        console.warn('[ProjectDirectoryService.roleDoc$]', { projectId: pid, uid }, err);
+        return of(null);
+      })
+    );
   }
 }
 

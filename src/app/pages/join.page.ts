@@ -1,3 +1,5 @@
+
+// src/app/pages/join.page.ts
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, ActivatedRoute, RouterLink } from '@angular/router';
@@ -6,7 +8,7 @@ import { AuthService } from '../services/auth.service';
 import { InvitesService } from '../services/invites.service';
 import { CurrentProjectService } from '../services/current-project.service';
 import { Firestore } from '@angular/fire/firestore';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { TranslateModule } from '@ngx-translate/core';
 
 @Component({
@@ -68,7 +70,7 @@ export class JoinPage {
   async ngOnInit() {
     this.pid = this.route.snapshot.queryParamMap.get('pid') || '';
     this.token = this.route.snapshot.queryParamMap.get('token') || '';
-    
+
     if (!this.pid || !this.token) {
       this.errorKey = 'join.invalidUrl';
       return;
@@ -91,6 +93,7 @@ export class JoinPage {
       const u = (this.auth as any).auth.currentUser;
       if (!u) { await this.login(); return; }
       const uid = u.uid;
+      const role = this.invite!.role;
 
       // 招待に email 指定がある場合は照合
       if (this.invite?.email && u.email && this.invite.email !== u.email) {
@@ -98,14 +101,21 @@ export class JoinPage {
         return;
       }
 
-      const mRef = doc(this.fs as any, `users/${uid}/memberships/${this.pid}`);
-      await setDoc(mRef, { role: this.invite!.role, joinedAt: serverTimestamp() }, { merge: true });
+      // 両側書きを単一バッチで原子的に実行
+      const batch = writeBatch(this.fs as any);
 
-      const pRef = doc(this.fs as any, `projects/${this.pid}/members/${uid}`);
-      await setDoc(
-        pRef,
+      // ① ユーザー側 memberships（サイドバーはここを監視）
+      batch.set(
+        doc(this.fs as any, `users/${uid}/memberships/${this.pid}`),
+        { role, joinedAt: serverTimestamp() },
+        { merge: true }
+      );
+
+      // ② プロジェクト側 members
+      batch.set(
+        doc(this.fs as any, `projects/${this.pid}/members/${uid}`),
         {
-          role: this.invite!.role,
+          role,
           joinedAt: serverTimestamp(),
           inviteId: this.token,
           invitedBy: (u.email ?? 'unknown'),
@@ -115,11 +125,16 @@ export class JoinPage {
         { merge: true }
       );
 
-      await this.invites.markRedeemed(this.pid, this.token, uid);
+      await batch.commit();
 
+      // ③ 招待の消し込み（任意）
+      await this.invites.markRedeemed(this.pid, this.token, uid).catch(() => {});
+
+      // ④ 現在プロジェクトを即反映＋履歴置換でホーム/ツリーへ
       this.current.set(this.pid);
-      this.router.navigateByUrl('/tree');
-    } catch (_e: any) {
+      this.router.navigateByUrl('/', { replaceUrl: true });
+      // ここでサイドバーの onSnapshot が即発火→一覧に出現します
+    } catch {
       this.errorKey = 'join.acceptFailed';
     }
   }

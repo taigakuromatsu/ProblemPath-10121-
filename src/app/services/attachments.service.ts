@@ -2,7 +2,8 @@
 import { Injectable } from '@angular/core';
 import { Firestore } from '@angular/fire/firestore';
 import { Storage } from '@angular/fire/storage';
-import { Observable } from 'rxjs';
+import { Observable, of } from 'rxjs';
+import { map, catchError } from 'rxjs/operators';
 
 // Firestore (native) + rxfire
 import {
@@ -60,10 +61,21 @@ export class AttachmentsService {
   }
 
   // --- 一覧（リアルタイム）
-  list(t: AttachmentTarget): Observable<AttachmentDoc[]> {
+  list$(t: AttachmentTarget): Observable<AttachmentDoc[]> {
     const colRef = nativeCollection(this.fs as any, this.colPath(t));
     const q = nativeQuery(colRef, nativeOrderBy('createdAt', 'desc'));
-    return rxCollectionData(q as any, { idField: 'id' }) as Observable<AttachmentDoc[]>;
+    return rxCollectionData(q, { idField: 'id' }).pipe(
+      map(d => d as AttachmentDoc[]),
+      catchError(err => {
+        console.warn('[AttachmentsService.list$]', t, err);
+        return of([] as AttachmentDoc[]);
+      })
+    );
+  }
+
+  // --- 一覧（リアルタイム）- Promise版（互換性のため残す）
+  list(t: AttachmentTarget): Observable<AttachmentDoc[]> {
+    return this.list$(t);
   }
 
   // --- アップロード + メタ作成（進捗コールバック任意）

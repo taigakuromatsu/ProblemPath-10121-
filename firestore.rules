@@ -67,10 +67,23 @@ service cloud.firestore {
       match /members/{uid} {
         allow read: if isMember(projectId);
 
-        allow create: if isSignedIn()
+         // admin を招待で付与するケースも許可
+          allow create: if isSignedIn()
           && request.auth.uid == uid
-          && request.resource.data.keys().hasOnly(['role','joinedAt','displayName','email'])
-          && request.resource.data.role == 'admin';
+          && request.resource.data.role == 'admin'
+          && (
+                // 自己作成（プロジェクト作成時）
+                request.resource.data.keys().hasOnly(['role','joinedAt','displayName','email'])
+                ||
+                // 招待経由の admin 付与
+                (
+                  request.resource.data.keys().hasOnly(['role','joinedAt','inviteId','invitedBy','displayName','email'])
+                  && request.auth.token.email != null
+                  && exists(/databases/$(database)/documents/projects/$(projectId)/invites/$(request.resource.data.inviteId))
+                  && get(/databases/$(database)/documents/projects/$(projectId)/invites/$(request.resource.data.inviteId)).data.email
+                    == request.auth.token.email
+                )
+              );
 
         allow create, update: if isSignedIn()
           && request.auth.uid == uid

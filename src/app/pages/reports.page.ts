@@ -10,11 +10,9 @@ import { MatInputModule } from '@angular/material/input';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatMenuModule } from '@angular/material/menu';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { docData } from '@angular/fire/firestore';
 import {
   addDoc,
   collection,
-  collectionData,
   deleteDoc,
   doc,
   Firestore,
@@ -24,8 +22,12 @@ import {
 } from '@angular/fire/firestore';
 import { Functions, httpsCallable } from '@angular/fire/functions';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { BehaviorSubject, catchError, combineLatest, map, Observable, of, switchMap, take } from 'rxjs';
+import { BehaviorSubject, combineLatest, map, Observable, of, switchMap, take } from 'rxjs';
 import { Auth } from '@angular/fire/auth';
+import { collectionData as rxCollectionData } from 'rxfire/firestore';
+import { docData as rxDocData } from 'rxfire/firestore';
+import { collection as nativeCollection, doc as nativeDoc, query as nativeQuery } from 'firebase/firestore';
+import { safeFromProject$ } from '../utils/rx-safe';
 
 import { CurrentProjectService } from '../services/current-project.service';
 
@@ -97,20 +99,22 @@ export class ReportsPage {
   /** AI/手動の一時メトリクス（手動フォーム保存時に利用） */
   private pendingMetrics: ReportMetrics | null = null;
 
-  private readonly firestoreReports$: Observable<ReportEntry[]> = this.projectId$.pipe(
-    switchMap(projectId => {
-      if (!projectId) return of([] as ReportEntry[]);
-      const reportsRef = collection(this.firestore, `projects/${projectId}/reports`);
-      return collectionData(reportsRef, { idField: 'id' }).pipe(
-        map((entries) => (entries as any[]).map(e => this.normalizeEntry(e))),
-        catchError(() => of([] as ReportEntry[])),
+  private readonly firestoreReports$: Observable<ReportEntry[]> = safeFromProject$(
+    this.currentProject.projectId$,
+    pid => {
+      const reportsRef = nativeCollection(this.firestore as any, `projects/${pid}/reports`);
+      const q = nativeQuery(reportsRef);
+      return rxCollectionData(q, { idField: 'id' }).pipe(
+        map((entries) => (entries as any[]).map(e => this.normalizeEntry(e)))
       );
-    }),
+    },
+    [] as ReportEntry[]
   );
 
-  get dateLocale(): string {
+  get dateLocale(): string | undefined {
     const lang = this.translate.currentLang || this.translate.defaultLang || 'ja';
-    return lang.startsWith('ja') ? 'ja-JP' : 'en-US';
+    // Angular の標準ロケールデータがない場合は undefined を返す（デフォルトロケールを使用）
+    return lang.startsWith('ja') ? undefined : 'en-US';
   }
 
   readonly reports$: Observable<ReportEntry[]> = combineLatest([
@@ -316,15 +320,15 @@ export class ReportsPage {
     });
   }
 
-  readonly projectName$ = this.projectId$.pipe(
-    switchMap(pid => {
-      if (!pid) return of<string | null>(null);
-      const ref = doc(this.firestore, `projects/${pid}`);
-      return docData(ref).pipe(
-        map((d: any) => (d?.meta?.name ?? d?.name ?? null) as string | null),
-        catchError(() => of<string | null>(null)),
+  readonly projectName$: Observable<string | null> = safeFromProject$(
+    this.currentProject.projectId$,
+    pid => {
+      const ref = nativeDoc(this.firestore as any, `projects/${pid}`);
+      return rxDocData(ref).pipe(
+        map((d: any) => (d?.meta?.name ?? d?.name ?? null) as string | null)
       );
-    })
+    },
+    null
   );
 
   deleteReport(report: ReportEntry): void {

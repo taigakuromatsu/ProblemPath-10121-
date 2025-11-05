@@ -1,8 +1,9 @@
 import { Injectable } from '@angular/core';
 import { Firestore } from '@angular/fire/firestore';
-import { Observable, map } from 'rxjs';
+import { Observable, map, of, catchError } from 'rxjs';
 import { Problem } from '../models/types';
 import { ProblemDef } from '../models/types';
+
 
 const DEBUG_PROBLEMS = false; // ← 必要な時だけ true に
 
@@ -24,6 +25,11 @@ import {
 } from 'firebase/firestore';
 import { collectionData as rxCollectionData } from 'rxfire/firestore';
 
+function isPermissionDenied(err: any): boolean {
+  return err?.code === 'permission-denied' ||
+         String(err?.message || '').includes('Missing or insufficient permissions');
+}
+
 @Injectable({ providedIn: 'root' })
 export class ProblemsService {
   constructor(private fs: Firestore) {}
@@ -37,18 +43,24 @@ export class ProblemsService {
     if (DEBUG_PROBLEMS) console.debug(...args);
   }
 
-  // list()
-  list(projectId: string): Observable<Problem[]> {
-    this.dlog('[ProblemsService.list]', { pid: projectId, path: this.colPath(projectId) });
-    const colRef = nativeCollection(this.fs as any, this.colPath(projectId));
+  // list$()
+  list$(projectId: string): Observable<Problem[]> {
+    const col = nativeCollection(this.fs as any, this.colPath(projectId));
     const q = nativeQuery(
-      colRef,
+      col,
       nativeWhere('visible', '==', true),
       nativeOrderBy('order', 'asc'),
       nativeOrderBy('createdAt', 'asc'),
     );
-    return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Problem[]>)
-      .pipe(map((xs: any[]) => xs.filter((p: any) => !p?.softDeleted)));
+    return rxCollectionData(q, { idField: 'id' }).pipe(
+      map(xs => xs.filter((p: any) => !p?.softDeleted) as Problem[]),
+      catchError(err => {
+        // ← ここで静かに握りつぶす
+        if (isPermissionDenied(err)) return of([] as Problem[]);
+        console.error('[ProblemsService.list$]', { projectId }, err);
+        return of([] as Problem[]);
+      }),
+    ) as Observable<Problem[]>;
   }
 
   // -------- nextOrder（内部ユーティリティ） --------

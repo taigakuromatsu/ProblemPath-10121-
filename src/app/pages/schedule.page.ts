@@ -10,9 +10,11 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { Firestore } from '@angular/fire/firestore';
-import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
-import { Observable, combineLatest, interval, of, from } from 'rxjs';
-import { map, switchMap, startWith, filter, distinctUntilChanged, catchError, shareReplay, take } from 'rxjs/operators';
+import { doc, getDoc, collection, getDocs, query as nativeQuery } from 'firebase/firestore';
+import { collectionData as rxCollectionData } from 'rxfire/firestore';
+import { Observable, combineLatest, interval, of } from 'rxjs';
+import { map, switchMap, startWith, filter, distinctUntilChanged, shareReplay, take } from 'rxjs/operators';
+import { safeFromProject$ } from '../utils/rx-safe';
 
 import { TasksService } from '../services/tasks.service';
 import { CurrentProjectService } from '../services/current-project.service';
@@ -128,24 +130,22 @@ export class SchedulePage implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     // メンバー
-    this.members$ = this.currentProject.projectId$.pipe(
-      switchMap(pid => {
-        if (!pid || pid === 'default') return of<MemberOption[]>([]);
+    this.members$ = safeFromProject$(
+      this.currentProject.projectId$,
+      pid => {
         const col = collection(this.fs as any, `projects/${pid}/members`);
-        return from(getDocs(col)).pipe(
-          map(snapshot =>
-            snapshot.docs.map(docSnap => {
-              const data: any = docSnap.data();
-              return {
-                uid: docSnap.id,
-                label: data?.displayName || data?.email || docSnap.id,
-              } as MemberOption;
-            })
-          ),
-          catchError(() => of<MemberOption[]>([])),
+        const q = nativeQuery(col);
+        return (rxCollectionData(q, { idField: 'id' }) as Observable<any[]>).pipe(
+          map(docs => docs.map((docSnap: any) => {
+            const data: any = docSnap;
+            return {
+              uid: docSnap.id || '',
+              label: data?.displayName || data?.email || docSnap.id || '',
+            } as MemberOption;
+          }))
         );
-      }),
-      shareReplay({ bufferSize: 1, refCount: true })
+      },
+      [] as MemberOption[]
     );
 
     this.memberDirectory$ = this.members$.pipe(
@@ -271,7 +271,7 @@ export class SchedulePage implements OnInit, OnDestroy {
 
     this.vm$ = combineLatest([this.currentProject.projectId$, params$]).pipe(
       switchMap(([pid]) => {
-        if (!pid || pid === 'default') return of(EMPTY_VM);
+        if (!pid) return of(EMPTY_VM);
 
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -290,13 +290,13 @@ export class SchedulePage implements OnInit, OnDestroy {
           nextWeekStart = this.addDays(startOfNextWeek, 1); // 明日(月)を除外
         }
 
-        const overdue$      = this.tasks.listAllOverdue(pid, this.ymd(today), this.openOnly, tags);
-        const today$        = this.tasks.listAllByDueRange(pid, this.ymd(today), this.ymd(today), this.openOnly, tags);
-        const tomorrow$     = this.tasks.listAllByDueRange(pid, this.ymd(tomorrow), this.ymd(tomorrow), this.openOnly, tags);
-        const thisWeekRest$ = this.tasks.listAllByDueRange(pid, this.ymd(this.addDays(tomorrow, 1)), this.ymd(endOfWeek), this.openOnly, tags);
-        const nextWeek$     = this.tasks.listAllByDueRange(pid, this.ymd(nextWeekStart), this.ymd(endOfNextWeek), this.openOnly, tags);
-        const later$        = this.tasks.listAllByDueRange(pid, this.ymd(this.addDays(endOfNextWeek, 1)), FAR_FUTURE, this.openOnly, tags);
-        const nodue$        = this.tasks.listAllNoDue(pid, this.openOnly, tags);
+        const overdue$      = this.tasks.listAllOverdue$(pid, this.ymd(today), this.openOnly, tags);
+        const today$        = this.tasks.listAllByDueRange$(pid, this.ymd(today), this.ymd(today), this.openOnly, tags);
+        const tomorrow$     = this.tasks.listAllByDueRange$(pid, this.ymd(tomorrow), this.ymd(tomorrow), this.openOnly, tags);
+        const thisWeekRest$ = this.tasks.listAllByDueRange$(pid, this.ymd(this.addDays(tomorrow, 1)), this.ymd(endOfWeek), this.openOnly, tags);
+        const nextWeek$     = this.tasks.listAllByDueRange$(pid, this.ymd(nextWeekStart), this.ymd(endOfNextWeek), this.openOnly, tags);
+        const later$        = this.tasks.listAllByDueRange$(pid, this.ymd(this.addDays(endOfNextWeek, 1)), FAR_FUTURE, this.openOnly, tags);
+        const nodue$        = this.tasks.listAllNoDue$(pid, this.openOnly, tags);
 
         return combineLatest([overdue$, today$, tomorrow$, thisWeekRest$, nextWeek$, later$, nodue$]).pipe(
           map(([overdue, todayArr, tomorrowArr, thisWeekRest, nextWeekArr, laterArr, nodue]) => {

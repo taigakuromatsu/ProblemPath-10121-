@@ -133,8 +133,6 @@ export class ProjectSwitcher implements OnDestroy {
   private authSub?: Subscription;
   private currentUid: string | null = null;
 
-  private reloadTimer?: any;
-
   constructor(
     private current: CurrentProjectService,
     private dir: ProjectDirectoryService,
@@ -146,32 +144,56 @@ export class ProjectSwitcher implements OnDestroy {
     private router: Router,
   ) {}
 
-  // --- debounce して memberships を再読込 ---
-  private scheduleReload(uid: string, ms = 150) {
-    clearTimeout(this.reloadTimer);
-    this.reloadTimer = setTimeout(() => this.reload(uid), ms);
-  }
-
   private startMembershipsListWatch(uid: string) {
     const colRef = collection(this.fs as any, `users/${uid}/memberships`);
     this.stopMembershipsListWatch = onSnapshot(
       colRef,
-      () => this.scheduleReload(uid),
-      () => this.scheduleReload(uid)
+      async (snap) => {
+        // memberships → MyProject[] へ変換（プロジェクト名の解決込み）
+        const items = await Promise.all(
+          snap.docs.map(async (d) => {
+            const pid  = d.id;
+            const role = (d.data() as any)?.role ?? 'viewer';
+            // プロジェクトが削除済みなら null を返して後で落とす
+            const pSnap = await getDoc(doc(this.fs as any, `projects/${pid}`)).catch(() => null);
+            if (!pSnap?.exists()) return null;
+            const name = (pSnap.data() as any)?.meta?.name ?? '(no name)';
+            return { pid, name, role } as MyProject;
+          })
+        );
+  
+        const list = (items.filter(Boolean) as MyProject[]);
+  
+        // 現在選択中が消えたかを検知
+        const removedCurrent = this.selected && !list.some(p => p.pid === this.selected);
+  
+        // 一覧を即時反映
+        this.projects = list;
+  
+        if (removedCurrent) {
+          // 選択中がなくなったら即座に退避（ホームへ）
+          this.handleProjectLost('deleted');
+        } else {
+          this.cdr.markForCheck();
+        }
+      },
+      // エラー時は最終手段として一度だけ読み直し
+      (_err) => this.reload(uid)
     );
   }
+  
 
   // --- プロジェクト喪失時の集中処理（ホームへ退避） ---
   private handleProjectLost(_reason: 'removed'|'deleted'|'error') {
     this.current.set(null);
     this.selected = null;
     this.prevSelected = null;
-    this.stopMembershipWatch?.();
-    this.stopMembershipsListWatch?.();
+    this.stopMembershipWatch = undefined;
+    this.stopMembershipsListWatch = undefined;
     this.cdr.markForCheck();
 
     // 表示中ページの購読を即座に破棄させるためホームに遷移
-    this.router.navigateByUrl('/');
+    this.router.navigateByUrl('/', { replaceUrl: true });
 
     // 軽い通知（後で MatSnackBar に差し替え可）
     try { alert(this.i18n.instant('projectSwitcher.alert.projectLost')); } catch {}
@@ -188,8 +210,8 @@ export class ProjectSwitcher implements OnDestroy {
       this.currentUid = uid ?? null;
 
       // 既存 watch の張り替え
-      this.stopMembershipWatch?.();
-      this.stopMembershipsListWatch?.();
+      this.stopMembershipWatch = undefined;
+      this.stopMembershipsListWatch = undefined;
 
       if (!uid) {
         // サインアウト
@@ -221,8 +243,8 @@ export class ProjectSwitcher implements OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.stopMembershipWatch?.();
-    this.stopMembershipsListWatch?.();
+    this.stopMembershipWatch = undefined;
+    this.stopMembershipsListWatch = undefined;
     this.authSub?.unsubscribe();
   }
 
@@ -242,7 +264,7 @@ export class ProjectSwitcher implements OnDestroy {
     this.current.set(pid);
     this.selected = pid;
     this.prevSelected = pid;
-    this.stopMembershipWatch?.();
+    this.stopMembershipWatch = undefined;
     if (pid && this.currentUid) this.startMembershipWatch(pid, this.currentUid);
     this.cdr.markForCheck();
   }
@@ -272,7 +294,7 @@ export class ProjectSwitcher implements OnDestroy {
     this.loading = true; this.cdr.markForCheck();
     try {
       try {
-        this.projects = await this.dir.listMine(uid);
+        this.projects = await firstValueFrom(this.dir.listMine$(uid));
       } catch {
         this.projects = await this.listMineByMemberships(uid);
       }
@@ -318,7 +340,7 @@ export class ProjectSwitcher implements OnDestroy {
       this.selected = pid;
       this.prevSelected = pid;
       this.current.set(pid);
-      this.stopMembershipWatch?.();
+      this.stopMembershipWatch = undefined;
       this.startMembershipWatch(pid, u.uid);
       alert(this.i18n.instant('projectSwitcher.alert.created'));
     } finally {

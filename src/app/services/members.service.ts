@@ -4,7 +4,7 @@ import { Firestore } from '@angular/fire/firestore';
 import { doc as nativeDoc } from 'firebase/firestore';
 import { docData as rxDocData } from 'rxfire/firestore';
 import { Observable, of, combineLatest } from 'rxjs';
-import { map, switchMap, shareReplay, distinctUntilChanged } from 'rxjs/operators';
+import { map, switchMap, shareReplay, distinctUntilChanged, catchError } from 'rxjs/operators';
 
 import { CurrentProjectService } from './current-project.service';
 import { AuthService } from './auth.service';
@@ -28,8 +28,12 @@ export class MembersService {
       switchMap(([pid, uid]) => {
         if (!pid || !uid) return of<Role | null>(null);
         const ref = nativeDoc(this.fs as any, `projects/${pid}/members/${uid}`);
-        return rxDocData(ref as any).pipe(
-          map((v: any) => (v?.role ?? null) as Role | null)
+        return rxDocData(ref).pipe(
+          map((v: any) => (v?.role ?? null) as Role | null),
+          catchError(err => {
+            console.warn('[MembersService.role$]', { projectId: pid, uid }, err);
+            return of<Role | null>(null);
+          })
         );
       }),
       distinctUntilChanged((a, b) => a === b),

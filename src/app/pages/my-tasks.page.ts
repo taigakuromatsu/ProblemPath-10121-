@@ -14,9 +14,11 @@ import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule, DateAdapter } from '@angular/material/core';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { Firestore } from '@angular/fire/firestore';
-import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
-import { Observable, combineLatest, interval, of, from, Subscription } from 'rxjs';
-import { map, switchMap, startWith, filter, distinctUntilChanged, catchError, shareReplay, take } from 'rxjs/operators';
+import { doc, getDoc, collection, getDocs, query as nativeQuery } from 'firebase/firestore';
+import { collectionData as rxCollectionData } from 'rxfire/firestore';
+import { Observable, combineLatest, interval, of, Subscription } from 'rxjs';
+import { map, switchMap, startWith, filter, distinctUntilChanged, shareReplay, take } from 'rxjs/operators';
+import { safeFromProject$ } from '../utils/rx-safe';
 
 import { TasksService } from '../services/tasks.service';
 import { CurrentProjectService } from '../services/current-project.service';
@@ -164,21 +166,22 @@ export class MyTasksPage implements OnInit, OnDestroy {
     this.displayStartDate = this.toDate(this.startRange);
     this.displayEndDate = this.toDate(this.endRange);
 
-    this.members$ = this.current.projectId$.pipe(
-      switchMap(pid => {
-        if (!pid || pid === 'default') return of<MemberOption[]>([]);
+    this.members$ = safeFromProject$(
+      this.current.projectId$,
+      pid => {
         const col = collection(this.fs as any, `projects/${pid}/members`);
-        return from(getDocs(col)).pipe(
-          map(snapshot =>
-            snapshot.docs.map(docSnap => {
-              const data: any = docSnap.data();
-              return { uid: docSnap.id, label: data?.displayName || data?.email || docSnap.id } as MemberOption;
-            })
-          ),
-          catchError(() => of<MemberOption[]>([])),
+        const q = nativeQuery(col);
+        return (rxCollectionData(q, { idField: 'id' }) as Observable<any[]>).pipe(
+          map(docs => docs.map((docSnap: any) => {
+            const data: any = docSnap;
+            return {
+              uid: docSnap.id || '',
+              label: data?.displayName || data?.email || docSnap.id || '',
+            } as MemberOption;
+          }))
         );
-      }),
-      shareReplay({ bufferSize: 1, refCount: true })
+      },
+      [] as MemberOption[]
     );
 
     this.memberDirectory$ = this.members$.pipe(
@@ -269,19 +272,25 @@ export class MyTasksPage implements OnInit, OnDestroy {
         const start = this.startRange || '0000-01-01';
         const end = this.endRange || FAR;
 
-        const allToToday$ = this.tasks.listMine(pid, uid, this.openOnly, start, this.ymd(today), tags);
-        const overdue$ = allToToday$.pipe(map(xs => xs.filter(x => (x.dueDate ?? '') < this.ymd(today))));
-        const today$ = allToToday$.pipe(map(xs => xs.filter(x => x.dueDate === this.ymd(today))));
-        const tomorrow$ = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(tomorrow), this.ymd(tomorrow), tags);
-        const thisWeekRest$ = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(this.addDays(tomorrow, 1)), this.ymd(endOfWeek), tags);
-        const nextWeek$ = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(startOfNextWeek), this.ymd(endOfNextWeek), tags);
-        const later$ = this.tasks.listMine(pid, uid, this.openOnly, this.ymd(this.addDays(endOfNextWeek, 1)), end, tags);
-        const nodue$ = this.tasks.listMineNoDue(pid, uid, this.openOnly, tags);
+        return safeFromProject$(
+          this.current.projectId$,
+          pid => {
+            const allToToday$ = this.tasks.listMine$(pid, uid, this.openOnly, start, this.ymd(today), tags);
+            const overdue$ = allToToday$.pipe(map(xs => xs.filter(x => (x.dueDate ?? '') < this.ymd(today))));
+            const today$ = allToToday$.pipe(map(xs => xs.filter(x => x.dueDate === this.ymd(today))));
+            const tomorrow$ = this.tasks.listMine$(pid, uid, this.openOnly, this.ymd(tomorrow), this.ymd(tomorrow), tags);
+            const thisWeekRest$ = this.tasks.listMine$(pid, uid, this.openOnly, this.ymd(this.addDays(tomorrow, 1)), this.ymd(endOfWeek), tags);
+            const nextWeek$ = this.tasks.listMine$(pid, uid, this.openOnly, this.ymd(startOfNextWeek), this.ymd(endOfNextWeek), tags);
+            const later$ = this.tasks.listMine$(pid, uid, this.openOnly, this.ymd(this.addDays(endOfNextWeek, 1)), end, tags);
+            const nodue$ = this.tasks.listMineNoDue$(pid, uid, this.openOnly, tags);
 
-        return combineLatest([overdue$, today$, tomorrow$, thisWeekRest$, nextWeek$, later$, nodue$]).pipe(
-          map(([overdue, todayArr, tomorrowArr, thisWeekRest, nextWeek, later, nodue]) =>
-            this.dedupeVm({ overdue, today: todayArr, tomorrow: tomorrowArr, thisWeekRest, nextWeek, later, nodue })
-          ),
+            return combineLatest([overdue$, today$, tomorrow$, thisWeekRest$, nextWeek$, later$, nodue$]).pipe(
+              map(([overdue, todayArr, tomorrowArr, thisWeekRest, nextWeek, later, nodue]) =>
+                this.dedupeVm({ overdue, today: todayArr, tomorrow: tomorrowArr, thisWeekRest, nextWeek, later, nodue })
+              ),
+            );
+          },
+          EMPTY_VM
         );
       }),
       shareReplay({ bufferSize: 1, refCount: true })

@@ -5,12 +5,11 @@ import {
   collection as nativeCollection,
   deleteDoc as nativeDeleteDoc,
   doc as nativeDoc,
-  getDocs as nativeGetDocs,
   setDoc as nativeSetDoc,
 } from 'firebase/firestore';
 import { collectionData as rxCollectionData } from 'rxfire/firestore';
-import { from, Observable, of } from 'rxjs';
-import { catchError, map, switchMap, tap } from 'rxjs/operators';
+import { Observable, of } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
 import { BoardColumn, DEFAULT_BOARD_COLUMNS, normalizeColumns } from '../models/types';
 
 @Injectable({ providedIn: 'root' })
@@ -30,50 +29,15 @@ export class BoardColumnsService {
    * Firestore のドキュメントに order が入っていない場合はヒット0件になってしまう。
    * → なのでまず素で全件取得して、sortは normalizeColumns() 側に任せる。
    */
-  list(projectId: string): Observable<BoardColumn[]> {
-    if (!projectId) {
-      return of(DEFAULT_BOARD_COLUMNS);
-    }
-
-    const colRef = nativeCollection(this.fs as any, this.colPath(projectId));
-
-    const stream$ = (rxCollectionData(colRef as any) as Observable<any[]>).pipe(
-      tap(raw => {
-        console.log(
-          '[BoardColumnsService] raw from Firestore for projectId=',
-          projectId,
-          raw
-        );
-      }),
-      map((raw) => {
-        const normalized = normalizeColumns(raw ?? []);
-        console.log(
-          '[BoardColumnsService] normalized columns =',
-          normalized
-        );
+  list$(projectId: string): Observable<BoardColumn[]> {
+    const col = nativeCollection(this.fs as any, this.colPath(projectId));
+    return rxCollectionData(col, { idField: 'id' }).pipe(
+      map(d => {
+        const normalized = normalizeColumns(d ?? []);
         return normalized.length ? normalized : DEFAULT_BOARD_COLUMNS;
       }),
-      catchError((err) => {
-        console.warn('[BoardColumnsService] Failed to load columns, fallback to default', err);
-        return of(DEFAULT_BOARD_COLUMNS);
-      })
-    );
-
-    return from(nativeGetDocs(colRef as any)).pipe(
-      switchMap((snapshot) => {
-        if (!snapshot.empty) {
-          return stream$;
-        }
-        return from(this.seedDefaultColumns(projectId)).pipe(
-          switchMap(() => stream$),
-          catchError((err) => {
-            console.warn('[BoardColumnsService] Failed to seed default columns', err);
-            return of(DEFAULT_BOARD_COLUMNS);
-          })
-        );
-      }),
-      catchError((err) => {
-        console.warn('[BoardColumnsService] Failed to ensure board columns', err);
+      catchError(err => {
+        console.warn('[BoardColumnsService.list$]', { projectId }, err);
         return of(DEFAULT_BOARD_COLUMNS);
       })
     );

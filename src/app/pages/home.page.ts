@@ -27,7 +27,9 @@ import { DraftsService } from '../services/drafts.service';
 import { NetworkService } from '../services/network.service';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { MessagingService, FcmNotice } from '../services/messaging.service';
-import { Firestore, doc, docData } from '@angular/fire/firestore';
+import { Firestore, doc } from '@angular/fire/firestore';
+import { docData as rxDocData } from 'rxfire/firestore';
+import { doc as nativeDoc } from 'firebase/firestore';
 import { MatDividerModule } from '@angular/material/divider';
 import { AiService } from '../services/ai.service';
 import { TranslatePipe } from '@ngx-translate/core';
@@ -36,6 +38,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule, DateAdapter } from '@angular/material/core';
 import { FcmTokensService } from '../services/fcm-tokens.service';
+import { safeFromProject$ } from '../utils/rx-safe';
 
 // ---- このページ専用の拡張型 ----
 type ProblemWithDef = Problem & {
@@ -172,7 +175,14 @@ export class HomePage implements OnInit, OnDestroy {
 
     // Problems（pid 必須）
     this.problems$ = combineLatest([this.auth.loggedIn$, this.currentProject.projectId$]).pipe(
-      switchMap(([isIn, pid]) => (isIn && pid && pid !== 'default') ? this.problems.list(pid) : of([]))
+      switchMap(([isIn, pid]) => {
+        if (!isIn || !pid || pid === 'default') return of([] as Problem[]);
+        return safeFromProject$(
+          this.currentProject.projectId$,
+          pid => this.problems.list$(pid),
+          [] as Problem[]
+        );
+      })
     );
 
     // 選択中 Problem の Doc
@@ -187,9 +197,14 @@ export class HomePage implements OnInit, OnDestroy {
       this.auth.loggedIn$,
       this.currentProject.projectId$
     ]).pipe(
-      switchMap(([pidProblem, isIn, pid]) =>
-        (isIn && pid && pid !== 'default' && pidProblem) ? this.issues.listByProblem(pid, pidProblem) : of([])
-      )
+      switchMap(([pidProblem, isIn, pid]) => {
+        if (!isIn || !pid || pid === 'default' || !pidProblem) return of([] as Issue[]);
+        return safeFromProject$(
+          this.currentProject.projectId$,
+          pid => this.issues.listByProblem$(pid, pidProblem),
+          [] as Issue[]
+        );
+      })
     );
 
     // Issue → Task購読 + ドラフト復元
@@ -203,8 +218,13 @@ export class HomePage implements OnInit, OnDestroy {
         const nextMap: Record<string, Observable<Task[]>> = {};
         for (const i of issues ?? []) {
           const id = i.id!;
-          nextMap[id] = this.tasksMap[id] ?? this.currentProject.projectId$.pipe(
-            switchMap(pid => (pid && pid !== 'default') ? this.tasks.listByIssue(pid, this.selectedProblemId!, id) : of([]))
+          nextMap[id] = this.tasksMap[id] ?? safeFromProject$(
+            this.currentProject.projectId$,
+            pid => {
+              if (!pid || pid === 'default') return of([] as Task[]);
+              return this.tasks.listByIssue$(pid, this.selectedProblemId!, id);
+            },
+            [] as Task[]
           );
 
           // Task タイトルのドラフト復元
@@ -231,10 +251,17 @@ export class HomePage implements OnInit, OnDestroy {
       this.fgMessages = [{ title: n?.title, body: n?.body }, ...this.fgMessages].slice(0, 20);
     });
 
-    // FCM 状態
+    // FCM 状態（users/{uid}/fcmStatus/app はプロジェクト非依存）
     this.fcmStatus$ = this.auth.uid$.pipe(
-      switchMap(uid => uid ? docData(doc(this.fs, `users/${uid}/fcmStatus/app`)) : of(null))
-    ) as any;
+      switchMap(uid => {
+        if (!uid) return of(null);
+        const ref = nativeDoc(this.fs as any, `users/${uid}/fcmStatus/app`);
+        return rxDocData(ref).pipe(
+          map((d: any) => ({ enabled: d?.enabled, lastTokenSavedAt: d?.lastTokenSavedAt, lastError: d?.lastError })),
+          switchMap(data => of(data))
+        );
+      })
+    );
   }
 
   // HomePage クラス内のどこかに追加

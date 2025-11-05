@@ -2,7 +2,8 @@
 import { Injectable } from '@angular/core';
 import { Firestore } from '@angular/fire/firestore';
 import { Task, Status } from '../models/types';
-import { Observable, combineLatest, map } from 'rxjs';
+import { Observable, combineLatest, map, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 
 // 読み取りは rxfire、CRUD は Firebase SDK (native)
 import {
@@ -53,24 +54,29 @@ export class TasksService {
   }
 
   // ===== リアルタイム一覧 =====
-  // 互換: listByIssue(problemId, issueId) は 'default' を使用
-  listByIssue(problemId: string, issueId: string): Observable<Task[]>;
-  listByIssue(projectId: string, problemId: string, issueId: string): Observable<Task[]>;
-  listByIssue(arg1: string, arg2: string, arg3?: string): Observable<Task[]> {
+  // 互換: listByIssue$(problemId, issueId) は 'default' を使用
+  listByIssue$(problemId: string, issueId: string): Observable<Task[]>;
+  listByIssue$(projectId: string, problemId: string, issueId: string): Observable<Task[]>;
+  listByIssue$(arg1: string, arg2: string, arg3?: string): Observable<Task[]> {
     const legacy = !arg3;
     const pid = legacy ? 'default' : arg1;
     const problemId = legacy ? arg1 : arg2;
     const issueId = legacy ? arg2 : (arg3 as string);
     const path = `${this.base(pid)}/${problemId}/issues/${issueId}/tasks`;
-    const colRef = nativeCollection(this.fs as any, path);
+    const col = nativeCollection(this.fs as any, path);
     const q = nativeQuery(
-      colRef,
+      col,
       nativeWhere('softDeleted','==', false),
       nativeOrderBy('order', 'asc'),
       nativeOrderBy('createdAt', 'asc')
     );
-    return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>)
-      .pipe(map((xs: Task[]) => this.filterVisible(xs)));
+    return rxCollectionData(q, { idField: 'id' }).pipe(
+      map(d => this.filterVisible(d as Task[])),
+      catchError(err => {
+        console.warn('[TasksService.listByIssue$]', { projectId: pid, problemId, issueId }, err);
+        return of([] as Task[]);
+      })
+    ) as Observable<Task[]>;
   }
 
   // ===== 作成 =====
@@ -221,20 +227,20 @@ export class TasksService {
 
   // ====== 集計API（collectionGroup） ======
   // 互換: projectId 省略時は 'default' を使用
-  listAllByDueRange(
+  listAllByDueRange$(
     startYmd: string,
     endYmd: string,
     openOnly?: boolean,
     tags?: string[]
   ): Observable<Task[]>;
-  listAllByDueRange(
+  listAllByDueRange$(
     projectId: string,
     startYmd: string,
     endYmd: string,
     openOnly?: boolean,
     tags?: string[]
   ): Observable<Task[]>;
-  listAllByDueRange(
+  listAllByDueRange$(
     arg1: string,
     arg2: string,
     arg3?: string | boolean,
@@ -263,33 +269,38 @@ export class TasksService {
       nativeOrderBy('dueDate', 'asc')
     );
 
-    return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>)
-    .pipe(map((xs: Task[]) => {
-            let ys = this.filterNoTemplates(xs);
-            if (openOnly) {
-              const set = new Set(OPEN_STATUSES);
-              ys = ys.filter(t => set.has(t.status as Status));
-            }
-            if (tags.length) {
-              const tagSet = new Set(tags.slice(0, 10).map(s => s.trim()));
-              ys = ys.filter(t => (t.tags ?? []).some(tag => tagSet.has(tag)));
-            }
-            return ys;
-          }));
+    return rxCollectionData(q, { idField: 'id' }).pipe(
+      map((xs: any[]) => {
+        let ys = this.filterNoTemplates(xs as Task[]);
+        if (openOnly) {
+          const set = new Set(OPEN_STATUSES);
+          ys = ys.filter(t => set.has(t.status as Status));
+        }
+        if (tags.length) {
+          const tagSet = new Set(tags.slice(0, 10).map(s => s.trim()));
+          ys = ys.filter(t => (t.tags ?? []).some(tag => tagSet.has(tag)));
+        }
+        return ys;
+      }),
+      catchError(err => {
+        console.warn('[TasksService.listAllByDueRange$]', { projectId: pid, startYmd, endYmd }, err);
+        return of([] as Task[]);
+      })
+    ) as Observable<Task[]>;
   }
 
-  listAllOverdue(
+  listAllOverdue$(
     todayYmd: string,
     openOnly?: boolean,
     tags?: string[]
   ): Observable<Task[]>;
-  listAllOverdue(
+  listAllOverdue$(
     projectId: string,
     todayYmd: string,
     openOnly?: boolean,
     tags?: string[]
   ): Observable<Task[]>;
-  listAllOverdue(
+  listAllOverdue$(
     arg1: string,
     arg2?: string | boolean,
     arg3?: boolean | string[],
@@ -312,32 +323,37 @@ export class TasksService {
       // status/tags はクライアントで
       nativeOrderBy('dueDate', 'asc')
     );
-    return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>)
-    .pipe(map((xs: Task[]) => {
-      let ys = this.filterNoTemplates(xs);
-      if (openOnly) {
-        const set = new Set(OPEN_STATUSES);
-        ys = ys.filter(t => set.has(t.status as Status));
-      }
-      if (tags.length) {
-        const tagSet = new Set(tags.slice(0, 10).map(s => s.trim()));
-        ys = ys.filter(t => (t.tags ?? []).some(tag => tagSet.has(tag)));
-      }
-      return ys;
-    }));
+    return rxCollectionData(q, { idField: 'id' }).pipe(
+      map((xs: any[]) => {
+        let ys = this.filterNoTemplates(xs as Task[]);
+        if (openOnly) {
+          const set = new Set(OPEN_STATUSES);
+          ys = ys.filter(t => set.has(t.status as Status));
+        }
+        if (tags.length) {
+          const tagSet = new Set(tags.slice(0, 10).map(s => s.trim()));
+          ys = ys.filter(t => (t.tags ?? []).some(tag => tagSet.has(tag)));
+        }
+        return ys;
+      }),
+      catchError(err => {
+        console.warn('[TasksService.listAllOverdue$]', { projectId: pid, todayYmd }, err);
+        return of([] as Task[]);
+      })
+    ) as Observable<Task[]>;
   }
 
-  // --- listAllNoDue: オーバーロード2本 + 実装1本だけ ---
-  listAllNoDue(
+  // --- listAllNoDue$: オーバーロード2本 + 実装1本だけ ---
+  listAllNoDue$(
     openOnly?: boolean,
     tags?: string[]
   ): Observable<Task[]>;
-  listAllNoDue(
+  listAllNoDue$(
     projectId: string,
     openOnly?: boolean,
     tags?: string[]
   ): Observable<Task[]>;
-  listAllNoDue(
+  listAllNoDue$(
     arg1?: string | boolean,
     arg2?: boolean | string[],
     arg3?: string[]
@@ -362,11 +378,16 @@ export class TasksService {
       nativeOrderBy('createdAt', 'desc')
     );
 
-    return (rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>)
-    .pipe(map((xs: Task[]) => this.filterNoTemplates(xs)));
+    return rxCollectionData(q, { idField: 'id' }).pipe(
+      map((xs: any[]) => this.filterNoTemplates(xs as Task[])),
+      catchError(err => {
+        console.warn('[TasksService.listAllNoDue$]', { projectId: pid }, err);
+        return of([] as Task[]);
+      })
+    ) as Observable<Task[]>;
   }
 
-    listAllInProject(
+    listAllInProject$(
       projectId: string,
       openOnly: boolean = false,
       tags: string[] = []
@@ -385,12 +406,10 @@ export class TasksService {
         nativeOrderBy('createdAt', 'asc')
       );
   
-      const stream = rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>;
-  
-      return stream.pipe(
+      return rxCollectionData(q, { idField: 'id' }).pipe(
         map(items => {
           // 念のためsoftDeleted二重フィルタ
-          let ys = this.filterNoTemplates(items);
+          let ys = this.filterNoTemplates(items as Task[]);
 
           // openOnly が true の場合は done を除外
           if (openOnly) {
@@ -405,8 +424,12 @@ export class TasksService {
           }
   
           return ys;
+        }),
+        catchError(err => {
+          console.warn('[TasksService.listAllInProject$]', { projectId }, err);
+          return of([] as Task[]);
         })
-      );
+      ) as Observable<Task[]>;
     }
   
 
@@ -423,7 +446,7 @@ export class TasksService {
     }
   
  // --- 自分のタスク横断取得（個人ToDo統合ビュー用） ---
- listMine(
+ listMine$(
   projectId: string,
   uid: string,
   openOnly: boolean = true,
@@ -447,29 +470,32 @@ export class TasksService {
     nativeOrderBy('dueDate', 'asc')
   );
 
-  const stream = rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>;
-
-  return stream.pipe(
+  return rxCollectionData(q, { idField: 'id' }).pipe(
     map(items => {
       // openOnly はクライアント側で
-      items = this.filterNoTemplates(items);
+      const filtered = this.filterNoTemplates(items as Task[]);
+      let result = filtered;
       if (openOnly) {
         const open = new Set(OPEN_STATUSES);
-        items = items.filter(x => open.has(x.status as Status));
+        result = result.filter(x => open.has(x.status as Status));
       }
       // タグもクライアント側で
       if (tags.length) {
         const set = new Set(tags.slice(0, 10).map(s => s.trim()));
-        items = items.filter(t => (t.tags ?? []).some(tag => set.has(tag)));
+        result = result.filter(t => (t.tags ?? []).some((tag: string) => set.has(tag)));
       }
-      return items;
+      return result;
+    }),
+    catchError(err => {
+      console.warn('[TasksService.listMine$]', { projectId, uid }, err);
+      return of([] as Task[]);
     })
-  );
+  ) as Observable<Task[]>;
 }
 
 
 // 自分にアサインされ、かつ dueDate == null のタスクを取得
-listMineNoDue(
+listMineNoDue$(
   projectId: string,
   uid: string,
   openOnly: boolean = true,
@@ -490,19 +516,21 @@ listMineNoDue(
     nativeOrderBy('createdAt', 'desc')
   );
 
-  const stream = rxCollectionData(q as any, { idField: 'id' }) as Observable<Task[]>;
-
-  return stream.pipe(
+  return rxCollectionData(q, { idField: 'id' }).pipe(
     map(xs => {
-      let ys = this.filterNoTemplates(xs);
+      let ys = this.filterNoTemplates(xs as Task[]);
       if (openOnly) ys = ys.filter(t => t.status !== 'done');
       if (tags.length) {
         const set = new Set(tags.slice(0, 10).map(s => s.trim()));
-        ys = ys.filter(t => (t.tags ?? []).some(tag => set.has(tag)));
+        ys = ys.filter(t => (t.tags ?? []).some((tag: string) => set.has(tag)));
       }
       return ys;
+    }),
+    catchError(err => {
+      console.warn('[TasksService.listMineNoDue$]', { projectId, uid }, err);
+      return of([] as Task[]);
     })
-  );
+  ) as Observable<Task[]>;
 }
 private async deleteCollection(path: string, batchSize = 300): Promise<void> {
   const colRef = nativeCollection(this.fs as any, path);

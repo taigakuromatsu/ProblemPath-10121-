@@ -16,7 +16,8 @@ import {
 import {
   collectionData as rxCollectionData,
 } from 'rxfire/firestore';
-import { Observable } from 'rxjs';
+import { Observable, of } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
 
 export type CommentTarget =
   | { kind:'problem'; projectId:string; problemId:string; }
@@ -42,12 +43,18 @@ export class CommentsService {
     return `projects/${t.projectId}/problems/${t.problemId}/issues/${t.issueId}/tasks/${t.taskId}/comments`;
   }
 
-  listByTarget(t: CommentTarget, pageSize=50, cursor?: any): Observable<CommentDoc[]> {
-    const colRef = nativeCollection(this.fs as any, this.colPath(t));
+  listByTarget$(t: CommentTarget, pageSize=50, cursor?: any): Observable<CommentDoc[]> {
+    const col = nativeCollection(this.fs as any, this.colPath(t));
     const q = cursor
-      ? nativeQuery(colRef, nativeOrderBy('createdAt','asc'), nativeStartAfter(cursor), nativeLimit(pageSize))
-      : nativeQuery(colRef, nativeOrderBy('createdAt','asc'), nativeLimit(pageSize));
-    return rxCollectionData(q as any, { idField: 'id' }) as Observable<CommentDoc[]>;
+      ? nativeQuery(col, nativeOrderBy('createdAt','asc'), nativeStartAfter(cursor), nativeLimit(pageSize))
+      : nativeQuery(col, nativeOrderBy('createdAt','asc'), nativeLimit(pageSize));
+    return rxCollectionData(q, { idField: 'id' }).pipe(
+      map(d => d as CommentDoc[]),
+      catchError(err => {
+        console.warn('[CommentsService.listByTarget$]', t, err);
+        return of([] as CommentDoc[]);
+      })
+    );
   }
 
   async create(t: CommentTarget, body: string, authorId: string, authorName?: string) {

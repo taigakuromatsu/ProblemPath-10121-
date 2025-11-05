@@ -20,6 +20,7 @@ import { NgChartsModule } from 'ng2-charts';
 import { ChartConfiguration } from 'chart.js';
 import { Observable, combineLatest, of, firstValueFrom } from 'rxjs';
 import { map, switchMap, take, tap } from 'rxjs/operators';
+import { safeFromProject$ } from '../utils/rx-safe';
 import { MembersService } from '../services/members.service';
 import { CommentsService, CommentDoc, CommentTarget } from '../services/comments.service';
 import { DraftsService } from '../services/drafts.service';
@@ -27,7 +28,7 @@ import { NetworkService } from '../services/network.service';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AttachmentsService, AttachmentDoc, AttachmentTarget } from '../services/attachments.service';
 import { BoardColumnsService } from '../services/board-columns.service';
-import { BoardColumn, DEFAULT_BOARD_COLUMNS, Task } from '../models/types';
+import { BoardColumn, DEFAULT_BOARD_COLUMNS, Task, Problem, Issue } from '../models/types';
 import { MatMenuModule } from '@angular/material/menu';
 
 type Status = BoardColumn['categoryHint'];
@@ -325,29 +326,30 @@ rememberPickedNames(ev: Event) {
 
   private startBoardColumnsSubscription() {
     this.boardColumnsSub?.unsubscribe();
-    this.boardColumnsSub = this.currentProject.projectId$
-      .pipe(
-        switchMap(pid => (pid && pid !== 'default')
-          ? this.boardColumns.list(pid)
-          : of(DEFAULT_BOARD_COLUMNS)
-        )
-      )
-      .subscribe(cols => {
-        this.columns = (cols && cols.length) ? cols : DEFAULT_BOARD_COLUMNS;
-      });
+    this.columns$ = safeFromProject$(
+      this.currentProject.projectId$,
+      pid => this.boardColumns.list$(pid),
+      DEFAULT_BOARD_COLUMNS
+    );
+    this.boardColumnsSub = this.columns$.subscribe(cols => {
+      this.columns = (cols && cols.length) ? cols : DEFAULT_BOARD_COLUMNS;
+    });
   }
+
+  columns$!: Observable<BoardColumn[]>;
 
   private startProblemsSubscription() {
     this.isLoadingProblems = true;
     this.loadError = null;
 
     this.subForTree?.unsubscribe();
-    this.subForTree = combineLatest([this.currentProject.projectId$, this.auth.loggedIn$]).pipe(
-      tap(([pid, isIn]) => dlog('[Tree] subscribe Problems with', { pid, isIn })),
-      switchMap(([pid, isIn]) => {
-        const safePid = (pid && pid !== 'default') ? pid : null;
-        return (isIn && safePid) ? this.problems.list(safePid) : of([]);
-      })
+    this.problems$ = safeFromProject$(
+      this.currentProject.projectId$,
+      pid => this.problems.list$(pid),
+      [] as Problem[]
+    );
+    this.subForTree = combineLatest([this.problems$, this.auth.loggedIn$]).pipe(
+      switchMap(([problems, isIn]) => isIn ? of(problems) : of([] as Problem[]))
     ).subscribe({
       next: async rows => {
         this.clearBadgeSubs();
@@ -369,7 +371,7 @@ rememberPickedNames(ev: Event) {
             // 先に単発ロード（既存）：初期表示を速く
             await Promise.all([ this.loadCountFor(n), this.loadAttachCountFor(n) ]);
             // 続いてリアルタイム購読
-            await this.attachBadgeStreams(n);
+            this.attachBadgeStreams(n);
           }));
         } catch {}
 
@@ -388,6 +390,8 @@ rememberPickedNames(ev: Event) {
       }
     });
   }
+
+  problems$!: Observable<Problem[]>;
 
   retryProblems() { this.startProblemsSubscription(); }
 
@@ -426,12 +430,13 @@ rememberPickedNames(ev: Event) {
   private attachIssueSubscription(pNode: TreeNode) {
     this.issueSubs.get(pNode.id)?.unsubscribe();
 
-    const sub = combineLatest([this.currentProject.projectId$, this.auth.loggedIn$]).pipe(
-      tap(([pid, isIn]) => dlog('[Tree] subscribe Issues with', { pid, isIn, problemId: pNode.id })),
-      switchMap(([pid, isIn]) => {
-        const safePid = (pid && pid !== 'default') ? pid : null;
-        return (isIn && safePid) ? this.issues.listByProblem(safePid, pNode.id) : of([]);
-      })
+    const issues$ = safeFromProject$(
+      this.currentProject.projectId$,
+      pid => this.issues.listByProblem$(pid, pNode.id),
+      [] as Issue[]
+    );
+    const sub = combineLatest([issues$, this.auth.loggedIn$]).pipe(
+      switchMap(([issues, isIn]) => isIn ? of(issues) : of([] as Issue[]))
     ).subscribe(async issues => {
       const kids: TreeNode[] = issues.map(i => ({
         id: i.id!,
@@ -468,9 +473,9 @@ rememberPickedNames(ev: Event) {
       // 件数ロード：親Problem自身＋子Issue
       try {
         // 親 Problem
-        await this.attachBadgeStreams(pNode);
+        this.attachBadgeStreams(pNode);
         // 子 Issue
-        await Promise.all(kids.map(k => this.attachBadgeStreams(k)));
+        kids.forEach(k => this.attachBadgeStreams(k));
       } catch {}
       
       // --- 不要になった件数購読の掃除（Issue が減った場合） ---
@@ -499,12 +504,13 @@ rememberPickedNames(ev: Event) {
     const key = `${problemId}_${issueNode.id}`;
     this.taskSubs.get(key)?.unsubscribe();
 
-    const sub = combineLatest([this.currentProject.projectId$, this.auth.loggedIn$]).pipe(
-      tap(([pid, isIn]) => dlog('[Tree] subscribe Tasks with', { pid, isIn, problemId, issueId: issueNode.id })),
-      switchMap(([pid, isIn]) => {
-        const safePid = (pid && pid !== 'default') ? pid : null;
-        return (isIn && safePid) ? this.tasks.listByIssue(safePid, problemId, issueNode.id) : of([]);
-      })
+    const tasks$ = safeFromProject$(
+      this.currentProject.projectId$,
+      pid => this.tasks.listByIssue$(pid, problemId, issueNode.id),
+      [] as Task[]
+    );
+    const sub = combineLatest([tasks$, this.auth.loggedIn$]).pipe(
+      switchMap(([tasks, isIn]) => isIn ? of(tasks) : of([] as Task[]))
     ).subscribe(async tasks => {
             // ← ここでテンプレートを除外
             const visible = (tasks ?? []).filter(t => this.isRealTask(t));
@@ -542,9 +548,9 @@ rememberPickedNames(ev: Event) {
           // 件数ロード：当該Issue＋子Task
           try {
             // 当該 Issue
-            await this.attachBadgeStreams(issueNode);
+            this.attachBadgeStreams(issueNode);
             // 子 Task
-            await Promise.all(kids.map(k => this.attachBadgeStreams(k)));
+            kids.forEach(k => this.attachBadgeStreams(k));
           } catch {}
           
           // --- 不要になった件数購読の掃除（Task が減った場合） ---
@@ -654,26 +660,19 @@ rememberPickedNames(ev: Event) {
 
     const FAR = '9999-12-31';
 
-    return this.currentProject.projectId$.pipe(
-      switchMap(pid => {
-        if (!pid) {
-          // プロジェクト未選択時は全部0
-          return of({
-            overdue: 0, today: 0, thisWeek: 0, nextWeek: 0, later: 0, nodue: 0,
-            openTotal: 0, doneTotal: 0, progressPct: 0
-          });
-        }
-
+    return safeFromProject$(
+      this.currentProject.projectId$,
+      pid => {
         // 期限関連バケット（= 期限つきタスクを区間ごとに集計）
-        const overdue$   = this.tasks.listAllOverdue(pid, this.ymd(today), true);
-        const today$     = this.tasks.listAllByDueRange(pid, this.ymd(today), this.ymd(today), true);
-        const thisWeek$  = this.tasks.listAllByDueRange(pid, this.ymd(tomorrow), this.ymd(endOfWeek), true);
-        const nextWeek$  = this.tasks.listAllByDueRange(pid, this.ymd(startOfNextWeek), this.ymd(endOfNextWeek), true);
-        const later$     = this.tasks.listAllByDueRange(pid, this.ymd(this.addDays(endOfNextWeek,1)), FAR, true);
-        const nodue$     = this.tasks.listAllNoDue(pid, true);
+        const overdue$   = this.tasks.listAllOverdue$(pid, this.ymd(today), true);
+        const today$     = this.tasks.listAllByDueRange$(pid, this.ymd(today), this.ymd(today), true);
+        const thisWeek$  = this.tasks.listAllByDueRange$(pid, this.ymd(tomorrow), this.ymd(endOfWeek), true);
+        const nextWeek$  = this.tasks.listAllByDueRange$(pid, this.ymd(startOfNextWeek), this.ymd(endOfNextWeek), true);
+        const later$     = this.tasks.listAllByDueRange$(pid, this.ymd(this.addDays(endOfNextWeek,1)), FAR, true);
+        const nodue$     = this.tasks.listAllNoDue$(pid, true);
 
         // "全タスク" 集計用（期限なしも含む・softDeleted除外済み）
-        const all$       = this.tasks.listAllInProject(pid, /*openOnly=*/false);
+        const all$       = this.tasks.listAllInProject$(pid, /*openOnly=*/false);
 
         return combineLatest([overdue$, today$, thisWeek$, nextWeek$, later$, nodue$, all$]).pipe(
           map(([ov, td, wk, nw, lt, nd, all]) => {
@@ -706,7 +705,11 @@ rememberPickedNames(ev: Event) {
             };
           })
         );
-      })
+      },
+      {
+        overdue: 0, today: 0, thisWeek: 0, nextWeek: 0, later: 0, nodue: 0,
+        openTotal: 0, doneTotal: 0, progressPct: 0
+      }
     );
   }
 
@@ -824,9 +827,6 @@ rememberPickedNames(ev: Event) {
   async openComments(node: TreeNode){
     this.selectedNode = node;
     this.activeDetailTab = 'comments';
-    const t = await this.toTarget(node);
-    if (!t) { this.comments$ = undefined; return; }
-    this.comments$ = this.comments.listByTarget(t, 50);
     this.editingId = null;
 
     // 一旦クリアしてからドラフト復元
@@ -840,10 +840,40 @@ rememberPickedNames(ev: Event) {
         if (ok) this.newBody = rec.value || '';
       }
     }
-    // 添付一覧 ーーーーーーーーーーーーーーーーーー
-    const at = await this.toAttachmentTarget(node);
-    this.attachments$ = at ? this.attachments.list(at) : undefined;
 
+    // コメント購読
+    this.comments$ = safeFromProject$(
+      this.currentProject.projectId$,
+      pid => {
+        let t: CommentTarget | null = null;
+        if (node.kind === 'problem') {
+          t = { kind: 'problem', projectId: pid, problemId: node.id };
+        } else if (node.kind === 'issue') {
+          t = { kind: 'issue', projectId: pid, problemId: node.parentId!, issueId: node.id };
+        } else {
+          t = { kind: 'task', projectId: pid, problemId: node.parentProblemId!, issueId: node.parentIssueId!, taskId: node.id };
+        }
+        return t ? this.comments.listByTarget$(t, 50) : of([] as CommentDoc[]);
+      },
+      [] as CommentDoc[]
+    );
+
+    // 添付一覧
+    this.attachments$ = safeFromProject$(
+      this.currentProject.projectId$,
+      pid => {
+        let at: AttachmentTarget | null = null;
+        if (node.kind === 'problem') {
+          at = { kind: 'problem', projectId: pid, problemId: node.id };
+        } else if (node.kind === 'issue') {
+          at = { kind: 'issue', projectId: pid, problemId: node.parentId!, issueId: node.id };
+        } else {
+          at = { kind: 'task', projectId: pid, problemId: node.parentProblemId!, issueId: node.parentIssueId!, taskId: node.id };
+        }
+        return at ? this.attachments.list(at) : of([] as AttachmentDoc[]);
+      },
+      [] as AttachmentDoc[]
+    );
   }
 
   // 投稿/更新/キャンセル時はドラフトを消す
@@ -1005,33 +1035,46 @@ rememberPickedNames(ev: Event) {
   }
   
   // TreePage クラス内に追加
-private async attachBadgeStreams(node: TreeNode) {
+private attachBadgeStreams(node: TreeNode) {
   // ---- コメント件数 ----
-  try {
-    const t = await this.toTarget(node);
-    if (t) {
-      this.commentCountSubs.get(node.id)?.unsubscribe();
-      const subC = this.comments
-        // ここは件数上限を広めに（サービス側の第二引数が limit の想定）
-        .listByTarget(t, 1000)
-        .pipe(map(arr => arr.length))
-        .subscribe(n => { this.commentCounts[node.id] = n; });
-      this.commentCountSubs.set(node.id, subC);
-    }
-  } catch {}
+  this.commentCountSubs.get(node.id)?.unsubscribe();
+  const commentCount$ = safeFromProject$(
+    this.currentProject.projectId$,
+    pid => {
+      let t: CommentTarget | null = null;
+      if (node.kind === 'problem') {
+        t = { kind: 'problem', projectId: pid, problemId: node.id };
+      } else if (node.kind === 'issue') {
+        t = { kind: 'issue', projectId: pid, problemId: node.parentId!, issueId: node.id };
+      } else {
+        t = { kind: 'task', projectId: pid, problemId: node.parentProblemId!, issueId: node.parentIssueId!, taskId: node.id };
+      }
+      return t ? this.comments.listByTarget$(t, 1000).pipe(map(arr => arr.length)) : of(0);
+    },
+    0
+  );
+  const subC = commentCount$.subscribe(n => { this.commentCounts[node.id] = n; });
+  this.commentCountSubs.set(node.id, subC);
 
   // ---- 添付件数 ----
-  try {
-    const at = await this.toAttachmentTarget(node);
-    if (at) {
-      this.attachmentCountSubs.get(node.id)?.unsubscribe();
-      const subA = this.attachments
-        .list(at) // 添付は list(at) が Observable<AttachmentDoc[]>
-        .pipe(map(arr => arr.length))
-        .subscribe(n => { this.attachmentCounts[node.id] = n; });
-      this.attachmentCountSubs.set(node.id, subA);
-    }
-  } catch {}
+  this.attachmentCountSubs.get(node.id)?.unsubscribe();
+  const attachmentCount$ = safeFromProject$(
+    this.currentProject.projectId$,
+    pid => {
+      let at: AttachmentTarget | null = null;
+      if (node.kind === 'problem') {
+        at = { kind: 'problem', projectId: pid, problemId: node.id };
+      } else if (node.kind === 'issue') {
+        at = { kind: 'issue', projectId: pid, problemId: node.parentId!, issueId: node.id };
+      } else {
+        at = { kind: 'task', projectId: pid, problemId: node.parentProblemId!, issueId: node.parentIssueId!, taskId: node.id };
+      }
+      return at ? this.attachments.list(at).pipe(map(arr => arr.length)) : of(0);
+    },
+    0
+  );
+  const subA = attachmentCount$.subscribe(n => { this.attachmentCounts[node.id] = n; });
+  this.attachmentCountSubs.set(node.id, subA);
 }
 
   /**
