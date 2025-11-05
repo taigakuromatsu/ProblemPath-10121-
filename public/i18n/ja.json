@@ -555,7 +555,8 @@
       "deleteOnlyAdmin": "削除できるのは管理者のみです",
       "deleted": "プロジェクトを削除しました",
       "adminCannotLeave": "管理者はここから退出できません",
-      "left": "退出しました"
+      "left": "退出しました",
+      "projectLost": "開いていたプロジェクトが削除または権限喪失したため、ホームに戻りました。"
     },
     "confirm": {
       "delete": "このプロジェクトを完全に削除します。よろしいですか？（元に戻せません）",
@@ -567,6 +568,9 @@
     "adminLabel": "管理者",
     "memberLabel": "メンバー",
     "viewerLabel": "閲覧者"
+  },
+  "guard": {
+    "projectRequired": "プロジェクトが未選択のため、ホームに戻りました。"
   }
   
 }

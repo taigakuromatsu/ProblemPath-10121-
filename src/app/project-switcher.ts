@@ -1,8 +1,10 @@
+// src/app/project-switcher.ts
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, ChangeDetectorRef, OnDestroy } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { Router } from '@angular/router';
 
 import { ProjectDirectoryService, MyProject } from './services/project-directory.service';
 import { CurrentProjectService } from './services/current-project.service';
@@ -127,8 +129,11 @@ export class ProjectSwitcher implements OnDestroy {
   private onlineNow = true;
 
   private stopMembershipWatch?: () => void;
+  private stopMembershipsListWatch?: () => void;
   private authSub?: Subscription;
   private currentUid: string | null = null;
+
+  private reloadTimer?: any;
 
   constructor(
     private current: CurrentProjectService,
@@ -138,9 +143,10 @@ export class ProjectSwitcher implements OnDestroy {
     private cdr: ChangeDetectorRef,
     private network: NetworkService,
     private i18n: TranslateService,
+    private router: Router,
   ) {}
-  private stopMembershipsListWatch?: () => void;
-  private reloadTimer?: any;
+
+  // --- debounce して memberships を再読込 ---
   private scheduleReload(uid: string, ms = 150) {
     clearTimeout(this.reloadTimer);
     this.reloadTimer = setTimeout(() => this.reload(uid), ms);
@@ -150,9 +156,25 @@ export class ProjectSwitcher implements OnDestroy {
     const colRef = collection(this.fs as any, `users/${uid}/memberships`);
     this.stopMembershipsListWatch = onSnapshot(
       colRef,
-      () => this.scheduleReload(uid),      // 変更を検知したら軽くデバウンスして再読込
+      () => this.scheduleReload(uid),
       () => this.scheduleReload(uid)
     );
+  }
+
+  // --- プロジェクト喪失時の集中処理（ホームへ退避） ---
+  private handleProjectLost(_reason: 'removed'|'deleted'|'error') {
+    this.current.set(null);
+    this.selected = null;
+    this.prevSelected = null;
+    this.stopMembershipWatch?.();
+    this.stopMembershipsListWatch?.();
+    this.cdr.markForCheck();
+
+    // 表示中ページの購読を即座に破棄させるためホームに遷移
+    this.router.navigateByUrl('/');
+
+    // 軽い通知（後で MatSnackBar に差し替え可）
+    try { alert(this.i18n.instant('projectSwitcher.alert.projectLost')); } catch {}
   }
 
   ngOnInit() {
@@ -160,17 +182,17 @@ export class ProjectSwitcher implements OnDestroy {
     this.isOnline$ = this.network.isOnline$;
     this.isOnline$.subscribe(v => { this.onlineNow = !!v; });
 
-    // ★ ここが核心：UID を常時監視してサインイン/アウトに追従
+    // UID 監視：サインイン/アウトに追従
     this.authSub = this.authSvc.uid$.subscribe(async (uid) => {
-      if (uid === this.currentUid) return;        // 変化なしは無視
+      if (uid === this.currentUid) return;
       this.currentUid = uid ?? null;
 
-      // 既存の membership watch は張り替える
+      // 既存 watch の張り替え
       this.stopMembershipWatch?.();
-      this.stopMembershipsListWatch = undefined; 
+      this.stopMembershipsListWatch?.();
 
       if (!uid) {
-        // サインアウト時：一覧と選択をクリア
+        // サインアウト
         this.projects = [];
         this.current.set(null);
         this.selected = null;
@@ -180,7 +202,7 @@ export class ProjectSwitcher implements OnDestroy {
         return;
       }
 
-      // サインイン時：プロジェクト一覧を取得して選択復元
+      // サインイン：一覧ウォッチ開始＆初期ロード
       this.startMembershipsListWatch(uid);
       await this.reload(uid);
 
@@ -237,19 +259,11 @@ export class ProjectSwitcher implements OnDestroy {
       ref,
       (snap) => {
         if (!snap.exists()) {
-          this.current.set(null);
-          this.selected = null;
-          this.prevSelected = null;
-          this.cdr.markForCheck();
-          this.stopMembershipWatch?.();
+          this.handleProjectLost('removed');
         }
       },
       (_err: any) => {
-        this.current.set(null);
-        this.selected = null;
-        this.prevSelected = null;
-        this.cdr.markForCheck();
-        this.stopMembershipWatch?.();
+        this.handleProjectLost('error');
       }
     );
   }
@@ -266,10 +280,7 @@ export class ProjectSwitcher implements OnDestroy {
       this.projects = [];
     } finally {
       if (this.selected && !this.projects.find(p => p.pid === this.selected)) {
-        this.current.set(null);
-        this.selected = null;
-        this.prevSelected = null;
-        this.stopMembershipWatch?.();
+        this.handleProjectLost('deleted');
       }
       this.loading = false; this.cdr.markForCheck();
     }
@@ -445,6 +456,7 @@ export class ProjectSwitcher implements OnDestroy {
     return items.filter(p => p.name !== '(deleted)');
   }
 }
+
 
 
 

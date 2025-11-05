@@ -547,7 +547,8 @@
       "deleteOnlyAdmin": "Only admins can delete the project",
       "deleted": "Project deleted",
       "adminCannotLeave": "Admins cannot leave from here",
-      "left": "Left the project"
+      "left": "Left the project",
+      "projectLost": "The project you were viewing was deleted or your permissions were lost, so you were returned to the home page."
     },
     "confirm": {
       "delete": "This will permanently delete the project. Continue?",
@@ -567,5 +568,8 @@
     "error": "AI error",
     "clear": "Clear",
     "noProblem": "Select a Problem first"
+    },
+  "guard": {
+    "projectRequired": "Project is not selected, so you were returned to the home page."
   }
 }
