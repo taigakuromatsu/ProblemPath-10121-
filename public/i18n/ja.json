@@ -177,7 +177,8 @@
     "createNew": "新規作成",
     "uploadDone": "アップロードしました",
     "uploadFailed": "アップロードに失敗しました",
-    "deleteFailed": "削除に失敗しました"
+    "deleteFailed": "削除に失敗しました",
+    "ok": "OK"
   },
   "template": {
     "bug": "バグ/不具合",
@@ -357,14 +358,60 @@
       "statusUpdate": "ステータス更新に失敗しました",
       "orderSave": "順序の保存に失敗しました",
       "assign": "Assignに失敗しました",
-      "unassign": "Unassignに失敗しました"
+      "unassign": "Unassignに失敗しました",
+      "columnAdd": "列の追加に失敗しました",
+      "columnDelete": "列の削除に失敗しました"
+    },
+    "addColumn": "列を追加",
+    "autoProgressHint": "特に指定がない場合、タスクカードを置いた列の設定（ステータス / 進捗率）に従って、そのタスクの状態と進捗が自動的に決まります。",
+    "aria": {
+      "reorderColumn": "列を並べ替え",
+      "editColumn": "列を編集",
+      "deleteColumn": "列を削除"
+    },
+    "confirm": {
+      "deleteColumn": "「{{name}}」列を削除しますか？"
+    },
+    "toast": {
+      "saved": "保存しました",
+      "columnAdded": "列を追加しました",
+      "columnDeleted": "列を削除しました"
+    },
+    "columnEdit": {
+      "dialogTitle": "列設定を編集",
+      "field": {
+        "title": "タイトル",
+        "category": "扱いカテゴリ",
+        "progress": "進捗率として扱う%"
+      },
+      "category": {
+        "not_started": "未着手扱い",
+        "in_progress": "進行中扱い",
+        "done": "完了扱い"
+      }
     }
   },
   "schedule": {
     "subtitle": "プロジェクト全体のタスクと期限をまとめて確認できます。",
     "export": {
       "csv": "CSV",
-      "json": "JSON"
+      "json": "JSON",
+      "title": "データエキスポート",
+      "headers": {
+        "id": "ID",
+        "title": "タイトル",
+        "status": "状態",
+        "priority": "優先度",
+        "due": "期日",
+        "assignees": "担当者",
+        "project": "プロジェクト",
+        "problem": "Problem",
+        "issue": "Issue",
+        "tags": "タグ",
+        "progress": "進捗(%)",
+        "createdAt": "作成日時",
+        "updatedAt": "更新日時"
+      }
     },
     "view": {
       "label": "表示",
@@ -384,9 +431,10 @@
       "placeholder": "担当者で絞り込み"
     },
     "actions": {
-      "complete": "完了にする",
+      "minusOne": "期日を-1日",
       "plusOne": "期日を+1日",
-      "today": "今日にする"
+      "today": "今日にする",
+      "complete": "完了にする"
     },
     "openInBoard": "Boardで見る",
     "section": {
@@ -399,6 +447,19 @@
       "noDue": "期限未設定"
     },
     "none": "なし"
+  },
+  "calendar": {
+    "prevMonth": "前の月へ",
+    "nextMonth": "次の月へ",
+    "weekday": {
+      "mon": "月",
+      "tue": "火",
+      "wed": "水",
+      "thu": "木",
+      "fri": "金",
+      "sat": "土",
+      "sun": "日"
+    }
   },
   "myTasks": {
     "title": "自分のタスク",
@@ -419,6 +480,15 @@
       "today": "今日",
       "week": "今週",
       "progress": "完了率"
+    },
+    "confirm": {
+      "markDone": "Task「{{title}}」を完了にしますか？",
+      "shiftBy": "期日を{{n}}日ずらしますか？",
+      "setToday": "期日を今日にしますか？"
+    },
+    "export": {
+      "csvFileName": "my-tasks.csv",
+      "jsonFileName": "my-tasks.json"
     }
   },
   "filter": {

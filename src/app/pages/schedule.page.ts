@@ -1,3 +1,4 @@
+// src/app/pages/schedule.page.ts
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { AsyncPipe, NgFor, NgIf, NgClass, NgSwitch, NgSwitchCase, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -7,7 +8,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { Firestore } from '@angular/fire/firestore';
 import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
 import { Observable, combineLatest, interval, of, from } from 'rxjs';
@@ -122,6 +123,7 @@ export class SchedulePage implements OnInit, OnDestroy {
     private tasks: TasksService,
     private currentProject: CurrentProjectService,
     private fs: Firestore,
+    private tr: TranslateService,
   ) {}
 
   ngOnInit(): void {
@@ -400,8 +402,42 @@ export class SchedulePage implements OnInit, OnDestroy {
     });
   }
 
+  private statusI18nKey(raw: any): 'done' | 'inProgress' | 'notStarted' {
+    if (raw === 'done') return 'done';
+    if (raw === 'in_progress') return 'inProgress';
+    if (raw === 'not_started') return 'notStarted';
+    // 既知以外は未着手扱い
+    return 'notStarted';
+  }
+
+  private labelStatus(raw: any): string {
+    const key = this.statusI18nKey(raw);
+    return this.tr.instant(`status.${key}`);
+  }
+
+  private labelPriority(raw: any): string {
+    if (!raw) return this.tr.instant('common.none');
+    // raw: 'high' | 'mid' | 'low'
+    return this.tr.instant(`priority.${raw}`);
+  }
+
   private toCsv(tasks: Task[], nameMap: Map<string, string>, dir: Map<string, string>): string {
-    const headers = ['ID', 'タイトル', '状態', '優先度', '期日', '担当者', 'プロジェクト', 'Problem', 'Issue', 'タグ', '進捗(%)', '作成日時', '更新日時'];
+    const headers = [
+      this.tr.instant('schedule.export.headers.id'),
+      this.tr.instant('schedule.export.headers.title'),
+      this.tr.instant('schedule.export.headers.status'),
+      this.tr.instant('schedule.export.headers.priority'),
+      this.tr.instant('schedule.export.headers.due'),
+      this.tr.instant('schedule.export.headers.assignees'),
+      this.tr.instant('schedule.export.headers.project'),
+      this.tr.instant('schedule.export.headers.problem'),
+      this.tr.instant('schedule.export.headers.issue'),
+      this.tr.instant('schedule.export.headers.tags'),
+      this.tr.instant('schedule.export.headers.progress'),
+      this.tr.instant('schedule.export.headers.createdAt'),
+      this.tr.instant('schedule.export.headers.updatedAt'),
+    ];
+
     const esc = (v: any) => `"${(v ?? '').toString().replace(/"/g, '""')}"`;
     const fmtTs = (x: any) => {
       const d = x?.toDate?.() ?? (typeof x === 'string' ? new Date(x) : null);
@@ -414,11 +450,13 @@ export class SchedulePage implements OnInit, OnDestroy {
       const pj = t.projectId ? (nameMap.get(`project:${t.projectId}`) ?? t.projectId) : '';
       const pr = (t.projectId && t.problemId) ? (nameMap.get(`problem:${t.projectId}:${t.problemId}`) ?? t.problemId) : '';
       const is = (t.projectId && t.problemId && t.issueId) ? (nameMap.get(`issue:${t.projectId}:${t.problemId}:${t.issueId}`) ?? t.issueId) : '';
+      const statusLabel = this.labelStatus((t as any).status);
+      const priorityLabel = this.labelPriority((t as any).priority);
       return [
         t.id,
         t.title,
-        t.status,
-        t.priority ?? '',
+        statusLabel,
+        priorityLabel,
         t.dueDate ?? '',
         joinAssignees(t.assignees),
         pj,
@@ -438,8 +476,8 @@ export class SchedulePage implements OnInit, OnDestroy {
     const mapped = tasks.map(t => ({
       id: t.id,
       title: t.title,
-      status: t.status,
-      priority: t.priority ?? null,
+      status: (t as any).status,
+      priority: (t as any).priority ?? null,
       dueDate: t.dueDate ?? null,
       assignees: Array.isArray(t.assignees) ? t.assignees.map(u => dir.get(u) ?? u) : [],
       project: t.projectId ? (nameMap.get(`project:${t.projectId}`) ?? t.projectId) : null,
@@ -519,4 +557,5 @@ export class SchedulePage implements OnInit, OnDestroy {
     return byUid;
   }
 }
+
 

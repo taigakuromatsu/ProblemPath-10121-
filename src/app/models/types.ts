@@ -1,3 +1,4 @@
+// src/app/models/types.ts
 // 共通の状態
 export type Status =
   | 'not_started'   // 0%

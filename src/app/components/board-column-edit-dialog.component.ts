@@ -1,3 +1,4 @@
+// src/app/components/board-column-edit-dialog.component.ts
 import { Component, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -6,6 +7,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
+import { TranslateModule } from '@ngx-translate/core';
 import { BoardColumn, BoardColumnCategoryHint } from '../models/types';
 
 export type BoardColumnEditDialogResult = Pick<BoardColumn, 'title' | 'categoryHint' | 'progressHint'>;
@@ -25,27 +27,40 @@ export interface BoardColumnEditDialogData {
     MatInputModule,
     MatSelectModule,
     MatButtonModule,
+    TranslateModule,
   ],
   template: `
-    <h2 mat-dialog-title>列設定を編集</h2>
+    <h2 mat-dialog-title>{{ 'board.columnEdit.dialogTitle' | translate }}</h2>
+
     <div mat-dialog-content class="dialog-body">
       <form class="dialog-form" (ngSubmit)="onSave()">
         <mat-form-field appearance="outline" class="field">
-          <mat-label>タイトル</mat-label>
-          <input matInput name="title" [(ngModel)]="title" required maxlength="120" />
+          <mat-label>{{ 'board.columnEdit.field.title' | translate }}</mat-label>
+          <input
+            matInput
+            name="title"
+            [(ngModel)]="title"
+            required
+            maxlength="120"
+            [attr.aria-label]="'board.columnEdit.field.title' | translate"
+          />
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="field">
-          <mat-label>扱いカテゴリ</mat-label>
-          <mat-select name="category" [(ngModel)]="category">
-            <mat-option [value]="'not_started'">未着手扱い</mat-option>
-            <mat-option [value]="'in_progress'">進行中扱い</mat-option>
-            <mat-option [value]="'done'">完了扱い</mat-option>
+          <mat-label>{{ 'board.columnEdit.field.category' | translate }}</mat-label>
+          <mat-select
+            name="category"
+            [(ngModel)]="category"
+            [attr.aria-label]="'board.columnEdit.field.category' | translate"
+          >
+            <mat-option [value]="'not_started'">{{ 'board.columnEdit.category.not_started' | translate }}</mat-option>
+            <mat-option [value]="'in_progress'">{{ 'board.columnEdit.category.in_progress' | translate }}</mat-option>
+            <mat-option [value]="'done'">{{ 'board.columnEdit.category.done' | translate }}</mat-option>
           </mat-select>
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="field">
-          <mat-label>進捗率として扱う%</mat-label>
+          <mat-label>{{ 'board.columnEdit.field.progress' | translate }}</mat-label>
           <input
             matInput
             type="number"
@@ -53,15 +68,24 @@ export interface BoardColumnEditDialogData {
             min="0"
             max="100"
             [(ngModel)]="progress"
+            [attr.aria-label]="'board.columnEdit.field.progress' | translate"
           />
         </mat-form-field>
       </form>
     </div>
 
     <div mat-dialog-actions align="end">
-      <button mat-button type="button" (click)="onCancel()">キャンセル</button>
-      <button mat-raised-button color="primary" type="button" [disabled]="!canSave()" (click)="onSave()">
-        保存
+      <button mat-button type="button" (click)="onCancel()">
+        {{ 'common.cancel' | translate }}
+      </button>
+      <button
+        mat-raised-button
+        color="primary"
+        type="button"
+        [disabled]="!canSave()"
+        (click)="onSave()"
+      >
+        {{ 'common.save' | translate }}
       </button>
     </div>
   `,
@@ -72,16 +96,12 @@ export interface BoardColumnEditDialogData {
       gap: 1.5rem;
       min-width: 320px;
     }
-
     .dialog-form {
       display: flex;
       flex-direction: column;
       gap: 1rem;
     }
-
-    .field {
-      width: 100%;
-    }
+    .field { width: 100%; }
   `,
 })
 export class BoardColumnEditDialogComponent {
@@ -120,3 +140,4 @@ export class BoardColumnEditDialogComponent {
     });
   }
 }
+

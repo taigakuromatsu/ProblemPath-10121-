@@ -7,7 +7,7 @@
     <!-- タイトル行 -->
     <div class="task-title">
       <span class="title-text">{{ task.title }}</span>
-      <span *ngIf="task.priority" class="priority">[{{ task.priority }}]</span>
+      <span *ngIf="priorityLabel(task) as p" class="priority">[{{ p }}]</span>
     </div>
 
     <!-- メタ情報行 -->
@@ -18,7 +18,7 @@
       </span>
 
       <!-- 担当者 -->
-      <span class="assignees" matTooltip="{{ assignees(task) }}">
+      <span class="assignees" [matTooltip]="assignees(task)">
         <mat-icon>group</mat-icon>
         <span>{{ assignees(task) }}</span>
       </span>
@@ -43,59 +43,64 @@
     </div>
   </div>
 
-  <div class="actions" *ngIf="actionConfig">
-    <!-- 完了ボタン（残す場合） -->
+  <div class="actions" *ngIf="actions">
+    <!-- 完了 -->
     <button
       class="action-complete"
       *ngIf="actions.complete !== false"
       mat-icon-button
-      matTooltip="完了にする"
-      (click)="complete.emit(task)">
+      [matTooltip]="'schedule.actions.complete' | translate"
+      [attr.aria-label]="'schedule.actions.complete' | translate"
+      (click)="onComplete()">
       <mat-icon>check_circle</mat-icon>
     </button>
-  
+
     <!-- −1日 -->
     <button
       *ngIf="actions.shift !== false"
       mat-icon-button
-      matTooltip="-1日"
+      [matTooltip]="'schedule.actions.minusOne' | translate"
+      [attr.aria-label]="'schedule.actions.minusOne' | translate"
       [disabled]="busy || !task.dueDate"
-      (click)="shiftDays.emit({ task, days: -1 })">
+      (click)="onShift(-1)">
       <mat-icon>arrow_back</mat-icon>
     </button>
-  
+
     <!-- ＋1日 -->
     <button
       *ngIf="actions.shift !== false"
       mat-icon-button
-      matTooltip="+1日"
+      [matTooltip]="'schedule.actions.plusOne' | translate"
+      [attr.aria-label]="'schedule.actions.plusOne' | translate"
       [disabled]="busy || !task.dueDate"
-      (click)="shiftDays.emit({ task, days: 1 })">
+      (click)="onShift(1)">
       <mat-icon>arrow_forward</mat-icon>
     </button>
-  
+
     <!-- 今日にする -->
     <button
       *ngIf="actions.setToday !== false"
       mat-icon-button
-      matTooltip="今日にする"
+      [matTooltip]="'schedule.actions.today' | translate"
+      [attr.aria-label]="'schedule.actions.today' | translate"
       [disabled]="busy"
-      (click)="setToday.emit(task)">
+      (click)="onSetToday()">
       <mat-icon>today</mat-icon>
     </button>
-  
-    <!-- ボードを開く -->
+
+    <!-- ボードを開く（クエリは既存仕様を踏襲） -->
     <a
       *ngIf="task.problemId && task.issueId"
       mat-icon-button
       [routerLink]="['/board']"
       [queryParams]="{ pid: task.problemId }"
-      matTooltip="{{ 'schedule.openInBoard' | translate }}">
+      [matTooltip]="'schedule.openInBoard' | translate"
+      [attr.aria-label]="'schedule.openInBoard' | translate">
       <mat-icon>open_in_new</mat-icon>
     </a>
   </div>
-  
 </div>
+
 
 
 

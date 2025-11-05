@@ -22,7 +22,7 @@
       <section class="export-card" aria-labelledby="export-title">
         <div class="group-title" id="export-title">
           <mat-icon fontSet="material-icons-outlined">download</mat-icon>
-          <span>データエキスポート</span>
+          <span>{{ 'schedule.export.title' | translate }}</span>
         </div>
         <div class="group-actions">
           <button mat-stroked-button (click)="exportCurrent('csv')">{{ 'schedule.export.csv' | translate }}</button>
@@ -122,4 +122,5 @@
 <ng-template #emptySection>
   <div class="empty">{{ 'schedule.none' | translate }}</div>
 </ng-template>
+
 

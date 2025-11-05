@@ -1,3 +1,4 @@
+
 <section class="board-page">
   <header class="board-header">
     <div class="header-left">
@@ -28,7 +29,7 @@
         [disabled]="!(canEdit$ | async)"
       >
         <mat-icon>add</mat-icon>
-        列を追加
+        {{ 'board.addColumn' | translate }}
       </button>
     </div>
   </header>
@@ -40,9 +41,7 @@
 
   <mat-card class="board-hint">
     <mat-icon>info</mat-icon>
-    <span>
-      特に指定がない場合、タスクカードを置いた列の設定（ステータス / 進捗率）に従って、そのタスクの状態と進捗が自動的に決まります。
-    </span>
+    <span>{{ 'board.autoProgressHint' | translate }}</span>
   </mat-card>
 
   <ng-container *ngIf="selectedProblemId as pid">
@@ -77,7 +76,7 @@
                   class="column-header__drag"
                   cdkDragHandle
                   [disabled]="!(canEdit$ | async)"
-                  aria-label="列を並べ替え"
+                  [attr.aria-label]="'board.aria.reorderColumn' | translate"
                 >
                   <mat-icon>drag_indicator</mat-icon>
                 </button>
@@ -90,7 +89,7 @@
                   type="button"
                   (click)="onEditColumn(col)"
                   [disabled]="!(canEdit$ | async)"
-                  aria-label="列を編集"
+                  [attr.aria-label]="'board.aria.editColumn' | translate"
                 >
                   <mat-icon>edit</mat-icon>
                 </button>
@@ -99,7 +98,7 @@
                   type="button"
                   (click)="onDeleteColumn(col)"
                   [disabled]="!(canEdit$ | async)"
-                  aria-label="列を削除"
+                  [attr.aria-label]="'board.aria.deleteColumn' | translate"
                 >
                   <mat-icon>delete</mat-icon>
                 </button>
@@ -143,7 +142,7 @@
                           <div class="task-card task-card--placeholder"></div>
                         </ng-template>
 
-                        <!-- 上: ID / 担当者数（ここにツールチップを追加） -->
+                        <!-- 上: 担当者数（ツールチップあり） -->
                         <div class="task-card__meta">
                           <span
                             class="task-assignees meta-chip"
@@ -172,7 +171,7 @@
                               [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
                             >
                               <mat-icon matChipAvatar>flag</mat-icon>
-                              <span>{{ t.priority || ('common.none' | translate) }}</span>
+                              <span>{{ t.priority ? ('priority.' + t.priority | translate) : ('common.none' | translate) }}</span>
                               <mat-icon>arrow_drop_down</mat-icon>
                             </mat-chip>
 
@@ -183,7 +182,7 @@
                                 [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
                               >
                                 <mat-icon>priority_high</mat-icon>
-                                <span>high</span>
+                                <span>{{ 'priority.high' | translate }}</span>
                               </button>
                               <button
                                 mat-menu-item
@@ -191,7 +190,7 @@
                                 [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
                               >
                                 <mat-icon>flag</mat-icon>
-                                <span>mid</span>
+                                <span>{{ 'priority.mid' | translate }}</span>
                               </button>
                               <button
                                 mat-menu-item
@@ -199,7 +198,7 @@
                                 [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
                               >
                                 <mat-icon>south</mat-icon>
-                                <span>low</span>
+                                <span>{{ 'priority.low' | translate }}</span>
                               </button>
                             </mat-menu>
 

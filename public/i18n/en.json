@@ -171,13 +171,14 @@
     "retry": "Retry",
     "loading": "Loading…",
     "projectNotSelected": "Project is not selected",
-    "none": "(None)",
+    "none": "(none)",
     "filter": "Filter",
     "undo": "Undo",
     "createNew": "New",
     "uploadDone": "Uploaded",
     "uploadFailed": "Upload failed",
-    "deleteFailed": "Delete failed"
+    "deleteFailed": "Delete failed",
+    "ok": "OK"
   },
   "template": {
     "bug": "Bug/Issue",
@@ -357,14 +358,60 @@
       "statusUpdate": "Failed to update status.",
       "orderSave": "Failed to save order.",
       "assign": "Failed to assign.",
-      "unassign": "Failed to unassign."
+      "unassign": "Failed to unassign.",
+      "columnAdd": "Failed to add column.",
+      "columnDelete": "Failed to delete column."
+    },
+    "addColumn": "Add column",
+    "autoProgressHint": "If no specific setting is given, the status and progress of the task will be automatically determined according to the settings of the column where the task card is placed (status / progress rate).",
+    "aria": {
+      "reorderColumn": "Reorder column",
+      "editColumn": "Edit column",
+      "deleteColumn": "Delete column"
+    },
+    "confirm": {
+      "deleteColumn": "Delete the column “{{name}}”?"
+    },
+    "toast": {
+      "saved": "Saved",
+      "columnAdded": "Column added",
+      "columnDeleted": "Column deleted"
+    },
+    "columnEdit": {
+      "dialogTitle": "Edit column settings",
+      "field": {
+        "title": "Title",
+        "category": "Category behavior",
+        "progress": "Progress to be treated as (%)"
+      },
+      "category": {
+        "not_started": "Treat as Not started",
+        "in_progress": "Treat as In progress",
+        "done": "Treat as Done"
+      }
     }
   },
   "schedule": {
     "subtitle": "Review all tasks and deadlines for the project.",
     "export": {
       "csv": "CSV",
-      "json": "JSON"
+      "json": "JSON",
+      "title": "Data export",
+      "headers": {
+        "id": "ID",
+        "title": "Title",
+        "status": "Status",
+        "priority": "Priority",
+        "due": "Due",
+        "assignees": "Assignees",
+        "project": "Project",
+        "problem": "Problem",
+        "issue": "Issue",
+        "tags": "Tags",
+        "progress": "Progress (%)",
+        "createdAt": "Created at",
+        "updatedAt": "Updated at"
+      }
     },
     "view": {
       "label": "View",
@@ -384,9 +431,10 @@
       "placeholder": "Filter by assignee"
     },
     "actions": {
-      "complete": "Mark as done",
-      "plusOne": "Postpone by 1 day",
-      "today": "Move to today"
+        "minusOne": "Shift due -1 day",
+        "plusOne": "Shift due +1 day",
+        "today": "Set due to today",
+        "complete": "Mark as done"
     },
     "openInBoard": "Open in Board",
     "section": {
@@ -399,6 +447,19 @@
       "noDue": "No due date"
     },
     "none": "None"
+  },
+  "calendar": {
+    "prevMonth": "Previous month",
+    "nextMonth": "Next month",
+    "weekday": {
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat",
+      "sun": "Sun"
+    }
   },
   "myTasks": {
     "title": "My Tasks",
@@ -419,6 +480,15 @@
       "today": "Today",
       "week": "This week",
       "progress": "Progress"
+    },
+    "confirm": {
+      "markDone": "Mark Task “{{title}}” as done?",
+      "shiftBy": "Shift the due date by {{n}} days?",
+      "setToday": "Set the due date to today?"
+    },
+    "export": {
+      "csvFileName": "my-tasks.csv",
+      "jsonFileName": "my-tasks.json"
     }
   },
   "filter": {

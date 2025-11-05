@@ -1,3 +1,4 @@
+// src/app/pages/my-tasks.page.ts
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { AsyncPipe, NgFor, NgIf, NgClass, NgSwitch, NgSwitchCase, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -7,10 +8,14 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { TranslateModule } from '@ngx-translate/core';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatNativeDateModule, DateAdapter } from '@angular/material/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { Firestore } from '@angular/fire/firestore';
 import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
-import { Observable, combineLatest, interval, of, from } from 'rxjs';
+import { Observable, combineLatest, interval, of, from, Subscription } from 'rxjs';
 import { map, switchMap, startWith, filter, distinctUntilChanged, catchError, shareReplay, take } from 'rxjs/operators';
 
 import { TasksService } from '../services/tasks.service';
@@ -37,7 +42,7 @@ const EMPTY_VM: Vm = {
 interface SectionDef {
   key: keyof Vm;
   icon: string;
-  label: string;
+  label: string; // i18n key
   accent: 'danger' | 'info' | 'muted';
 }
 
@@ -53,8 +58,13 @@ interface MemberOption {
   styleUrls: ['./my-tasks.page.scss'],
   imports: [
     AsyncPipe, NgFor, NgIf, NgClass, NgSwitch, NgSwitchCase, NgTemplateOutlet,
-    FormsModule, MatButtonModule, MatButtonToggleModule, MatCardModule, MatIconModule,
-    MatTooltipModule, MatProgressBarModule, TranslateModule, TaskRowComponent, TaskCalendarComponent,
+    FormsModule,
+    MatButtonModule, MatButtonToggleModule, MatCardModule, MatIconModule,
+    MatTooltipModule, MatProgressBarModule,
+    // ▼ 追加（疑似入力フォーム = Material Datepicker）
+    MatFormFieldModule, MatInputModule, MatDatepickerModule, MatNativeDateModule,
+    TranslateModule,
+    TaskRowComponent, TaskCalendarComponent,
   ],
 })
 export class MyTasksPage implements OnInit, OnDestroy {
@@ -62,8 +72,15 @@ export class MyTasksPage implements OnInit, OnDestroy {
 
   openOnly = true;
   tagQuery = '';
+
+  // 内部保持：表示用の日付（Material DatepickerはDate型が扱いやすい）
+  displayStartDate: Date | null = null;
+  displayEndDate: Date | null = null;
+
+  // 既存のクエリ文字列（YYYY-MM-DD）
   startRange = '';
   endRange = '';
+
   viewMode: 'list' | 'calendar' = 'list';
   calendarMonth = new Date();
 
@@ -91,6 +108,8 @@ export class MyTasksPage implements OnInit, OnDestroy {
   private dueDateTimers = new Map<string, any>();
   private inFlight = new Set<string>();
 
+  private langSub?: Subscription; // 言語切替の購読
+
   members$!: Observable<MemberOption[]>;
   memberDirectory$!: Observable<Record<string, string>>;
 
@@ -99,9 +118,52 @@ export class MyTasksPage implements OnInit, OnDestroy {
     private current: CurrentProjectService,
     private auth: AuthService,
     private fs: Firestore,
+    private tr: TranslateService,
+    private dateAdapter: DateAdapter<Date>,
   ) {}
 
+  // ===== ユーティリティ（Date <-> YYYY-MM-DD） =====
+  private toDate(s?: string | null): Date | null {
+    if (!s) return null;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+    if (!m) return null;
+    return new Date(+m[1], +m[2] - 1, +m[3]);
+  }
+  private toYmd(d?: Date | null): string {
+    if (!d) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  // ===== 画面イベント（期間の疑似入力フォーム） =====
+  onStartPicked(date: Date | null) {
+    this.displayStartDate = date;
+    this.startRange = date ? this.toYmd(date) : '';
+    this.onDateRangeChange();
+  }
+  onEndPicked(date: Date | null) {
+    this.displayEndDate = date;
+    this.endRange = date ? this.toYmd(date) : '';
+    this.onDateRangeChange();
+  }
+
+  // ===== 言語 → Datepicker ロケール同期 =====
+  private applyLocaleFromI18n() {
+    const l = (this.tr.currentLang || '').toLowerCase();
+    this.dateAdapter.setLocale(l.startsWith('en') ? 'en-US' : 'ja-JP');
+  }
+
   ngOnInit(): void {
+    // 初期ロケール反映 & 言語切替に追随
+    this.applyLocaleFromI18n();
+    this.langSub = this.tr.onLangChange.subscribe(() => this.applyLocaleFromI18n());
+
+    // 初期の文字列→Date（リロード時にも使える）
+    this.displayStartDate = this.toDate(this.startRange);
+    this.displayEndDate = this.toDate(this.endRange);
+
     this.members$ = this.current.projectId$.pipe(
       switchMap(pid => {
         if (!pid || pid === 'default') return of<MemberOption[]>([]);
@@ -136,6 +198,7 @@ export class MyTasksPage implements OnInit, OnDestroy {
     this.dueDateTimers.forEach(t => clearTimeout(t));
     this.dueDateTimers.clear();
     this.inFlight.clear();
+    this.langSub?.unsubscribe();
   }
 
   // -------- UI handlers --------
@@ -252,8 +315,11 @@ export class MyTasksPage implements OnInit, OnDestroy {
     this.dueDateTimers.set(key, timer);
   }
 
+  // ---- 確認ダイアログ付きアクション ----
   async markDone(task: Task) {
     if (!task?.id || !task.projectId || !task.problemId || !task.issueId) return;
+    const ok = this.confirmI18n('myTasks.confirm.markDone', { title: task.title });
+    if (!ok) return;
     try {
       await this.tasks.update(task.projectId, task.problemId, task.issueId, task.id, { status: 'done' as any });
     } catch (err) {
@@ -266,18 +332,25 @@ export class MyTasksPage implements OnInit, OnDestroy {
     if (!task?.id || !task.dueDate) return;
     if (this.inFlight.has(task.id)) return;
 
+    const ok = this.confirmI18n('myTasks.confirm.shiftBy', { n: days });
+    if (!ok) return;
+
     const current = new Date(task.dueDate);
     if (isNaN(current.getTime())) return;
     current.setDate(current.getDate() + days);
-    const next = this.ymd(current);
+    const next = this.toYmd(current);
     this.scheduleDueUpdate(task, next);
   }
 
   setTaskToday(task: Task) {
     if (!task?.id) return;
     if (this.inFlight.has(task.id)) return;
+
+    const ok = this.confirmI18n('myTasks.confirm.setToday');
+    if (!ok) return;
+
     const today = new Date(); today.setHours(0,0,0,0);
-    this.scheduleDueUpdate(task, this.ymd(today));
+    this.scheduleDueUpdate(task, this.toYmd(today));
   }
 
   private flattenVm(vm: Vm) {
@@ -295,16 +368,20 @@ export class MyTasksPage implements OnInit, OnDestroy {
       const assigneeDir = await this.resolveAssigneeDirectory(data);
       if (kind === 'csv') {
         const csv = this.toCsv(data, nameMap, assigneeDir);
-        this.download('my-tasks.csv', csv, 'text/csv');
+        const fname = this.tr.instant('myTasks.export.csvFileName') || 'my-tasks.csv';
+        this.download(fname, csv, 'text/csv');
       } else {
         const json = this.toJson(data, nameMap, assigneeDir);
-        this.download('my-tasks.json', json, 'application/json');
+        const fname = this.tr.instant('myTasks.export.jsonFileName') || 'my-tasks.json';
+        this.download(fname, json, 'application/json');
       }
     });
   }
 
   private toCsv(tasks: Task[], nameMap: Map<string, string>, dir: Map<string, string>): string {
-    const headers = ['ID','タイトル','状態','優先度','期日','担当者','プロジェクト','Problem','Issue','タグ','進捗(%)','作成日時','更新日時'];
+    const headerKeys = ['id','title','status','priority','due','assignees','project','problem','issue','tags','progress','createdAt','updatedAt'];
+    const headers = headerKeys.map(k => this.tr.instant(`schedule.export.headers.${k}`) || k);
+
     const esc = (v: any) => `"${(v ?? '').toString().replace(/"/g, '""')}"`;
     const fmtTs = (x: any) => {
       const d = x?.toDate?.() ?? (typeof x === 'string' ? new Date(x) : null);
@@ -344,7 +421,7 @@ export class MyTasksPage implements OnInit, OnDestroy {
     return JSON.stringify(mapped, null, 2);
   }
 
-      // ---- File download helper ----
+  // ---- File download helper ----
   private download(filename: string, content: string, mime = 'text/plain') {
     const bom = mime.startsWith('text/csv') ? '\uFEFF' : '';
     const blob = new Blob([bom + content], { type: mime + ';charset=utf-8' });
@@ -357,14 +434,13 @@ export class MyTasksPage implements OnInit, OnDestroy {
     document.body.appendChild(a);
     a.click();
 
-    // 後始末
     setTimeout(() => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }, 0);
   }
 
-  
+  // ---- Firestore name resolvers ----
   private async resolveNames(tasks: Task[]): Promise<Map<string, string>> {
     const nameMap = new Map<string, string>();
     const needProject = new Set<string>();
@@ -417,6 +493,14 @@ export class MyTasksPage implements OnInit, OnDestroy {
     }
     return byUid;
   }
+
+  // ---- i18n confirm helper ----
+  private confirmI18n(key: string, params?: Record<string, any>) {
+    const msg = this.tr.instant(key, params);
+    // 素直にブラウザ標準のconfirmを使用（Materialダイアログ未導入でもOK）
+    return window.confirm(msg);
+  }
 }
+
 
 

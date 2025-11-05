@@ -1,10 +1,22 @@
-import { ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  EventEmitter,
+  Input,
+  OnChanges,
+  OnDestroy,
+  OnInit,
+  Output,
+  SimpleChanges,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DragDropModule, CdkDragDrop, moveItemInArray, transferArrayItem } from '@angular/cdk/drag-drop';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { Subscription } from 'rxjs';
 import { Task } from '../../models/types';
 
 interface CalendarDay {
@@ -30,7 +42,7 @@ interface CalendarWeek {
   styleUrls: ['./task-calendar.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class TaskCalendarComponent implements OnChanges {
+export class TaskCalendarComponent implements OnChanges, OnInit, OnDestroy {
   @Input() tasks: Task[] = [];
   @Input() undatedTasks: Task[] = [];
   @Input() activeMonth = new Date();
@@ -41,7 +53,22 @@ export class TaskCalendarComponent implements OnChanges {
 
   weeks: CalendarWeek[] = [];
   dropListIds: string[] = [];
-  readonly weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  /** 翻訳キー（表示はテンプレートで |translate） */
+  readonly weekdayKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+  private langSub?: Subscription;
+
+  constructor(private tr: TranslateService, private cdr: ChangeDetectorRef) {}
+
+  ngOnInit(): void {
+    // 言語切替時に再描画（OnPushのため手動でCDをキック）
+    this.langSub = this.tr.onLangChange.subscribe(() => this.cdr.markForCheck());
+  }
+
+  ngOnDestroy(): void {
+    this.langSub?.unsubscribe();
+  }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['tasks'] || changes['activeMonth'] || changes['undatedTasks']) {
@@ -52,7 +79,16 @@ export class TaskCalendarComponent implements OnChanges {
   trackTask = (_: number, item: Task) => item.id;
 
   get monthLabel(): string {
-    return this.activeMonth.toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
+    const locale = this.localeFromTranslate(this.tr.currentLang);
+    return new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'long' }).format(this.activeMonth);
+  }
+
+  private localeFromTranslate(lang?: string): string {
+    const l = (lang || '').toLowerCase();
+    if (l.startsWith('ja')) return 'ja-JP';
+    if (l.startsWith('en')) return 'en';
+    // 必要に応じてロケールを追加
+    return 'en';
   }
 
   previousMonth() {
@@ -172,7 +208,7 @@ export class TaskCalendarComponent implements OnChanges {
   private startOfWeek(date: Date): Date {
     const d = new Date(date);
     const day = d.getDay();
-    const diff = (day === 0 ? -6 : 1 - day);
+    const diff = day === 0 ? -6 : 1 - day;
     d.setDate(d.getDate() + diff);
     d.setHours(0, 0, 0, 0);
     return d;
@@ -181,7 +217,7 @@ export class TaskCalendarComponent implements OnChanges {
   private endOfWeek(date: Date): Date {
     const d = new Date(date);
     const day = d.getDay();
-    const diff = (day === 0 ? 0 : 7 - day);
+    const diff = day === 0 ? 0 : 7 - day;
     d.setDate(d.getDate() + diff);
     d.setHours(0, 0, 0, 0);
     return d;
@@ -206,3 +242,7 @@ export class TaskCalendarComponent implements OnChanges {
     return diff >= 0 && diff <= 2;
   }
 }
+
+
+
+

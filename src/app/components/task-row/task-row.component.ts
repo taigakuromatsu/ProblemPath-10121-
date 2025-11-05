@@ -1,12 +1,12 @@
-import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, Input, OnDestroy, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatButtonModule } from '@angular/material/button';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { Subscription } from 'rxjs';
 import { Task } from '../../models/types';
-import { input } from '@angular/core';
 
 export interface TaskRowActionConfig {
   showComplete?: boolean;
@@ -22,7 +22,7 @@ export interface TaskRowActionConfig {
   styleUrls: ['./task-row.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class TaskRowComponent {
+export class TaskRowComponent implements OnDestroy {
   @Input() task!: Task;
   @Input() memberDirectory: Record<string, string> | null = null;
   @Input() actionConfig: TaskRowActionConfig = { showComplete: true, showShiftTomorrow: true, showSetToday: true };
@@ -32,6 +32,7 @@ export class TaskRowComponent {
   @Output() shiftDays = new EventEmitter<{ task: Task; days: number }>();
   @Output() setToday = new EventEmitter<Task>();
 
+  /** schedule.page から渡される簡易フラグ群（こちらを優先） */
   @Input() actions: { complete?: boolean; shift?: boolean; setToday?: boolean } = {
     complete: true,
     shift: true,
@@ -39,6 +40,33 @@ export class TaskRowComponent {
   };
 
   @Input() busy = false;
+
+  /** 現在のロケール（言語切替で更新） */
+  private locale: string;
+  private langSub: Subscription;
+
+  constructor(private tr: TranslateService, private cdr: ChangeDetectorRef) {
+    // 初期ロケール設定
+    this.locale = this.resolveLocaleFromI18n(this.tr.currentLang);
+    // 言語切替に追随してロケール変更 → OnPush再描画
+    this.langSub = this.tr.onLangChange.subscribe(ev => {
+      this.locale = this.resolveLocaleFromI18n(ev.lang);
+      this.cdr.markForCheck();
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.langSub?.unsubscribe();
+  }
+
+  private resolveLocaleFromI18n(lang?: string): string {
+    const l = (lang || '').toLowerCase();
+    if (l.startsWith('en')) return 'en-US';
+    if (l.startsWith('ja')) return 'ja-JP';
+    if (l.startsWith('zh')) return 'zh-CN';
+    // 既定は英語
+    return 'en-US';
+  }
 
   statusColor(status: string | undefined): string {
     switch (status) {
@@ -59,7 +87,7 @@ export class TaskRowComponent {
   assignees(task: Task): string {
     const ids = task.assignees ?? [];
     if (!ids.length) {
-      return '-';
+      return this.tr.instant('common.none');
     }
     return ids.map(id => this.assigneeLabel(id)).join(', ');
   }
@@ -91,22 +119,31 @@ export class TaskRowComponent {
     return 'later';
   }
 
+  /** 期日表示（i18nロケール準拠） */
   dueLabel(task: Task): string {
-    if (!task.dueDate) return '-';
+    if (!task.dueDate) return this.tr.instant('schedule.none');
     const date = new Date(task.dueDate);
-    if (isNaN(date.getTime())) return task.dueDate;
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    if (isNaN(date.getTime())) return task.dueDate!;
+    // 言語に応じて 'Nov 1' / '11月1日' などを表示
+    return new Intl.DateTimeFormat(this.locale, { month: 'short', day: 'numeric' }).format(date);
+  }
+
+  priorityLabel(task: Task): string | null {
+    const p: any = (task as any)?.priority;
+    if (!p) return null;
+    // 'high' | 'mid' | 'low'
+    return this.tr.instant(`priority.${p}`);
   }
 
   onComplete() {
     this.complete.emit(this.task);
   }
-
   onShift(days: number) {
     this.shiftDays.emit({ task: this.task, days });
   }
-
   onSetToday() {
     this.setToday.emit(this.task);
   }
 }
+
+

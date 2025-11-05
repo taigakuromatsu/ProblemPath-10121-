@@ -1,16 +1,18 @@
 <div class="calendar-card">
   <div class="calendar-header">
-    <button mat-icon-button (click)="previousMonth()" aria-label="Previous month">
+    <button mat-icon-button (click)="previousMonth()" [attr.aria-label]="'calendar.prevMonth' | translate" [matTooltip]="'calendar.prevMonth' | translate">
       <mat-icon fontSet="material-icons-outlined">chevron_left</mat-icon>
     </button>
     <div class="month-label">{{ monthLabel }}</div>
-    <button mat-icon-button (click)="nextMonth()" aria-label="Next month">
+    <button mat-icon-button (click)="nextMonth()" [attr.aria-label]="'calendar.nextMonth' | translate" [matTooltip]="'calendar.nextMonth' | translate">
       <mat-icon fontSet="material-icons-outlined">chevron_right</mat-icon>
     </button>
   </div>
+
   <div class="calendar-weekdays">
-    <div *ngFor="let w of weekdays" class="weekday">{{ w }}</div>
+    <div *ngFor="let key of weekdayKeys" class="weekday">{{ ('calendar.weekday.' + key) | translate }}</div>
   </div>
+
   <div class="calendar-grid">
     <div *ngFor="let week of weeks">
       <div class="calendar-week">
@@ -26,7 +28,7 @@
           [cdkDropListConnectedTo]="dropListIds"
           [id]="dropIdForDay(day)"
           (cdkDropListDropped)="onDrop($event, day.iso)"
-          matTooltip="{{ tooltip(day) }}"
+          [matTooltip]="tooltip(day)"
           matTooltipClass="calendar-tooltip"
         >
           <div class="day-label">
@@ -41,7 +43,7 @@
               [cdkDragData]="task"
             >
               <span class="status" [style.background]="statusColor(task.status)"></span>
-              <span class="title" matTooltip="{{ task.title }}">{{ task.title }}</span>
+              <span class="title" [matTooltip]="task.title">{{ task.title }}</span>
             </div>
           </div>
         </div>
@@ -50,7 +52,12 @@
   </div>
 </div>
 
-<div class="no-due" cdkDropList [cdkDropListData]="undatedTasks" [cdkDropListConnectedTo]="dropListIds" [id]="dropIdForNoDue()" (cdkDropListDropped)="onDropToNoDue($event)">
+<div class="no-due"
+     cdkDropList
+     [cdkDropListData]="undatedTasks"
+     [cdkDropListConnectedTo]="dropListIds"
+     [id]="dropIdForNoDue()"
+     (cdkDropListDropped)="onDropToNoDue($event)">
   <div class="no-due-header">
     <mat-icon fontSet="material-icons-outlined">calendar_today</mat-icon>
     <span>{{ 'schedule.section.noDue' | translate }}</span>
@@ -59,8 +66,10 @@
   <div class="no-due-list">
     <div class="task-chip" *ngFor="let task of undatedTasks; trackBy: trackTask" cdkDrag [cdkDragData]="task">
       <span class="status" [style.background]="statusColor(task.status)"></span>
-      <span class="title" matTooltip="{{ task.title }}">{{ task.title }}</span>
+      <span class="title" [matTooltip]="task.title">{{ task.title }}</span>
     </div>
     <div *ngIf="!undatedTasks.length" class="empty">{{ 'schedule.none' | translate }}</div>
   </div>
 </div>
+
+

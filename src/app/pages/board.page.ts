@@ -1,3 +1,4 @@
+// src/app/pages/board.page.ts
 import { Component, DestroyRef } from '@angular/core';
 import { AsyncPipe, DatePipe, NgFor, NgIf, NgClass } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -45,7 +46,7 @@ type MemberOption = { uid: string; label: string };
     MatButtonModule, MatIconModule, MatFormFieldModule, MatSelectModule, MatCardModule, MatChipsModule,
     DragDropModule, MatSnackBarModule, TranslateModule, MatDialogModule,
     MatMenuModule,
-    MatTooltipModule, // ← 追加（ツールチップ）
+    MatTooltipModule,
   ],
   templateUrl: './board.page.html',
   styleUrls: ['./board.page.scss']
@@ -108,7 +109,7 @@ export class BoardPage {
     private snack: MatSnackBar,
     private tr: TranslateService,
     private dialog: MatDialog,
-    private fs: Firestore, // ← 追加
+    private fs: Firestore,
   ) {
     this.isEditor$ = this.members.isEditor$;
     this.isOnline$ = this.network.isOnline$;
@@ -151,10 +152,10 @@ export class BoardPage {
     this.withPid(async (pid) => {
       try {
         await this.boardColumns.updateColumn(pid, column.columnId, patch);
-        this.snack.open('保存しました', 'OK', { duration: 2500 });
+        this.snack.open(this.tr.instant('board.toast.saved'), this.tr.instant('common.ok'), { duration: 2500 });
       } catch (err) {
         console.error('[BoardPage] Failed to update column', err);
-        this.snack.open('保存に失敗しました', 'OK', { duration: 3000 });
+        this.snack.open(this.tr.instant('board.err.update'), this.tr.instant('common.ok'), { duration: 3000 });
       }
     });
   }
@@ -190,10 +191,10 @@ export class BoardPage {
           categoryHint: result.categoryHint,
           progressHint: Math.min(100, Math.max(0, Number(result.progressHint ?? 0))),
         });
-        this.snack.open('列を追加しました', 'OK', { duration: 2500 });
+        this.snack.open(this.tr.instant('board.toast.columnAdded'), this.tr.instant('common.ok'), { duration: 2500 });
       } catch (err) {
         console.error('[BoardPage] Failed to create column', err);
-        this.snack.open('列の追加に失敗しました', 'OK', { duration: 3000 });
+        this.snack.open(this.tr.instant('board.err.columnAdd'), this.tr.instant('common.ok'), { duration: 3000 });
       }
     });
   }
@@ -201,15 +202,17 @@ export class BoardPage {
   async onDeleteColumn(column: BoardColumn) {
     if (!(await this.requireCanEdit())) return;
     if (!column?.columnId) return;
-    if (!confirm(`「${this.columnTitle(column)}」列を削除しますか？`)) return;
+
+    const ok = confirm(this.tr.instant('board.confirm.deleteColumn', { name: this.columnTitle(column) }));
+    if (!ok) return;
 
     this.withPid(async (pid) => {
       try {
         await this.boardColumns.deleteColumn(pid, column.columnId);
-        this.snack.open('列を削除しました', 'OK', { duration: 2500 });
+        this.snack.open(this.tr.instant('board.toast.columnDeleted'), this.tr.instant('common.ok'), { duration: 2500 });
       } catch (err) {
         console.error('[BoardPage] Failed to delete column', err);
-        this.snack.open('列の削除に失敗しました', 'OK', { duration: 3000 });
+        this.snack.open(this.tr.instant('board.err.columnDelete'), this.tr.instant('common.ok'), { duration: 3000 });
       }
     });
   }
@@ -235,7 +238,7 @@ export class BoardPage {
         );
       } catch (err) {
         console.error('[BoardPage] Failed to reorder columns', err);
-        this.snack.open('列の並び順を保存できませんでした', 'OK', { duration: 3000 });
+        this.snack.open(this.tr.instant('board.err.orderSave'), this.tr.instant('common.ok'), { duration: 3000 });
       }
     });
   }
@@ -290,7 +293,7 @@ export class BoardPage {
         this.selectedProblem$.next(pid);
       });
 
-    // ▼ 担当者名ディレクトリ（スケジュールと同様のロジック）
+    // ▼ 担当者名ディレクトリ
     this.memberOptions$ = this.currentProject.projectId$.pipe(
       switchMap(pid => {
         if (!pid || pid === 'default') return of<MemberOption[]>([]);
@@ -305,7 +308,6 @@ export class BoardPage {
               } as MemberOption;
             })
           ),
-          // Firestore失敗時は空配列
           map(list => list ?? []),
         );
       }),
@@ -415,7 +417,7 @@ export class BoardPage {
         t.progress = prevProgress;
         t.boardColumnId = prevColumnId;
         this.recalcTotals();
-        this.snack.open(this.tr.instant('board.err.update'), 'OK', { duration: 3000 });
+        this.snack.open(this.tr.instant('board.err.update'), this.tr.instant('common.ok'), { duration: 3000 });
       }
       finally { this.busyTaskIds.delete(t.id!); }
     });
@@ -468,7 +470,7 @@ export class BoardPage {
         moved.progress = prevProgress;
         moved.boardColumnId = prevColumnId;
         this.recalcTotals();
-        this.snack.open(this.tr.instant('board.err.statusUpdate'), 'OK', { duration: 3000 });
+        this.snack.open(this.tr.instant('board.err.statusUpdate'), this.tr.instant('common.ok'), { duration: 3000 });
       }
       finally { this.busyTaskIds.delete(id); }
     });
@@ -487,7 +489,7 @@ export class BoardPage {
         if (!u.id || this.isBusy(u.id)) continue;
         this.busyTaskIds.add(u.id);
         try { await this.tasks.update(pid, problemId, issueId, u.id, { order: u.order }); }
-        catch (e) { console.error(e); this.snack.open(this.tr.instant('board.err.orderSave'), 'OK', { duration: 3000 }); }
+        catch (e) { console.error(e); this.snack.open(this.tr.instant('board.err.orderSave'), this.tr.instant('common.ok'), { duration: 3000 }); }
         finally { this.busyTaskIds.delete(u.id); }
       }
     });
@@ -515,7 +517,7 @@ export class BoardPage {
       } catch (e) {
         console.error(e);
         t.priority = prevPriority;
-        this.snack.open(this.tr.instant('board.err.update'), 'OK', { duration: 3000 });
+        this.snack.open(this.tr.instant('board.err.update'), this.tr.instant('common.ok'), { duration: 3000 });
       } finally {
         this.busyTaskIds.delete(t.id!);
       }
@@ -636,7 +638,7 @@ export class BoardPage {
   private withPid(run: (pid: string) => void) {
     this.currentProject.projectId$.pipe(take(1)).subscribe(pid => {
       if (!pid || pid === 'default') {
-        this.snack.open(this.tr.instant('common.projectNotSelected'), 'OK', { duration: 2500 });
+        this.snack.open(this.tr.instant('common.projectNotSelected'), this.tr.instant('common.ok'), { duration: 2500 });
         return;
       }
       run(pid);
@@ -656,7 +658,7 @@ export class BoardPage {
     this.withPid(async pid => {
       this.busyTaskIds.add(t.id!);
       try { await this.tasks.assignMe(pid, problemId, issueId, t.id!, uid); }
-      catch (e) { console.error(e); this.snack.open(this.tr.instant('board.err.assign'), 'OK', { duration: 3000 }); }
+      catch (e) { console.error(e); this.snack.open(this.tr.instant('board.err.assign'), this.tr.instant('common.ok'), { duration: 3000 }); }
       finally { this.busyTaskIds.delete(t.id!); }
     });
   }
@@ -668,7 +670,7 @@ export class BoardPage {
     this.withPid(async pid => {
       this.busyTaskIds.add(t.id!);
       try { await this.tasks.unassignMe(pid, problemId, issueId, t.id!, uid); }
-      catch (e) { console.error(e); this.snack.open(this.tr.instant('board.err.unassign'), 'OK', { duration: 3000 }); }
+      catch (e) { console.error(e); this.snack.open(this.tr.instant('board.err.unassign'), this.tr.instant('common.ok'), { duration: 3000 }); }
       finally { this.busyTaskIds.delete(t.id!); }
     });
   }
@@ -679,11 +681,11 @@ export class BoardPage {
       firstValueFrom(this.isOnline$),
     ]);
     if (!isEditor) {
-      this.snack.open(this.tr.instant('warn.noEditPermission'), 'OK', { duration: 3000 });
+      this.snack.open(this.tr.instant('warn.noEditPermission'), this.tr.instant('common.ok'), { duration: 3000 });
       return false;
     }
     if (!online) {
-      this.snack.open(this.tr.instant('warn.offlineNoEdit'), 'OK', { duration: 3000 });
+      this.snack.open(this.tr.instant('warn.offlineNoEdit'), this.tr.instant('common.ok'), { duration: 3000 });
       return false;
     }
     return true;
@@ -717,6 +719,7 @@ export class BoardPage {
     return xs.map(u => map[u] ?? u).join(', ');
   }
 }
+
 
 
 
