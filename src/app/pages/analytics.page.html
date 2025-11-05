@@ -4,8 +4,12 @@
       <h1 class="section-title section-title--info no-truncate">
         {{ 'analytics.title' | translate }}
       </h1>
-      <button type="button" mat-stroked-button class="analytics-page__refresh-button" (click)="onRefreshAnalytics()">
-        再集計
+      <button
+        type="button"
+        mat-stroked-button
+        class="analytics-page__refresh-button"
+        (click)="onRefreshAnalytics()">
+        {{ 'analytics.actions.refresh' | translate }}
       </button>
     </div>
     <p class="page__subtitle">{{ 'analytics.subtitle' | translate }}</p>
@@ -75,14 +79,14 @@
     <mat-card class="analytics-page__problem-card">
       <mat-card-header class="problem-progress__header">
         <div class="problem-progress__header-main">
-          <mat-card-title>Problem別の進捗（平均%）</mat-card-title>
+          <mat-card-title>{{ 'analytics.problemProgress.title' | translate }}</mat-card-title>
           <mat-icon
             class="problem-progress__info"
-            matTooltip="この値は、そのProblem内にあるタスクの進捗率(progress)の平均です。各タスクはボード上で置かれた列に応じて自動的に進捗率が更新されます。"
+            [matTooltip]="'analytics.problemProgress.tooltip' | translate"
           >info</mat-icon>
         </div>
         <mat-card-subtitle class="problem-progress__subtitle">
-          列を「未着手 / 対応中 / レビュー中 / 完了」などに分けると、その列にあるタスクの進捗率が使われ、平均値としてここに表示されます。
+          {{ 'analytics.problemProgress.subtitle' | translate }}
         </mat-card-subtitle>
       </mat-card-header>
 
@@ -102,7 +106,7 @@
       </mat-card-content>
     </mat-card>
 
-    <!-- ここから新設：個人タスクデータ -->
+    <!-- 個人タスクデータ -->
     <mat-card class="analytics-page__personal-card">
       <mat-card-header>
         <mat-card-title>{{ 'analytics.personal.title' | translate }}</mat-card-title>

@@ -82,7 +82,7 @@
             [class.active]="report.id === activeReport?.id">
             <div class="report-card__title">{{ report.title }}</div>
             <div class="report-card__meta">
-              <span>{{ createdAtToDate(report.createdAt) | date: 'yyyy/MM/dd' }}</span>
+              <span>{{ createdAtToDate(report.createdAt) | date: 'yyyy/MM/dd' : undefined : dateLocale }}</span>
               <span class="dot" *ngIf="report.createdBy || report.createdByName">•</span>
               <span class="report-card__author" *ngIf="report.createdBy || report.createdByName">
                 {{ report.createdByName || report.createdBy }}
@@ -102,7 +102,7 @@
       <mat-card-header>
         <mat-card-title>{{ report.title }}</mat-card-title>
         <mat-card-subtitle>
-          {{ createdAtToDate(report.createdAt) | date: 'yyyy/MM/dd (EEE)' }}
+          {{ createdAtToDate(report.createdAt) | date: 'yyyy/MM/dd (EEE)' : undefined : dateLocale }}
         </mat-card-subtitle>
       </mat-card-header>
 
@@ -115,8 +115,12 @@
 
       <!-- 作成者のみ編集/削除 -->
       <mat-card-actions *ngIf="!report.id?.startsWith('draft-') && isMine(report)">
-        <button mat-stroked-button type="button" (click)="editReport(report)">編集</button>
-        <button mat-stroked-button color="warn" type="button" (click)="deleteReport(report)">削除</button>
+        <button mat-stroked-button type="button" (click)="editReport(report)">
+          {{ 'common.edit' | translate }}
+        </button>
+        <button mat-stroked-button color="warn" type="button" (click)="onDeleteReport(report)">
+          {{ 'common.delete' | translate }}
+        </button>
       </mat-card-actions>
 
       <mat-divider></mat-divider>

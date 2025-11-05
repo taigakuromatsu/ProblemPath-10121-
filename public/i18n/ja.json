@@ -93,6 +93,9 @@
     "title": "Analytics / プロジェクト分析",
     "subtitle": "プロジェクト全体の定量指標をまとめたダッシュボードです。",
     "projectContext": "現在のプロジェクト ID: {{id}}",
+    "actions": { "refresh": "再集計" },
+    "confirm": { "refresh": "「{{name}}」の分析を今すぐ再集計します。よろしいですか？" },
+    "refresh": { "ok": "再集計を開始しました。しばらくお待ちください。", "fail": "再集計に失敗しました。" },
     "cards": {
       "completedTasks7d": "完了タスク (過去7日)",
       "avgLeadTime30d": "平均対応日数 (30日平均)",
@@ -108,6 +111,8 @@
     },
     "problemProgress": {
       "title": "Problem別の進捗",
+      "tooltip": "この値は、そのProblem内タスクの進捗率(progress)の平均です。タスクはボード上の列に応じて自動的に進捗率が更新されます。",
+      "subtitle": "列を「未着手 / 対応中 / レビュー中 / 完了」などに分けると、その列のタスク進捗率が平均されてここに表示されます。",
       "empty": "現在表示できるProblemはありません。"
     },
     "personal": {
@@ -143,13 +148,18 @@
     },
     "list": {
       "title": "過去レポート",
-      "empty": "まだレポートはありません"
+      "empty": "まだレポートはありません",
+      "noTitle": "(タイトルなし)"
     },
     "preview": {
       "metricsTitle": "指標メモ",
       "completedTasks": "完了タスク",
       "avgProgress": "平均進捗率",
       "notes": "メモ"
+    },
+    "confirm": {
+      "discardDraft": "未保存の下書きを破棄しますか？入力内容は失われます。",
+      "delete": "レポート「{{title}}」を削除しますか？"
     }
   },
   "label": {
@@ -330,7 +340,9 @@
   "status": {
     "done": "完了",
     "inProgress": "対応中",
-    "notStarted": "未着手"
+    "notStarted": "未着手",
+    "not_started": "未着手",
+    "in_progress": "対応中"
   },
   "comment": {
     "title": "コメント",

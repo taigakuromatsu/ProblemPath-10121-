@@ -6,7 +6,7 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { doc, docData, Firestore } from '@angular/fire/firestore';
 import { getFunctions, httpsCallable } from '@angular/fire/functions';
 import { catchError, firstValueFrom, map, Observable, of, switchMap, combineLatest } from 'rxjs';
@@ -49,7 +49,6 @@ const EMPTY_MY: PersonalAnalyticsSummary = {
 function toNum(n: any, d = 0): number {
   return Number.isFinite(n) ? Number(n) : d;
 }
-// ローカル型
 type StatusItem = { label: string; count: number };
 type ProgItem   = { title: string; percent: number };
 
@@ -89,7 +88,6 @@ function coerceMySummary(data: any): PersonalAnalyticsSummary {
   };
 }
 
-
 @Component({
   standalone: true,
   selector: 'pp-analytics-page',
@@ -105,6 +103,7 @@ export class AnalyticsPage {
   private readonly currentProject = inject(CurrentProjectService);
   private readonly firestore = inject(Firestore);
   private readonly auth = inject(AuthService);
+  private readonly i18n = inject(TranslateService);
 
   readonly projectId$: Observable<string | null> = this.currentProject.projectId$;
 
@@ -161,20 +160,29 @@ export class AnalyticsPage {
   );
 
   async onRefreshAnalytics(): Promise<void> {
-    console.log('[analytics] TEST LOG onRefreshAnalytics() start');
-    const projectId = await firstValueFrom(this.projectId$);
-    console.log('[analytics] projectId =', projectId);
+    const [projectId, projectName] = await Promise.all([
+      firstValueFrom(this.projectId$),
+      firstValueFrom(this.projectName$),
+    ]);
+
     if (!projectId) {
       console.warn('[analytics] Cannot refresh analytics summary without a projectId');
       return;
     }
+
+    const name = projectName || projectId;
+    const ok = window.confirm(this.i18n.instant('analytics.confirm.refresh', { name }));
+    if (!ok) return;
+
     const functions = getFunctions(undefined, 'asia-northeast1');
     const callable = httpsCallable<{ projectId: string }, { ok: boolean }>(functions, 'refreshAnalyticsSummaryV2');
     try {
       await callable({ projectId });
+      alert(this.i18n.instant('analytics.refresh.ok'));
       console.log('[analytics] manual refresh OK');
     } catch (err) {
       console.error('[analytics] manual refresh failed', err);
+      alert(this.i18n.instant('analytics.refresh.fail'));
     }
   }
 }

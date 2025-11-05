@@ -15,6 +15,18 @@ type QueryDocumentSnapshotLike = {
   ref: { collection: (path: string) => { get(): Promise<{ docs: QueryDocumentSnapshotLike[] }> } };
 };
 
+// ==== i18n方針 ====
+// Firestore には翻訳済みの文言を保存しない。
+// 「翻訳キー」を保存し、クライアントで ngx-translate によって表示言語へ変換する。
+const statusLabelKey = (status: string) => `status.${status}`;
+
+// 既知ステータス → 翻訳キー
+const KNOWN_STATUSES: Array<{ value: string; label: string }> = [
+  { value: "not_started", label: statusLabelKey("not_started") },
+  { value: "in_progress", label: statusLabelKey("in_progress") },
+  { value: "done",        label: statusLabelKey("done") },
+];
+
 const toDate = (value: unknown): Date | null => {
   if (!value) return null;
   if (value instanceof Date) return value;
@@ -95,12 +107,6 @@ export const computeAndWriteAnalytics = async (projectId: string) => {
     .collectionGroup("tasks")
     .where("projectId", "==", projectId)
     .get();
-
-  const knownStatuses: Array<{ value: string; label: string }> = [
-    { value: "not_started", label: "未着手" },
-    { value: "in_progress", label: "対応中" },
-    { value: "done", label: "完了" },
-  ];
 
   // プロジェクト全体用
   const statusCounts: Record<string, number> = {};
@@ -203,24 +209,21 @@ export const computeAndWriteAnalytics = async (projectId: string) => {
     }
   });
 
-  // ステータス内訳（全体）
+  // ステータス内訳（全体）：翻訳キーを保存
   const statusBreakdownMap = new Map<string, { label: string; count: number }>();
-  knownStatuses.forEach(({ value, label }) => {
-    if (!statusBreakdownMap.has(value)) {
-      statusBreakdownMap.set(value, { label, count: statusCounts[value] ?? 0 });
-    }
+  KNOWN_STATUSES.forEach(({ value, label }) => {
+    statusBreakdownMap.set(value, { label, count: statusCounts[value] ?? 0 });
   });
   Object.entries(statusCounts).forEach(([status, count]) => {
     if (!statusBreakdownMap.has(status)) {
-      statusBreakdownMap.set(status, { label: status, count });
-    } else if (!knownStatuses.some((k) => k.value === status)) {
-      statusBreakdownMap.set(status, { label: status, count });
+      statusBreakdownMap.set(status, { label: statusLabelKey(status), count });
     }
   });
   const statusBreakdown = Array.from(statusBreakdownMap.values());
 
   if (!hasCompletedAt) {
-    completedTasks7d = completedTasksCount; // completedAt 未導入プロジェクト向けフォールバック
+    // completedAt 未導入プロジェクト向けフォールバック
+    completedTasks7d = completedTasksCount;
   }
 
   const avgLeadTime30dDays =
@@ -266,7 +269,7 @@ export const computeAndWriteAnalytics = async (projectId: string) => {
       completedTasks7d,
       avgLeadTime30dDays,
       lateRateThisWeekPercent,
-      statusBreakdown,
+      statusBreakdown, // ← label は翻訳キー
       problemProgress,
       updatedAt: new Date().toISOString(),
     },
@@ -275,13 +278,12 @@ export const computeAndWriteAnalytics = async (projectId: string) => {
 
   // === per-user 書き込み ===
   const userWrites = Array.from(byUser.entries()).map(async ([uid, agg]) => {
-    // ステータス内訳
     const perMap = new Map<string, { label: string; count: number }>();
-    knownStatuses.forEach(({ value, label }) => {
+    KNOWN_STATUSES.forEach(({ value, label }) => {
       perMap.set(value, { label, count: agg.statusCounts[value] ?? 0 });
     });
     Object.entries(agg.statusCounts).forEach(([st, c]) => {
-      if (!perMap.has(st)) perMap.set(st, { label: st, count: c });
+      if (!perMap.has(st)) perMap.set(st, { label: statusLabelKey(st), count: c });
     });
     const perStatus = Array.from(perMap.values());
 
@@ -293,16 +295,14 @@ export const computeAndWriteAnalytics = async (projectId: string) => {
 
     const myLate =
       agg.dueWindowTaskCount === 0 ? 0 : Math.round(((agg.overdueInWindowCount / agg.dueWindowTaskCount) * 100) * 10) / 10;
-      
+
     const ref = firestore.doc(`projects/${projectId}/analyticsPerUser/${uid}`);
-
-
     await ref.set(
       {
         completedTasks7d: agg.completedTasks7d,
         avgLeadTime30dDays: myLead,
         lateRateThisWeekPercent: myLate,
-        statusBreakdown: perStatus,
+        statusBreakdown: perStatus, // ← label は翻訳キー
         updatedAt: new Date().toISOString(),
       },
       { merge: true }
@@ -343,3 +343,4 @@ export const refreshAllAnalyticsSummaries = onSchedule(
     }
   }
 );
+

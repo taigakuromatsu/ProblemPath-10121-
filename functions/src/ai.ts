@@ -275,8 +275,7 @@ export class AiClient {
 const ai = new AiClient();
 
 function buildPrompt(input: IssueSuggestInput): string {
-  const preferLang = input.lang === "ja" ? "Japanese" : "English";
-  return [
+  const common = [
     `Project ID: ${input.projectId}`,
     `Problem Title: ${input.problem.title}`,
     input.problem.phenomenon ? `Phenomenon: ${input.problem.phenomenon}` : "",
@@ -284,7 +283,25 @@ function buildPrompt(input: IssueSuggestInput): string {
     input.problem.solution ? `Solution: ${input.problem.solution}` : "",
     input.problem.goal ? `Goal/KPI: ${input.problem.goal}` : "",
     "",
-    `Return ${preferLang} issue titles only.`,
+  ].filter(Boolean);
+
+  if (input.lang === "ja") {
+    return [
+      ...common,
+      `出力は日本語のイシュータイトルのみ。`,
+      `ルール:`,
+      `- 8〜36文字`,
+      `- 動詞で始める`,
+      `- 具体的で一読可`,
+      `- 番号・Markdown禁止`,
+      `- 重複回避`,
+      `- 5〜7行`,
+    ].join("\n");
+  }
+
+  return [
+    ...common,
+    `Return English issue titles only.`,
     `Rules:`,
     `- 8–36 characters`,
     `- Start with a verb`,
@@ -292,9 +309,7 @@ function buildPrompt(input: IssueSuggestInput): string {
     `- No numbering, no markdown`,
     `- Avoid duplicates`,
     `- Provide 5 to 7 lines`,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  ].join("\n");
 }
 
 // === NEW: Insight 用のプロンプト ===
@@ -404,24 +419,24 @@ function buildWeeklyPersonalBody(p: WeeklyPersonalParams): string {
       ? `最優先プロブレムである「${p.topProblemTitle}」は進捗${formatNumber(p.topProblemPercent)}%。`
       : `Top priority "${p.topProblemTitle}" is at ${formatNumber(p.topProblemPercent)}%. `;
 
-  const sections =
-    L === "ja"
-      ? [
-          `【概要】個人の週次サマリーです（集計期間: ${p.rangeDisp} / JST）。`,
-          `【今週の個人成果】${kpiLine}`,
-          `【自分のステータス内訳】${statusLine}`,
-          `【傾向・気づき】${head}${p.insight}`,
-          `【来週のフォーカス】（ここに具体的なタスク・OKRを記入）`,
-          `【期間注記】集計はJSTの週（Mon–Sun）基準です。`,
-        ]
-      : [
-          `【Overview】Weekly summary for your tasks (Range: ${p.rangeDisp}, JST).`,
-          `【My Results】${kpiLine}`,
-          `【My Status Breakdown】${statusLine}`,
-          `【Insight】${head}${p.insight}`,
-          `【Next Week Focus】(Fill in concrete tasks/OKRs here)`,
-          `【Note】Week is based on Mon–Sun in JST.`,
-        ];
+      const sections =
+      L === "ja"
+        ? [
+            `【概要】個人の週次サマリーです（集計期間: ${p.rangeDisp} / JST）。`,
+            `【今週の個人成果】${kpiLine}`,
+            `【自分のステータス内訳】${statusLine}`,
+            `【傾向・気づき】${head}${p.insight}`,
+            `【来週のフォーカス】（ここに具体的なタスク・OKRを記入）`,
+            `【期間注記】集計はJSTの週（Mon–Sun）基準です。`,
+          ]
+        : [
+            `Overview: Weekly summary (Range: ${p.rangeDisp}, JST).`,
+            `My Results: ${kpiLine}`,
+            `My Status Breakdown: ${statusLine}`,
+            `Insight: ${head}${p.insight}`,
+            `Next Week Focus: (Fill in concrete tasks/OKRs here)`,
+            `Note: Week is based on Mon–Sun in JST.`,
+          ];
 
   return sections.join("\n");
 }
@@ -460,26 +475,26 @@ function buildWeeklyProjectBody(p: WeeklyProjectParams): string {
       ? `最優先プロブレムである「${p.topProblemTitle}」は進捗${formatNumber(p.topProblemPercent)}%。`
       : `Top priority "${p.topProblemTitle}" is at ${formatNumber(p.topProblemPercent)}%. `;
 
-  const sections =
-    L === "ja"
-      ? [
-          `【概要】プロジェクト全体の週次サマリーです（集計期間: ${p.rangeDisp} / JST）。`,
-          `【主要KPI】${kpiLine}`,
-          `【Problem別平均進捗（上位3）】${top3}（平均: ${formatNumber(p.avgProgressPercent)}%）`,
-          `【ステータス内訳】${statusLine}`,
-          `【傾向・気づき】${head}${p.insight}`,
-          `【来週の重点】（ここにスプリント目標や重点イシューを記入）`,
-          `【期間注記】集計はJSTの週（Mon–Sun）基準です。`,
-        ]
-      : [
-          `【Overview】Weekly summary for the project (Range: ${p.rangeDisp}, JST).`,
-          `【Key KPIs】${kpiLine}`,
-          `【Top 3 Problems by Avg Progress】${top3} (Avg: ${formatNumber(p.avgProgressPercent)}%)`,
-          `【Status Breakdown】${statusLine}`,
-          `【Insight】${head}${p.insight}`,
-          `【Next Week Focus】(Fill in sprint goals and key issues here)`,
-          `【Note】Week is based on Mon–Sun in JST.`,
-        ];
+      const sections =
+      L === "ja"
+        ? [
+            `【概要】プロジェクト全体の週次サマリーです（集計期間: ${p.rangeDisp} / JST）。`,
+            `【主要KPI】${kpiLine}`,
+            `【Problem別平均進捗（上位3）】${top3}（平均: ${formatNumber(p.avgProgressPercent)}%）`,
+            `【ステータス内訳】${statusLine}`,
+            `【傾向・気づき】${head}${p.insight}`,
+            `【来週の重点】（ここにスプリント目標や重点イシューを記入）`,
+            `【期間注記】集計はJSTの週（Mon–Sun）基準です。`,
+          ]
+        : [
+            `Overview: Weekly summary (Range: ${p.rangeDisp}, JST).`,
+            `Key KPIs: ${kpiLine}`,
+            `Top 3 Problems by Avg Progress: ${top3} (Avg: ${formatNumber(p.avgProgressPercent)}%)`,
+            `Status Breakdown: ${statusLine}`,
+            `Insight: ${head}${p.insight}`,
+            `Next Week Focus: (Fill in sprint goals and key issues here)`,
+            `Note: Week is based on Mon–Sun in JST.`,
+          ];
 
   return sections.join("\n");
 }

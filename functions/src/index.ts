@@ -1,4 +1,4 @@
-
+// index.ts
 import { getApps, initializeApp } from "firebase-admin/app";
 import {
   FieldValue,
@@ -96,6 +96,113 @@ function withWebPushLink(
   };
 }
 
+function uniqueTokens(input: string[]): string[] {
+  const set = new Set<string>();
+  for (const t of input) {
+    const s = (t ?? "").trim();
+    if (s) set.add(s);
+  }
+  return Array.from(set);
+}
+
+// ===== functions/src/index.ts =====
+
+type Lang = "ja" | "en";
+
+function normalizeLang(input?: string): "ja" | "en" | undefined {
+  if (!input) return undefined;
+  const v = String(input).toLowerCase().replace("_", "-");
+  if (v.startsWith("en")) return "en"; // en, en-us, en-gb など
+  if (v.startsWith("ja")) return "ja"; // ja, ja-jp
+  return undefined;
+}
+
+async function readUserLang(uid: string): Promise<Lang> {
+  const db = getFirestore();
+
+  // 1) users/{uid}/prefs/app
+  try {
+    const appSnap = await db.doc(`users/${uid}/prefs/app`).get();
+    if (appSnap.exists) {
+      const d = appSnap.data() as any;
+      const n = normalizeLang(d?.lang ?? d?.locale);
+      if (n) return n;
+    }
+  } catch {}
+
+  // 2) users/{uid}/prefs
+  try {
+    const prefsSnap = await db.doc(`users/${uid}/prefs`).get();
+    if (prefsSnap.exists) {
+      const d = prefsSnap.data() as any;
+      const n = normalizeLang(d?.lang ?? d?.locale);
+      if (n) return n;
+    }
+  } catch {}
+
+  // 3) users/{uid}
+  try {
+    const rootSnap = await db.doc(`users/${uid}`).get();
+    if (rootSnap.exists) {
+      const d = rootSnap.data() as any;
+      const n = normalizeLang(d?.prefs?.lang ?? d?.lang ?? d?.locale);
+      if (n) return n;
+    }
+  } catch {}
+
+  // 最後の最後だけ日本語にフォールバック
+  return "ja";
+}
+
+
+async function bucketUidsByLang(uids: string[]): Promise<Record<Lang, string[]>> {
+  const buckets: Record<Lang, string[]> = { ja: [], en: [] };
+  await Promise.all(
+    uids.map(async (uid) => {
+      const lang = await readUserLang(uid);
+      buckets[lang].push(uid);
+    })
+  );
+
+  // デバッグ（必要なら）：どのUIDがどの言語に入ったかをログ
+  console.log("[notify] lang buckets", JSON.stringify(buckets));
+  return buckets;
+}
+
+
+function commentNotificationByLang(lang: Lang, scope: "problem" | "issue" | "task") {
+  const title = lang === "ja" ? "新しいコメント" : "New comment";
+  const body =
+    scope === "task"
+      ? (lang === "ja" ? "タスクにコメントが追加されました" : "A comment was added to a task")
+      : scope === "issue"
+      ? (lang === "ja" ? "Issueにコメントが追加されました" : "A comment was added to an issue")
+      : (lang === "ja" ? "Problemにコメントが追加されました" : "A comment was added to a problem");
+  return { title, body };
+}
+
+function attachmentNotificationByLang(lang: Lang, scope: "problem" | "issue" | "task") {
+  const title = lang === "ja" ? "ファイルが追加されました" : "File added";
+  const body =
+    scope === "task"
+      ? (lang === "ja" ? "タスクにファイルが追加されました" : "A file was added to a task")
+      : scope === "issue"
+      ? (lang === "ja" ? "Issueにファイルが追加されました" : "A file was added to an issue")
+      : (lang === "ja" ? "Problemにファイルが追加されました" : "A file was added to a problem");
+  return { title, body };
+}
+
+function reminderNotificationByLang(lang: Lang, window: ReminderWindow) {
+  const title = lang === "ja" ? "期限リマインド" : "Due reminder";
+  const body =
+    window === "1d"
+      ? (lang === "ja" ? "タスク期限が明日に迫っています" : "Task is due tomorrow")
+      : (lang === "ja" ? "タスク期限まで1週間です" : "Task is due in one week");
+  return { title, body };
+}
+
+
+
 /** コメント作成時の通知（自己通知の抑止＋リンク付与） */
 async function handleCommentCreated(
   event: FirestoreEvent<any, CommentParams>
@@ -108,17 +215,9 @@ async function handleCommentCreated(
 
   const allMemberUids = await listProjectMemberUids(projectId);
   const targetUids = authorId ? allMemberUids.filter(uid => uid !== authorId) : allMemberUids;
-  const tokens = await listFcmTokensForUsers(targetUids);
 
-  const notification = {
-    title: "新しいコメント",
-    body:
-      scope === "task"
-        ? "タスクにコメントが追加されました"
-        : scope === "issue"
-        ? "Issueにコメントが追加されました"
-        : "Problemにコメントが追加されました",
-  };
+  // ✅ 言語別にUIDをバケット化
+  const buckets = await bucketUidsByLang(targetUids);
 
   const data: Record<string, string> = {
     type: "comment_created",
@@ -131,24 +230,47 @@ async function handleCommentCreated(
   if (taskId)  data.taskId  = taskId;
 
   const link = buildDeepLink(projectId, problemId, issueId, taskId);
-  const payload = withWebPushLink({ notification, data }, link);
+
+  // 送信結果を集計
+  const sums = { successCount: 0, failureCount: 0, attemptedTokens: 0 };
+  const sent = new Set<string>();
+  for (const lang of ["ja", "en"] as const) {
+    if (!buckets[lang]?.length) continue;
+
+    // 言語ごとにトークンを取得
+    const tokensRaw = await listFcmTokensForUsers(buckets[lang]);
+    const tokens = uniqueTokens(tokensRaw).filter(t => !sent.has(t)); 
+    if (!tokens.length) continue;
+
+    // 言語ごとの文面
+    const notification = commentNotificationByLang(lang, scope);
+    const dataWithLang = { ...data, lang };
+    const payload = withWebPushLink({ notification, data: dataWithLang }, link);
+    const result = await sendToTokens(tokens, payload);
+
+    // 集計（sendToTokensの戻り値は環境により型が異なることがあるため防御的に）
+    sums.successCount += Number((result as any)?.successCount ?? 0);
+    sums.failureCount += Number((result as any)?.failureCount ?? 0);
+    sums.attemptedTokens += tokens.length;
+
+    tokens.forEach(t => sent.add(t));
+  }
 
   console.log(
-    "[notify] Comment created",
-    JSON.stringify({ projectId, problemId, issueId, taskId, commentId, authorId, targetUids: targetUids.length, tokens: tokens.length })
+    "[notify] Comment created (multilang)",
+    JSON.stringify({
+      projectId, problemId, issueId, taskId, commentId, authorId,
+      targetUids: targetUids.length,
+      sent: sums
+    })
   );
-
-  const result = tokens.length
-    ? await sendToTokens(tokens, payload)
-    : { successCount: 0, failureCount: 0, attemptedTokens: 0 };
-
-  console.log("[notify] Comment notification result", JSON.stringify(result));
 
   const auditRef = firestore
     .collection(`projects/${projectId}/auditLogs`)
     .doc("events")
     .collection("notifications")
     .doc();
+
   await auditRef.set({
     type: "comment_created",
     scope,
@@ -159,10 +281,12 @@ async function handleCommentCreated(
     commentId,
     authorId: authorId ?? null,
     sentAt: FieldValue.serverTimestamp(),
-    result,
+    result: sums,
   });
-  return result;
+
+  return sums;
 }
+
 
 /** 添付作成時の通知（自己通知の抑止＋リンク付与） */
 async function handleAttachmentCreated(
@@ -176,17 +300,9 @@ async function handleAttachmentCreated(
 
   const allMemberUids = await listProjectMemberUids(projectId);
   const targetUids = createdBy ? allMemberUids.filter(uid => uid !== createdBy) : allMemberUids;
-  const tokens = await listFcmTokensForUsers(targetUids);
 
-  const notification = {
-    title: "ファイルが追加されました",
-    body:
-      scope === "task"
-        ? "タスクにファイルが追加されました"
-        : scope === "issue"
-        ? "Issueにファイルが追加されました"
-        : "Problemにファイルが追加されました",
-  };
+  // ✅ 言語別にUIDをバケット化
+  const buckets = await bucketUidsByLang(targetUids);
 
   const data: Record<string, string> = {
     type: "attachment_created",
@@ -199,24 +315,47 @@ async function handleAttachmentCreated(
   if (taskId)  data.taskId  = taskId;
 
   const link = buildDeepLink(projectId, problemId, issueId, taskId);
-  const payload = withWebPushLink({ notification, data }, link);
+
+  // 送信結果を集計
+  const sums = { successCount: 0, failureCount: 0, attemptedTokens: 0 };
+  const sent = new Set<string>();
+  for (const lang of ["ja", "en"] as const) {
+    if (!buckets[lang]?.length) continue;
+
+    // 言語ごとにトークンを取得
+    const tokensRaw = await listFcmTokensForUsers(buckets[lang]);
+    const tokens = uniqueTokens(tokensRaw).filter(t => !sent.has(t)); 
+    if (!tokens.length) continue;
+
+    // 言語ごとの文面
+    const notification = attachmentNotificationByLang(lang, scope);
+    const dataWithLang = { ...data, lang };
+    const payload = withWebPushLink({ notification, data: dataWithLang }, link);
+    const result = await sendToTokens(tokens, payload);
+
+    // 集計
+    sums.successCount += Number((result as any)?.successCount ?? 0);
+    sums.failureCount += Number((result as any)?.failureCount ?? 0);
+    sums.attemptedTokens += tokens.length;
+
+    tokens.forEach(t => sent.add(t));
+  }
 
   console.log(
-    "[notify] Attachment created",
-    JSON.stringify({ projectId, problemId, issueId, taskId, attachmentId, createdBy, targetUids: targetUids.length, tokens: tokens.length })
+    "[notify] Attachment created (multilang)",
+    JSON.stringify({
+      projectId, problemId, issueId, taskId, attachmentId, createdBy,
+      targetUids: targetUids.length,
+      sent: sums
+    })
   );
-
-  const result = tokens.length
-    ? await sendToTokens(tokens, payload)
-    : { successCount: 0, failureCount: 0, attemptedTokens: 0 };
-
-  console.log("[notify] Attachment notification result", JSON.stringify(result));
 
   const auditRef = firestore
     .collection(`projects/${projectId}/auditLogs`)
     .doc("events")
     .collection("notifications")
     .doc();
+
   await auditRef.set({
     type: "attachment_created",
     scope,
@@ -227,10 +366,12 @@ async function handleAttachmentCreated(
     attachmentId,
     createdBy: createdBy ?? null,
     sentAt: FieldValue.serverTimestamp(),
-    result,
+    result: sums,
   });
-  return result;
+
+  return sums;
 }
+
 
 function extractPathParams(ref: DocumentReference) {
   const segments = ref.path.split("/");
@@ -256,19 +397,27 @@ async function notifyTaskReminder(
   },
   dueDate: string,
   window: ReminderWindow,
-  cache: Map<string, string[]>
+  cache: Map<string, Record<Lang, string[]>>
 ) {
   const { projectId, problemId, issueId, taskId } = params;
-  let tokens = cache.get(projectId);
-  if (!tokens) {
+
+  // 言語別トークンのキャッシュ取得 or 構築
+  let tokensByLang = cache.get(projectId);
+  if (!tokensByLang) {
     const memberUids = await listProjectMemberUids(projectId);
-    tokens = await listFcmTokensForUsers(memberUids);
-    cache.set(projectId, tokens);
+    const buckets = await bucketUidsByLang(memberUids);
+    const jaTokens = buckets.ja.length ? await listFcmTokensForUsers(buckets.ja) : [];
+    const enTokens = buckets.en.length ? await listFcmTokensForUsers(buckets.en) : [];
+    tokensByLang = { ja: jaTokens, en: enTokens };
+    cache.set(projectId, tokensByLang);
   }
 
-  if (!tokens.length) {
+  const totalTokens =
+    (tokensByLang.ja?.length ?? 0) + (tokensByLang.en?.length ?? 0);
+
+  if (!totalTokens) {
     console.log(
-      "[notify] No tokens for reminder",
+      "[notify] No tokens for reminder (multilang)",
       JSON.stringify({ projectId, taskId, window, dueDate })
     );
     await markReminderSent(projectId, taskId, dueDate, window);
@@ -286,26 +435,36 @@ async function notifyTaskReminder(
   if (issueId)   data.issueId   = issueId;
 
   const link = buildDeepLink(projectId, problemId, issueId, taskId);
-  const payload = withWebPushLink(
-    {
-      notification: {
-        title: "期限リマインド",
-        body: window === "1d" ? "タスク期限が明日に迫っています" : "タスク期限まで1週間です",
-      },
-      data,
-    },
-    link
-  );
 
-  const result = await sendToTokens(tokens, payload);
+  const sums = { successCount: 0, failureCount: 0, attemptedTokens: 0 };
+  const sent = new Set<string>();
+
+  for (const lang of ["ja", "en"] as const) {
+    const raw = tokensByLang[lang] ?? [];
+    const tokens = raw.filter(t => !sent.has(t));
+    if (!tokens.length) continue;
+
+    const notification = reminderNotificationByLang(lang, window);
+    const dataWithLang = { ...data, lang };
+    const payload = withWebPushLink({ notification, data: dataWithLang }, link);
+
+    const result = await sendToTokens(tokens, payload);
+    sums.successCount += Number((result as any)?.successCount ?? 0);
+    sums.failureCount += Number((result as any)?.failureCount ?? 0);
+    sums.attemptedTokens += tokens.length;
+
+    tokens.forEach(t => sent.add(t));
+
+  }
 
   console.log(
-    "[notify] Reminder notification result",
-    JSON.stringify({ projectId, taskId, window, dueDate, result })
+    "[notify] Reminder notification result (multilang)",
+    JSON.stringify({ projectId, taskId, window, dueDate, sent: sums })
   );
 
   await markReminderSent(projectId, taskId, dueDate, window);
 }
+
 
 // ======== Firestore triggers (自己通知抑止 & WebPushリンク 版) ========
 
@@ -395,7 +554,7 @@ export const taskDueReminder = onSchedule(
       { window: "7d", offset: 7 },
     ];
 
-    const tokenCache = new Map<string, string[]>();
+    const tokenCache = new Map<string, Record<Lang, string[]>>();
 
     for (const { window, offset } of windows) {
       const targetDate = formatYmd(addDays(today, offset));

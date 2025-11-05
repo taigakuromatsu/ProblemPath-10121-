@@ -93,6 +93,9 @@
     "title": "Analytics / Project Insights",
     "subtitle": "A dashboard that highlights key health metrics for the current project.",
     "projectContext": "Current project ID: {{id}}",
+    "actions": { "refresh": "Refresh" },
+    "confirm": { "refresh": "Refresh the analytics for \"{{name}}\" now? This will take a few minutes." },
+    "refresh": { "ok": "Refresh started. Please wait a moment.", "fail": "Refresh failed." },
     "cards": {
       "completedTasks7d": "Completed tasks (last 7 days)",
       "avgLeadTime30d": "Average lead time (30-day window)",
@@ -108,6 +111,8 @@
     },
     "problemProgress": {
       "title": "Progress by Problem",
+      "tooltip": "This value is the average progress rate (progress) of tasks in that Problem. The progress rate of tasks is automatically updated according to the columns on the Board.",
+      "subtitle": "When columns are divided into \"Not started / In progress / In review / Done\" etc., the progress rate of tasks in that column is averaged and displayed here.",
       "empty": "No Problem data available yet."
     },
     "personal": {
@@ -143,13 +148,18 @@
     },
     "list": {
       "title": "Past reports",
-      "empty": "No reports yet"
+      "empty": "No reports yet",
+      "noTitle": "(no title)"
     },
     "preview": {
       "metricsTitle": "Metric notes",
       "completedTasks": "Completed tasks",
       "avgProgress": "Average progress",
       "notes": "Notes"
+    },
+    "confirm": {
+      "discardDraft": "Discard unsaved draft? Your input will be lost.",
+      "delete": "Delete the report “{{title}}”?"
     }
   },
   "label": {
@@ -330,7 +340,9 @@
   "status": {
     "done": "Done",
     "inProgress": "In progress",
-    "notStarted": "Not started"
+    "notStarted": "Not started",
+    "in_progress": "In progress",
+    "not_started": "Not started"
   },
   "comment": {
     "title": "Comments",

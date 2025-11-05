@@ -108,6 +108,11 @@ export class ReportsPage {
     }),
   );
 
+  get dateLocale(): string {
+    const lang = this.translate.currentLang || this.translate.defaultLang || 'ja';
+    return lang.startsWith('ja') ? 'ja-JP' : 'en-US';
+  }
+
   readonly reports$: Observable<ReportEntry[]> = combineLatest([
     this.firestoreReports$,
     this.manualReports$,
@@ -178,10 +183,24 @@ export class ReportsPage {
   }
 
   cancelManualReport(): void {
+    const hasInput =
+      (this.draftReport.title && this.draftReport.title.trim() !== '') ||
+      (this.draftReport.body && this.draftReport.body.trim() !== '');
+    if (hasInput) {
+      const ok = window.confirm(this.translate.instant('reports.confirm.discardDraft'));
+      if (!ok) return;
+    }
     this.manualFormOpen = false;
     this.draftReport = { title: '', body: '' };
     this.pendingMetrics = null;
     this.editingReportId = null;
+  }
+
+  onDeleteReport(report: ReportEntry): void {
+    const title = report?.title?.trim() || this.translate.instant('reports.list.noTitle');
+    const ok = window.confirm(this.translate.instant('reports.confirm.delete', { title }));
+    if (!ok) return;
+    this.deleteReport(report);
   }
 
   /** 一覧→プレビューで自分のレポートなら編集開始（フォームに読み込み） */
@@ -351,16 +370,15 @@ export class ReportsPage {
   }
 
   private normalizeEntry(raw: any): ReportEntry {
-    const title = typeof raw?.title === 'string' ? raw.title : '(no title)';
+    const fallbackTitle = this.translate.instant('reports.list.noTitle');
+    const title = typeof raw?.title === 'string' && raw.title.trim() ? raw.title : fallbackTitle;
     const body  = typeof raw?.body === 'string'  ? raw.body  : '';
     const m = raw?.metrics ?? {};
-
     const metrics: ReportMetrics = {
       completedTasks: Number.isFinite(m?.completedTasks) ? m.completedTasks : 0,
       avgProgressPercent: Number.isFinite(m?.avgProgressPercent) ? m.avgProgressPercent : 0,
       notes: typeof m?.notes === 'string' ? m.notes : this.buildSummaryFromBody(body),
     };
-
     return {
       id: String(raw?.id ?? ''),
       title,
