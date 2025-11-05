@@ -247,12 +247,12 @@
   "task": {
     "placeholderNewTitle": "New task title",
     "add": "Add Task",
-    "dueShort": "(due: {{ date }})",
-    "editDue": "Due",
-    "editTags": "Tags",
+    "dueShort": "(due date: {{ date }})",
+    "editDue": "Due change",
+    "editTags": "Tagging",
     "noneYet": "(No tasks yet)",
     "duePlaceholder": "MM/DD/YYYY",
-    "promptDue": "Due (YYYY-MM-DD, empty to clear)",
+    "promptDue": "Due date (YYYY-MM-DD, empty to clear)",
     "promptTags": "Tags (comma/space separated)\nEx: bug, UI  or  bug UI"
   },
   "recurrence": {

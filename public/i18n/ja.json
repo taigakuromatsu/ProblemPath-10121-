@@ -241,9 +241,9 @@
   "task": {
     "placeholderNewTitle": "新しいタスクのタイトル",
     "add": "タスクを追加",
-    "dueShort": "（期限: {{ date }}）",
-    "editDue": "期限",
-    "editTags": "タグ",
+    "dueShort": "（期日: {{ date }}）",
+    "editDue": "期日変更",
+    "editTags": "タグ付け",
     "noneYet": "（タスクはまだありません）",
     "duePlaceholder": "YYYY-MM-DD",
     "promptDue": "期日 (YYYY-MM-DD、空で解除)",
