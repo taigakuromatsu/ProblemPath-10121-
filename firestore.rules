@@ -67,56 +67,54 @@ service cloud.firestore {
       match /members/{uid} {
         allow read: if isMember(projectId);
 
-         // admin を招待で付与するケースも許可
-          allow create: if isSignedIn()
+        // --- (1) 本人が displayName / email を更新 ---
+        allow update: if isSignedIn()
+          && request.auth.uid == uid
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly(['displayName','email'])
+          && (request.resource.data.displayName is string)
+          && request.resource.data.displayName.size() > 0
+          && request.resource.data.displayName.size() <= 120
+          && request.auth.token.email != null
+          && request.resource.data.email == request.auth.token.email;
+
+        // --- (2) admin 作成（初回プロジェクト or admin招待） ---
+        allow create: if isSignedIn()
           && request.auth.uid == uid
           && request.resource.data.role == 'admin'
           && (
-                // 自己作成（プロジェクト作成時）
-                request.resource.data.keys().hasOnly(['role','joinedAt','displayName','email'])
-                ||
-                // 招待経由の admin 付与
-                (
-                  request.resource.data.keys().hasOnly(['role','joinedAt','inviteId','invitedBy','displayName','email'])
-                  && request.auth.token.email != null
-                  && exists(/databases/$(database)/documents/projects/$(projectId)/invites/$(request.resource.data.inviteId))
-                  && get(/databases/$(database)/documents/projects/$(projectId)/invites/$(request.resource.data.inviteId)).data.email
-                    == request.auth.token.email
-                )
-              );
+            // 自己作成（プロジェクト作成時）
+            request.resource.data.keys().hasOnly(['role','joinedAt','displayName','email'])
+            ||
+            // 招待経由の admin 付与
+            (
+              request.resource.data.keys().hasOnly(['role','joinedAt','inviteId','invitedBy','displayName','email'])
+              && request.auth.token.email != null
+              && exists(/databases/$(database)/documents/projects/$(projectId)/invites/$(request.resource.data.inviteId))
+              && get(/databases/$(database)/documents/projects/$(projectId)/invites/$(request.resource.data.inviteId)).data.email
+                == request.auth.token.email
+            )
+          );
 
-        allow create, update: if isSignedIn()
+        // --- (3) member/viewer の招待登録 ---
+        allow create: if isSignedIn()
           && request.auth.uid == uid
-          && request.resource.data.keys().hasOnly(['role','joinedAt','inviteId','invitedBy','displayName','email'])
           && (request.resource.data.role in ['member','viewer'])
+          && request.resource.data.keys().hasOnly(['role','joinedAt','inviteId','invitedBy','displayName','email'])
           && request.auth.token.email != null
           && exists(/databases/$(database)/documents/projects/$(projectId)/invites/$(request.resource.data.inviteId))
           && get(/databases/$(database)/documents/projects/$(projectId)/invites/$(request.resource.data.inviteId)).data.email
-             == request.auth.token.email;
+            == request.auth.token.email;
 
+        // --- (4) 管理者によるロール変更 ---
         allow update: if isAdmin(projectId)
           && request.resource.data.keys().hasOnly(['role','joinedAt'])
           && isValidRole(request.resource.data.role);
 
+        // --- (5) 削除権限 ---
         allow delete: if (isSignedIn() && request.auth.uid == uid && resource.data.role in ['member','viewer'])
                       || isAdmin(projectId);
       }
 
-      // invites
-      match /invites/{token} {
-        allow get: if true;
-        allow list: if isAdmin(projectId);
-        allow create: if isAdmin(projectId);
-
-        allow update: if isSignedIn()
-          && request.auth.token.email != null
-          && resource.data.email == request.auth.token.email
-          && resource.data.redeemedBy == null
-          && request.resource.data.diff(resource.data).changedKeys().hasOnly(['redeemedBy','redeemedAt'])
-          && request.resource.data.redeemedBy == request.auth.uid;
-
-        allow delete: if isAdmin(projectId);
-      }
 
       // --- カンバン列(boardColumns)のバリデーション ---
       function isValidBoardColumn(col) {

@@ -8,6 +8,12 @@ import {
   onAuthStateChanged,
   signOut,
   user as afUser,
+  // ▼ 追加（メール/パスワード & プロフィール更新）
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendEmailVerification,
+  sendPasswordResetEmail,
+  updateProfile,
 } from '@angular/fire/auth';
 import { map, shareReplay } from 'rxjs/operators';
 import { Observable } from 'rxjs';
@@ -34,14 +40,25 @@ export class AuthService {
 
   private didOnboard = false;
 
+  /** email から表示名を推定（先頭のローカル部を整形） */
+  private deriveDisplayName(email?: string | null): string | null {
+    if (!email) return null;
+    const local = email.split('@')[0] ?? '';
+    const name = local.replace(/[._-]+/g, ' ').trim();
+    return name || null;
+  }
+
   constructor() {
-    // 1) リダイレクト結果を“必ず”回収（成功時はここで currentUser も立つ）
+    // 1) リダイレクト結果を回収
     getRedirectResult(this.auth)
       .then(async (cred) => {
         if (cred?.user) {
-          // デバッグログ（必要に応じて消してOK）
+          let name = cred.user.displayName ?? this.deriveDisplayName(cred.user.email) ?? 'Me';
+          if (!cred.user.displayName && name) {
+            try { await updateProfile(cred.user, { displayName: name }); } catch {}
+          }
           console.debug('[auth] redirect result user=', cred.user.uid);
-          await this.ensureOnboard(cred.user.uid, cred.user.displayName || 'Me');
+          await this.ensureOnboard(cred.user.uid, name);
         } else {
           console.debug('[auth] redirect result: none');
         }
@@ -50,30 +67,28 @@ export class AuthService {
         console.warn('[auth] getRedirectResult error:', e?.code || e);
       });
 
-    // 2) onAuthStateChanged でも保険（ブラウザや拡張の差異対策）
+    // 2) onAuthStateChanged（保険）
     onAuthStateChanged(this.auth, async (u) => {
       console.debug('[auth] onAuthStateChanged =>', !!u, u?.uid);
       if (!u || this.didOnboard) return;
       this.didOnboard = true;
-      await this.ensureOnboard(u.uid, u.displayName || 'Me');
+      let name = u.displayName ?? this.deriveDisplayName(u.email) ?? 'Me';
+      if (!u.displayName && name) {
+        try { await updateProfile(u, { displayName: name }); } catch {}
+      }
+      await this.ensureOnboard(u.uid, name);
     });
   }
 
-  /**
-   * Google サインイン
-   * - まず Popup を試し、ブロック/未対応などの代表的エラーは Redirect にフォールバック
-   * - 選択毎回表示したい場合は { forceChoose: true }
-   */
+  /** Google サインイン */
   async signInWithGoogle(opts: { forceChoose?: boolean } = {}): Promise<void> {
     const provider = new GoogleAuthProvider();
     if (opts.forceChoose) provider.setCustomParameters({ prompt: 'select_account' });
 
-    // 永続化は明示（initializeAuth 側でも設定しているが二重指定は安全側）
     await setPersistence(this.auth as any, browserLocalPersistence);
 
     try {
       await signInWithPopup(this.auth, provider);
-      // Popup 成功時はここで onAuthStateChanged が走る
     } catch (e: any) {
       const code = e?.code as string | undefined;
       const shouldFallback =
@@ -84,12 +99,41 @@ export class AuthService {
         code === 'auth/unauthorized-domain';
 
       if (shouldFallback) {
-        // フォールバック：Redirect
         await signInWithRedirect(this.auth, provider);
         return;
       }
       throw e;
     }
+  }
+
+  // ===== メール/パスワード導線（追加） =====
+
+  /** 新規登録（メール/パスワード） */
+  async signUpWithEmail(email: string, password: string) {
+    await setPersistence(this.auth as any, browserLocalPersistence);
+    const { user } = await createUserWithEmailAndPassword(this.auth, email, password);
+    // 表示名が空なら email から自動セット
+    const name = this.deriveDisplayName(user.email) ?? 'Me';
+    try { await updateProfile(user, { displayName: name }); } catch {}
+  }
+
+  /** サインイン（メール/パスワード） */
+  async signInWithEmail(email: string, password: string) {
+    await setPersistence(this.auth as any, browserLocalPersistence);
+    await signInWithEmailAndPassword(this.auth, email, password);
+  }
+
+  /** パスワードリセット */
+  resetPassword(email: string) {
+    return sendPasswordResetEmail(this.auth, email);
+  }
+
+  /** 自分の表示名を変更（プロフィール＆メンバー同期用） */
+  async updateMyDisplayName(newName: string) {
+    const u = this.auth.currentUser;
+    if (!u) return;
+    await updateProfile(u, { displayName: newName });
+    // 以降は各画面側で members/{uid}.displayName を必要に応じて同期更新してください
   }
 
   /** サインアウト */
@@ -133,6 +177,7 @@ export class AuthService {
     this.currentProject.set(projectId);
   }
 }
+
 
 
 

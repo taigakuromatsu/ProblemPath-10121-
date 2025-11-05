@@ -1,33 +1,154 @@
-import { Component, ViewChild } from '@angular/core';
+import { Component, ViewChild, inject } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { AsyncPipe, NgFor, NgIf } from '@angular/common';
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
 import { map } from 'rxjs/operators';
-import { Observable } from 'rxjs';
+import { Observable, firstValueFrom } from 'rxjs';
 
 import { MatSidenavModule, MatSidenav } from '@angular/material/sidenav';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { FormsModule } from '@angular/forms';
+
 import { ProjectSwitcher } from './project-switcher';
 import { ThemeService } from './services/theme.service';
 import { TranslateModule } from '@ngx-translate/core';
 import { AuthService } from './services/auth.service';
 import { MessagingService } from './services/messaging.service';
-// 追加：DevTools から `await window.ppGetToken()` で常に最新IDトークンを取得
+import { CurrentProjectService } from './services/current-project.service';
+
+import { Firestore, doc, setDoc, serverTimestamp } from '@angular/fire/firestore';
+
+// DevTools: await window.ppGetToken()
 import { getAuth } from '@angular/fire/auth';
 (globalThis as any).ppGetToken = async () => {
   const auth = getAuth();
   const u = auth.currentUser || await new Promise<any>(r => {
     const off = auth.onAuthStateChanged(x => { off(); r(x); });
   });
-  const t = await u.getIdToken(true); // ← 強制リフレッシュ
+  const t = await u.getIdToken(true);
   console.log('ID_TOKEN=', t);
   return t;
 };
 
+/* ───────── メール/パスワード ダイアログ ───────── */
+@Component({
+  standalone: true,
+  selector: 'pp-email-login-dialog',
+  imports: [MatDialogModule, MatFormFieldModule, MatInputModule, MatButtonModule, FormsModule, NgIf, MatSnackBarModule],
+  template: `
+    <h2 mat-dialog-title>メールでログイン</h2>
+    <div mat-dialog-content style="display:grid; gap:12px; width:min(420px,90vw);">
+      <mat-form-field appearance="outline">
+        <mat-label>メールアドレス</mat-label>
+        <input matInput [(ngModel)]="email" type="email" autocomplete="email" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>パスワード</mat-label>
+        <input matInput [(ngModel)]="password" type="password" autocomplete="current-password" />
+      </mat-form-field>
+      <small class="hint" style="opacity:.7">※ アカウントが無い場合は「新規登録」で作成できます。</small>
+      <div *ngIf="error" style="color:#d32f2f; font-size:12px;">{{ error }}</div>
+    </div>
+    <div mat-dialog-actions style="justify-content:space-between; gap:8px;">
+      <button mat-button (click)="reset()" [disabled]="busy || !email">パスワードをリセット</button>
+      <span style="flex:1"></span>
+      <button mat-button (click)="close()" [disabled]="busy">キャンセル</button>
+      <button mat-stroked-button color="primary" (click)="signin()" [disabled]="busy || !email || !password">サインイン</button>
+      <button mat-flat-button color="primary" (click)="signup()" [disabled]="busy || !email || !password">新規登録</button>
+    </div>
+  `
+})
+export class EmailLoginDialog {
+  private authSvc = inject(AuthService);
+  private dialog = inject(MatDialog);
+  private snack = inject(MatSnackBar);
 
+  email = ''; password = ''; busy = false; error: string | null = null;
+
+  close(){ this.dialog.closeAll(); }
+  async signin(){ this.error=null; this.busy=true; try{ await this.authSvc.signInWithEmail(this.email.trim(), this.password); this.snack.open('サインインしました','OK',{duration:2500}); this.close(); } catch(e:any){ this.error=this.err(e?.code);} finally{ this.busy=false; } }
+  async signup(){ this.error=null; this.busy=true; try{ await this.authSvc.signUpWithEmail(this.email.trim(), this.password); this.snack.open('登録完了。確認メールを送信しました。','OK',{duration:3000}); this.close(); } catch(e:any){ this.error=this.err(e?.code);} finally{ this.busy=false; } }
+  async reset(){ this.error=null; this.busy=true; try{ await this.authSvc.resetPassword(this.email.trim()); this.snack.open('パスワード再設定メールを送信しました','OK',{duration:3000}); } catch(e:any){ this.error=this.err(e?.code);} finally{ this.busy=false; } }
+  private err(code?:string){ switch(code){ case 'auth/user-not-found': return 'ユーザーが見つかりません。'; case 'auth/wrong-password': return 'パスワードが違います。'; case 'auth/invalid-email': return 'メールアドレスが不正です。'; case 'auth/email-already-in-use': return 'このメールは既に使用されています。'; case 'auth/too-many-requests': return 'しばらくしてから再試行してください。'; default: return `エラー: ${code ?? '不明なエラー'}`; } }
+}
+
+/* ───────── 表示名変更ダイアログ ───────── */
+@Component({
+  standalone: true,
+  selector: 'pp-edit-name-dialog',
+  imports: [MatDialogModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatCheckboxModule, FormsModule, NgIf, TranslateModule],
+  template: `
+    <h2 mat-dialog-title>表示名を変更</h2>
+    <div mat-dialog-content style="display:grid; gap:12px; width:min(420px,90vw);">
+      <mat-form-field appearance="outline">
+        <mat-label>新しい表示名</mat-label>
+        <input matInput [(ngModel)]="name" maxlength="120" />
+      </mat-form-field>
+
+      <mat-checkbox [(ngModel)]="syncMember">このプロジェクトのメンバー名にも反映する</mat-checkbox>
+
+      <div *ngIf="error" style="color:#d32f2f; font-size:12px;">{{ error }}</div>
+    </div>
+
+    <div mat-dialog-actions style="justify-content:flex-end; gap:8px;">
+      <button mat-button (click)="close()" [disabled]="busy">キャンセル</button>
+      <button mat-flat-button color="primary" (click)="save()" [disabled]="busy || !name.trim()">保存</button>
+    </div>
+  `
+})
+export class EditNameDialog {
+  private auth = inject(AuthService);
+  private fs = inject(Firestore);
+  private current = inject(CurrentProjectService);
+  private dialog = inject(MatDialog);
+  private snack = inject(MatSnackBar);
+
+  name = '';
+  syncMember = true;
+  busy = false;
+  error: string | null = null;
+
+  constructor() {
+    // 初期値: 現在の displayName を流し込む
+    this.auth.displayName$.subscribe(n => { if (n != null && !this.name) this.name = n; });
+  }
+
+  close(){ this.dialog.closeAll(); }
+
+  async save(){
+    this.error = null; this.busy = true;
+    try{
+      const newName = this.name.trim();
+      await this.auth.updateMyDisplayName(newName);
+
+      if (this.syncMember) {
+        const uid = await firstValueFrom(this.auth.uid$);
+        const pid = this.current.getSync();
+        if (uid && pid) {
+          const ref = doc(this.fs as any, `projects/${pid}/members/${uid}`);
+          await setDoc(ref, { displayName: newName, updatedAt: serverTimestamp() }, { merge: true });
+        }
+      }
+
+      this.snack.open('表示名を更新しました', 'OK', { duration: 2500 });
+      this.close();
+    }catch(e:any){
+      this.error = e?.message ?? '更新に失敗しました';
+    }finally{
+      this.busy = false;
+    }
+  }
+}
+
+/* ───────── ルート App（ヘッダーは前回のまま＋名前変更ボタン） ───────── */
 @Component({
   standalone: true,
   selector: 'app-root',
@@ -35,67 +156,83 @@ import { getAuth } from '@angular/fire/auth';
     AsyncPipe, NgFor, NgIf,
     RouterOutlet, RouterLink, RouterLinkActive,
     MatSidenavModule, MatToolbarModule, MatIconModule, MatButtonModule,
-    ProjectSwitcher, TranslateModule
+    MatDialogModule, MatSnackBarModule,
+    ProjectSwitcher, TranslateModule,
+    EmailLoginDialog, EditNameDialog
   ],
+  styles: [`
+    /* ヘッダー：Grid（左=auto / 中央=1fr / 右=auto） */
+    .topbar { display:grid; grid-template-columns:auto 1fr auto; align-items:center; column-gap:8px; min-height:48px; }
+    .brand { min-width:0; }
+    .brand__title { font-size:16px; }
+
+    /* タブのビューポート（中央） */
+    .topnav-viewport { min-width:0; overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+    .topnav-viewport::-webkit-scrollbar { display:none; }
+    .topnav-track { display:flex; flex-wrap:nowrap; gap:6px; width:max-content; align-items:center; }
+
+    .topnav-track .mdc-button { min-width:auto; }
+    .tab-btn { display:inline-flex; align-items:center; justify-content:center;
+      height:clamp(26px,3vw,32px); padding:0 clamp(6px,1.2vw,10px); font-size:clamp(11px,1.1vw,13px);
+      white-space:nowrap; flex:0 0 auto; }
+
+    .topbar-actions { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; flex:0 0 auto; }
+
+    .auth-button.auth--compact{ --pp-btn-h:26px; --pp-btn-px:8px; min-height:var(--pp-btn-h); height:var(--pp-btn-h); padding:0 var(--pp-btn-px); line-height:1; font-size:12px; letter-spacing:.2px; }
+    .auth-button.auth--compact .mdc-button__label{ transform:translateY(-.5px); }
+
+    .user-chip.user-chip--compact{ font-size:12px; padding:2px 6px; border-radius:9999px; background:rgba(255,255,255,.25);
+      white-space:nowrap; max-width:24ch; overflow:hidden; text-overflow:ellipsis; }
+
+    .menu-button { margin-right:4px; }
+  `],
   template: `
     <mat-sidenav-container class="shell">
-      <!-- 左サイド（幅は styles.scss の --sidebar で調整） -->
       <mat-sidenav
         #drawer
         class="shell__sidenav sidenav--dark"
         [mode]="(isHandset$ | async) ? 'over' : 'side'"
         [opened]="!(isHandset$ | async)"
-        [autoFocus]="false"
-      >
+        [autoFocus]="false">
         <div class="sidenav__wrapper">
           <pp-project-switcher></pp-project-switcher>
         </div>
       </mat-sidenav>
 
-      <!-- 右側コンテンツ -->
       <mat-sidenav-content class="shell__content">
         <mat-toolbar color="primary" class="topbar">
-          <!-- モバイル用メニュー -->
-          <button
-            mat-icon-button
-            class="menu-button"
-            (click)="drawer.toggle()"
-            *ngIf="isHandset$ | async"
-            aria-label="Toggle navigation"
-          >
-            <mat-icon>menu</mat-icon>
-          </button>
-
-          <!-- ブランド -->
+          <!-- 左：メニュー + ブランド -->
           <div class="brand" aria-label="ProblemPath">
+            <button mat-icon-button class="menu-button" (click)="drawer.toggle()" *ngIf="isHandset$ | async" aria-label="Toggle navigation">
+              <mat-icon>menu</mat-icon>
+            </button>
             <span class="brand__title">ProblemPath</span>
           </div>
 
-          <!-- タブ（押しやすい“ボタン”表示） -->
-          <nav class="topnav minw-0" aria-label="Primary navigation">
-            <a
-              mat-stroked-button
-              class="tab-btn"
-              *ngFor="let link of navLinks"
-              [routerLink]="link.path"
-              routerLinkActive="active"
-              [routerLinkActiveOptions]="{ exact: link.exact }"
-            >
-              {{ link.label | translate }}
-            </a>
-          </nav>
+          <!-- 中央：タブ -->
+          <div class="topnav-viewport" aria-label="Primary navigation">
+            <div class="topnav-track">
+              <a mat-stroked-button class="tab-btn" *ngFor="let link of navLinks"
+                 [routerLink]="link.path"
+                 routerLinkActive="active"
+                 [routerLinkActiveOptions]="{ exact: link.exact }">
+                {{ link.label | translate }}
+              </a>
+            </div>
+          </div>
 
-          <span class="spacer"></span>
-
-          <!-- 右側：サインイン/アウト＆ユーザー名（40%縮小） -->
-          <div class="topbar-actions topbar-right minw-0" role="group" aria-label="Toolbar actions">
+          <!-- 右：名前変更 → アカウント名 → サインアウト -->
+          <div class="topbar-actions" role="group" aria-label="Toolbar actions">
             <ng-container *ngIf="auth.loggedIn$ | async; else signIn">
-              <button mat-stroked-button type="button" class="auth-button auth--compact" (click)="auth.signOut()">
-                {{ 'auth.signOut' | translate }}
+              <button mat-stroked-button type="button" class="auth-button auth--compact" (click)="openEditName()">
+                名前変更
               </button>
               <span class="user-chip user-chip--compact">
                 {{ (auth.displayName$ | async) || ('auth.signedIn' | translate) }}
               </span>
+              <button mat-stroked-button type="button" class="auth-button auth--compact" (click)="auth.signOut()">
+                {{ 'auth.signOut' | translate }}
+              </button>
             </ng-container>
 
             <ng-template #signIn>
@@ -105,7 +242,14 @@ import { getAuth } from '@angular/fire/auth';
                 type="button"
                 class="auth-button auth--compact"
                 (click)="auth.signInWithGoogle({ forceChoose: true })">
-                {{ 'auth.signIn' | translate }}
+                Googleでログイン
+              </button>
+              <button
+                mat-stroked-button
+                type="button"
+                class="auth-button auth--compact"
+                (click)="openEmailLogin()">
+                メールでログイン
               </button>
             </ng-template>
           </div>
@@ -130,20 +274,23 @@ export class App {
   ];
 
   readonly isHandset$: Observable<boolean>;
-
   @ViewChild('drawer') drawer!: MatSidenav;
 
   constructor(
     private theme: ThemeService,
     private breakpoint: BreakpointObserver,
     public auth: AuthService,
-    private _msg: MessagingService
-  ) {
-    this.isHandset$ = this.breakpoint.observe(Breakpoints.Handset).pipe(map(result => result.matches));
+    private _msg: MessagingService,
+    private dialog: MatDialog
+  ){
+    this.isHandset$ = this.breakpoint.observe(Breakpoints.Handset).pipe(map(r => r.matches));
   }
 
-  ngOnInit() {
-    this.theme.init();
-  }
+  ngOnInit(){ this.theme.init(); }
 
+  openEmailLogin(){ this.dialog.open(EmailLoginDialog, { disableClose: true }); }
+  openEditName(){ this.dialog.open(EditNameDialog, { disableClose: true }); }
 }
+
+
+
