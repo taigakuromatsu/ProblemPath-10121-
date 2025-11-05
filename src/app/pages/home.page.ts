@@ -20,7 +20,7 @@ import { MembersService } from '../services/members.service';
 import { InvitesService, InviteRole } from '../services/invites.service';
 import { Problem, Issue, Task } from '../models/types';
 import { Observable, BehaviorSubject, of, combineLatest, firstValueFrom, Subscription } from 'rxjs';
-import { switchMap, take, map, startWith } from 'rxjs/operators';
+import { switchMap, take, map, startWith, catchError } from 'rxjs/operators';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { serverTimestamp } from 'firebase/firestore';
 import { DraftsService } from '../services/drafts.service';
@@ -51,7 +51,10 @@ type ProblemWithDef = Problem & {
     updatedBy?: string;
   };
 };
+
 type EditProblemField = 'phenomenon' | 'cause' | 'solution' | 'goal';
+
+type HomeViewHint = 'none' | 'viewer' | 'projectLost';
 
 @Component({
   standalone: true,
@@ -66,7 +69,10 @@ type EditProblemField = 'phenomenon' | 'cause' | 'solution' | 'goal';
   styleUrls: ['./home.page.scss']
 })
 export class HomePage implements OnInit, OnDestroy {
+
   readonly NEW_OPTION_VALUE = '__NEW__';
+
+  hint$!: Observable<HomeViewHint>; 
 
   problems$!: Observable<Problem[]>;
   selectedProblemId: string | null = null;
@@ -259,6 +265,22 @@ export class HomePage implements OnInit, OnDestroy {
         return rxDocData(ref).pipe(
           map((d: any) => ({ enabled: d?.enabled, lastTokenSavedAt: d?.lastTokenSavedAt, lastError: d?.lastError })),
           switchMap(data => of(data))
+        );
+      })
+    );
+    this.hint$ = combineLatest([this.currentProject.projectId$, this.auth.uid$]).pipe(
+      switchMap(([pid, uid]) => {
+        // プロジェクト未選択 or 未ログイン → 何も出さない
+        if (!pid || pid === 'default' || !uid) return of<HomeViewHint>('none');
+    
+        // メンバーシップを直接確認（存在しない/読めない＝喪失）
+        const ref = nativeDoc(this.fs as any, `projects/${pid}/members/${uid}`);
+        return rxDocData(ref).pipe(
+          map((m: any | undefined) => {
+            if (!m) return 'projectLost' as HomeViewHint;       // 削除 or 権限喪失
+            return m.role === 'viewer' ? 'viewer' : 'none';      // 純粋なViewer
+          }),
+          catchError(() => of<HomeViewHint>('projectLost'))      // permission-denied も喪失扱い
         );
       })
     );

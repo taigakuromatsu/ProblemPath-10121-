@@ -48,17 +48,25 @@
   </header>
 
   <!-- Alerts -->
-  <div class="page-alerts" *ngIf="auth.loggedIn$ | async">
-    <mat-card class="card alert-card alert-card--offline" *ngIf="!(isOnline$ | async)">
-      <mat-icon>signal_wifi_off</mat-icon>
-      <span>{{ 'warn.offlineEditBlocked' | translate }}</span>
-    </mat-card>
+<div class="page-alerts" *ngIf="auth.loggedIn$ | async">
+  <!-- オフライン -->
+  <mat-card class="card alert-card alert-card--offline" *ngIf="!(isOnline$ | async)">
+    <mat-icon>signal_wifi_off</mat-icon>
+    <span>{{ 'warn.offlineEditBlocked' | translate }}</span>
+  </mat-card>
 
-    <mat-card class="card alert-card alert-card--viewer" *ngIf="!(members.isEditor$ | async)">
-      <mat-icon>visibility</mat-icon>
-      <span>{{ 'warn.viewerOnly' | translate }}</span>
-    </mat-card>
-  </div>
+  <!-- プロジェクト喪失（削除 / 権限喪失） -->
+  <mat-card class="card alert-card alert-card--lost" *ngIf="(hint$ | async) === 'projectLost'">
+    <mat-icon>info</mat-icon>
+    <span>{{ 'home.projectLost' | translate }}</span>
+  </mat-card>
+
+  <!-- 純粋に Viewer のときだけ -->
+  <mat-card class="card alert-card alert-card--viewer" *ngIf="(hint$ | async) === 'viewer'">
+    <mat-icon>visibility</mat-icon>
+    <span>{{ 'warn.viewerOnly' | translate }}</span>
+  </mat-card>
+</div>
 
   <ng-container *ngIf="auth.loggedIn$ | async; else guestState">
     <div class="home-layout">

@@ -4,6 +4,8 @@
     "lead": "Select a Problem and edit its child Issues / Tasks.",
     "needSignIn": "Sign-in is required to edit. Use the “Sign in” button above.",
     "viewOnlyHint": "You can view via Tree / Board / Schedule.",
+    "projectLost": "The selected project has been deleted or your access has been lost. Please select another project from the list or create a new one.",
+    "viewerHint": "You are currently a Viewer in this project. Edit buttons are hidden.",
     "notifications": {
       "title": "Latest notifications",
       "lead": "Check the history of foreground notifications.",
@@ -548,7 +550,7 @@
       "deleted": "Project deleted",
       "adminCannotLeave": "Admins cannot leave from here",
       "left": "Left the project",
-      "projectLost": "The project you were viewing was deleted or your permissions were lost, so you were returned to the home page."
+      "projectLost": "The selected project has been deleted or your access has been lost. Please select another project from the list or create a new one."
     },
     "confirm": {
       "delete": "This will permanently delete the project. Continue?",
