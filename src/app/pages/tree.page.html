@@ -258,11 +258,12 @@
               <div class="detail-pane detail-pane--files" *ngSwitchCase="'files'">
                 <section class="attachments">
                   <h3>📎 {{ 'files.title' | translate }}</h3>
+              
                   <div class="upload-bar">
+                    <!-- ここは元のまま -->
                     <label class="filepick"
-                          [class.is-disabled]="uploadBusy || !(canEdit$ | async)"
-                          [attr.aria-disabled]="uploadBusy || !(canEdit$ | async) ? 'true' : null">
-                      <!-- ネイティブ input は視覚的に隠す -->
+                           [class.is-disabled]="uploadBusy || !(canEdit$ | async)"
+                           [attr.aria-disabled]="uploadBusy || !(canEdit$ | async) ? 'true' : null">
                       <input
                         type="file"
                         #fileInput
@@ -271,7 +272,6 @@
                         (change)="rememberPickedNames($event); onPickFiles($event)"
                         [disabled]="uploadBusy || !(canEdit$ | async)"
                       />
-                      <!-- 疑似ボタン：キーボード操作も可にする -->
                       <span class="filepick__btn"
                             tabindex="0"
                             (keydown.enter)="fileInput.click()"
@@ -280,21 +280,24 @@
                         {{ 'files.pick' | translate }}
                       </span>
                     </label>
-                  
-                    <!-- 選択ファイル名（先頭 + 件数）を任意表示 -->
+              
                     <span class="filepick__note" *ngIf="lastPickedNames?.length">
                       {{ lastPickedNames[0] }}<ng-container *ngIf="lastPickedNames.length > 1">
                         &nbsp;+{{ lastPickedNames.length - 1 }}
                       </ng-container>
                     </span>
-                  
+              
                     <span class="muted" *ngIf="uploadBusy">{{ 'files.uploading' | translate }}</span>
                   </div>
-                  
-
+              
+                  <!-- ▼ ここから一覧 & サムネ -->
                   <div class="attachment-list" *ngIf="attachments$ | async as ats; else loadingAttachments">
-                    <div class="empty-state" *ngIf="!ats.length">{{ 'common.none' | translate }}</div>
+                    <div class="empty-state" *ngIf="!ats.length">
+                      {{ 'common.none' | translate }}
+                    </div>
+              
                     <div class="attachment-item" *ngFor="let a of ats">
+                      <!-- 上段: 開く / 削除 -->
                       <div class="attachment-actions">
                         <a *ngIf="a.downloadURL"
                            mat-stroked-button
@@ -303,30 +306,53 @@
                            rel="noopener">
                           {{ 'files.open' | translate }}
                         </a>
-                    
-                        <!-- 削除ボタン: 作成者本人 & 編集権限ありのときだけ表示 -->
+              
+                        <!-- 削除: アップロードした本人 かつ 編集権限あり のときだけ -->
                         <button
                           mat-button
                           color="warn"
                           type="button"
                           (click)="removeAttachment(a)"
-                          *ngIf="(auth.uid$ | async) === a.createdBy && (canEdit$ | async)"
-                        >
+                          *ngIf="(auth.uid$ | async) === a.createdBy && (canEdit$ | async)">
                           {{ 'common.delete' | translate }}
                         </button>
                       </div>
+              
+                      <!-- 下段: プレビュー -->
+                      <div class="attachment-preview" *ngIf="a.downloadURL">
+                        <!-- 画像ならサムネ -->
+                        <img
+                          *ngIf="a.contentType?.startsWith('image/')"
+                          [src]="a.downloadURL!"
+                          [alt]="a.name"
+                          loading="lazy"
+                          class="attachment-thumb"
+                        />
+              
+                        <!-- 画像以外 (PDF 等) はアイコン＋名前 -->
+                        <div *ngIf="!a.contentType?.startsWith('image/')"
+                             class="attachment-preview__file">
+                          <mat-icon>description</mat-icon>
+                          <span class="attachment-name">{{ a.name }}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
+              
                   <ng-template #loadingAttachments>
                     <div class="empty-state">{{ 'common.loading' | translate }}</div>
                   </ng-template>
                 </section>
               </div>
+              
             </div>
           </div>
         </ng-container>
-        <ng-template #emptyDetail>
-          <div class="detail-empty">{{ 'comment.emptyHint' | translate }}</div>
+        <ng-template #emptyDetail> 
+          <div class="detail-empty-container">
+            <div class="detail-empty">{{ 'comment.emptyHint' | translate }}</div>
+            <div class="empty-subtitle">{{ 'comment.emptySubtitle' | translate }}</div>
+          </div>
         </ng-template>
       </aside>
     </div>

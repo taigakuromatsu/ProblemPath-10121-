@@ -387,7 +387,8 @@
     "placeholder": "Type a comment…",
     "post": "Post",
     "update": "Update",
-    "noneYet": "No comments yet"
+    "noneYet": "No comments yet",
+    "emptySubtitle": "Comments and files can only be deleted by the creator."
   },
   "board": {
     "offlineNotice": "You are offline. Moving/updating cards and changing assignees are disabled.",
