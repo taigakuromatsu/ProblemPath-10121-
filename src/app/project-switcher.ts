@@ -200,15 +200,33 @@ export class ProjectSwitcher implements OnDestroy {
   }
 
   private handleProjectLost(_reason: 'removed'|'deleted'|'error') {
+    // ▼ サインアウト中: アラート出さずに全部掃除
+    if ((this.authSvc as any).isSigningOut) {
+      this.current.set(null);
+      this.selected = null;
+      this.prevSelected = null;
+      this.liveRole = null;
+      this.stopAllWatchers();        // ← サインアウト時だけ全停止
+      this.cdr.markForCheck();
+      return;
+    }
+  
+    // ▼ 通常の「プロジェクト喪失」（削除 / 追放 / エラー）
+    //    → 選択解除＋そのプロジェクトの membership watcher だけ止める
+    //    → memberships リスト監視は生かす（一覧を正しく更新させるため）
     this.current.set(null);
     this.selected = null;
     this.prevSelected = null;
     this.liveRole = null;
-    this.stopMembershipWatch = undefined;
-    this.stopMembershipsListWatch = undefined;
+  
+    this.stopProjectMembershipWatch();   // ★ここだけ
+    // this.stopMembershipsListWatcher(); は呼ばない
+  
     this.cdr.markForCheck();
     this.router.navigateByUrl('/', { replaceUrl: true });
-    try { alert(this.i18n.instant('projectSwitcher.alert.projectLost')); } catch {}
+    try {
+      alert(this.i18n.instant('projectSwitcher.alert.projectLost'));
+    } catch {}
   }
 
   ngOnInit() {
@@ -219,8 +237,7 @@ export class ProjectSwitcher implements OnDestroy {
       if (uid === this.currentUid) return;
       this.currentUid = uid ?? null;
 
-      this.stopMembershipWatch = undefined;
-      this.stopMembershipsListWatch = undefined;
+      this.stopAllWatchers();
 
       if (!uid) {
         this.projects = [];
@@ -228,6 +245,7 @@ export class ProjectSwitcher implements OnDestroy {
         this.selected = null;
         this.prevSelected = null;
         this.loading = false;
+        this.liveRole = null;
         this.cdr.markForCheck();
         return;
       }
@@ -250,8 +268,7 @@ export class ProjectSwitcher implements OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.stopMembershipWatch = undefined;
-    this.stopMembershipsListWatch = undefined;
+    this.stopAllWatchers();
     this.authSub?.unsubscribe();
   }
 
@@ -272,7 +289,9 @@ export class ProjectSwitcher implements OnDestroy {
     this.selected = pid;
     this.prevSelected = pid;
     this.liveRole = null;
-    this.stopMembershipWatch = undefined;
+
+    this.stopProjectMembershipWatch();
+
     if (pid && this.currentUid) this.startMembershipWatch(pid, this.currentUid);
     this.cdr.markForCheck();
   }
@@ -302,6 +321,25 @@ export class ProjectSwitcher implements OnDestroy {
         this.handleProjectLost('error');
       }
     );
+  }
+
+  private stopProjectMembershipWatch() {
+    if (this.stopMembershipWatch) {
+      try { this.stopMembershipWatch(); } catch {}
+      this.stopMembershipWatch = undefined;
+    }
+  }
+
+  private stopMembershipsListWatcher() {
+    if (this.stopMembershipsListWatch) {
+      try { this.stopMembershipsListWatch(); } catch {}
+      this.stopMembershipsListWatch = undefined;
+    }
+  }
+
+  private stopAllWatchers() {
+    this.stopProjectMembershipWatch();
+    this.stopMembershipsListWatcher();
   }
 
   private async reload(uid: string) {
@@ -354,7 +392,7 @@ export class ProjectSwitcher implements OnDestroy {
       this.selected = pid;
       this.prevSelected = pid;
       this.current.set(pid);
-      this.stopMembershipWatch = undefined;
+      this.stopProjectMembershipWatch();
       this.startMembershipWatch(pid, u.uid);
       alert(this.i18n.instant('projectSwitcher.alert.created'));
     } finally {
@@ -436,7 +474,10 @@ export class ProjectSwitcher implements OnDestroy {
       if (!confirm(this.i18n.instant('projectSwitcher.confirm.delete'))) return;
 
       this.current.set(null);
-      this.selected = null; this.prevSelected = null; this.stopMembershipWatch?.(); this.cdr.markForCheck();
+      this.selected = null;
+      this.prevSelected = null;
+      this.stopProjectMembershipWatch();
+      this.cdr.markForCheck();
 
       try {
         const invs = await getDocs(collection(this.fs as any, `projects/${pid}/invites`));
@@ -502,7 +543,10 @@ export class ProjectSwitcher implements OnDestroy {
       if (!confirm(this.i18n.instant('projectSwitcher.confirm.leave'))) return;
 
       this.current.set(null);
-      this.selected = null; this.prevSelected = null; this.stopMembershipWatch?.(); this.cdr.markForCheck();
+      this.selected = null;
+      this.prevSelected = null;
+      this.stopProjectMembershipWatch();
+      this.cdr.markForCheck();
 
       await this.unassignAllTasksForUser(pid, u.uid);
       await deleteDoc(doc(this.fs as any, `users/${u.uid}/memberships/${pid}`)).catch(() => {});

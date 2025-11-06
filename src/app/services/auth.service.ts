@@ -136,11 +136,22 @@ export class AuthService {
     // 以降は各画面側で members/{uid}.displayName を必要に応じて同期更新してください
   }
 
+  private _isSigningOut = false;
+  get isSigningOut(): boolean {
+    return this._isSigningOut;
+  }
+
   /** サインアウト */
   async signOut(): Promise<void> {
-    this.currentProject.set(null);
-    await signOut(this.auth);
-    this.didOnboard = false;
+    this._isSigningOut = true;
+    try {
+      this.currentProject.set(null);
+      await signOut(this.auth);
+      this.didOnboard = false;
+    } finally {
+      // 成功・失敗どちらでも必ず false に戻す
+      this._isSigningOut = false;
+    }
   }
 
   // ---- 初回ログイン時の自動作成 / 既存ユーザーは前回 or 最初のプロジェクトを選択 ----
