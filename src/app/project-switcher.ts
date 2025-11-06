@@ -40,20 +40,32 @@ import { arrayRemove } from 'firebase/firestore';
     .switcher__list { display: flex; flex-direction: column; gap: var(--gap-1); overflow-y: auto; padding-right: calc(2px * var(--m)); }
 
     .switcher__item {
-      display: inline-flex; align-items: center; gap: var(--gap-1);
-      width: 100%; border-radius: 999px; padding: calc(6px * var(--m)) calc(10px * var(--m));
-      justify-content: space-between; background: rgba(255, 255, 255, 0.08); color: inherit; text-align: left;
+      display: inline-flex; align-items: center; width: 100%;
+      border-radius: 999px; padding: calc(6px * var(--m)) calc(10px * var(--m));
+      background: rgba(255, 255, 255, 0.08); color: inherit; text-align: left;
       transition: background-color .15s ease, box-shadow .15s ease, border-color .15s ease;
       border: 1px solid rgba(255, 255, 255, 0.12); cursor: pointer; box-shadow: 0 10px 24px rgba(2, 6, 23, 0.35);
+      /* ここ重要：中寄せ用に内部ラッパを中央配置 */
+      justify-content: center;
     }
     .switcher__item:hover { background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.22); }
     .switcher__item.is-active { background: color-mix(in srgb, var(--accent-blue) 30%, rgba(255, 255, 255, 0.08) 70%); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-blue) 55%, transparent); border-color: color-mix(in srgb, var(--accent-blue) 45%, transparent); }
     .switcher__item:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
     .switcher__item[disabled] { opacity: .5; cursor: default; }
 
-    .label { display: inline-flex; align-items: center; gap: var(--gap-1); min-width: 0; flex: 1 1 auto; }
+    /* 中寄せ用の内側コンテナ：横幅を少し狭めて左右に余白を持たせる */
+    .switcher__inner {
+      display: inline-flex; align-items: center; gap: calc(10px * var(--m));
+      width: 100%; max-width: 88%; /* ← ここで両端に余白を確保（お好みで 82–92% 程度） */
+      justify-content: space-between;
+      margin-inline: auto;  /* ボタン内で中央寄せ */
+      min-width: 0;
+    }
+
+    .label { display: inline-flex; align-items: center; gap: var(--gap-1); min-width: 0; }
     .switcher__dot { width: calc(8px * var(--m)); height: calc(8px * var(--m)); border-radius: 50%; background: color-mix(in srgb, var(--accent-blue) 60%, transparent); flex-shrink: 0; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12); }
-    .switcher__name { flex: 1 1 auto; font-weight: 600; line-height: 1.2; min-width: 0; font-size: calc(13px * var(--m)); color: rgba(255, 255, 255, 0.95); }
+    .switcher__name { font-weight: 600; line-height: 1.2; min-width: 0; font-size: calc(13px * var(--m)); color: rgba(255, 255, 255, 0.95); }
+    .switcher__name.no-truncate { white-space: nowrap; }
     .switcher__role { font-size: calc(11px * var(--m)); color: rgba(255, 255, 255, 0.6); flex-shrink: 0; }
 
     .switcher__placeholder { font-size: calc(12px * var(--m)); color: rgba(255, 255, 255, 0.64); padding: var(--pad-1); border: 1px dashed rgba(255, 255, 255, 0.18); border-radius: var(--radius); text-align: center; background: rgba(255, 255, 255, 0.04); }
@@ -84,11 +96,13 @@ import { arrayRemove } from 'firebase/firestore';
           (click)="p.pid !== selected ? onChange(p.pid) : null"
           [attr.aria-pressed]="p.pid === selected"
         >
-          <span class="label">
-            <span class="switcher__dot"></span>
-            <span class="switcher__name" [title]="p.name">{{ p.name }}</span>
+          <span class="switcher__inner">
+            <span class="label">
+              <span class="switcher__dot"></span>
+              <span class="switcher__name" [title]="p.name">{{ p.name }}</span>
+            </span>
+            <span class="switcher__role">{{ ('role.' + p.role + 'Label') | translate }}</span>
           </span>
-          <span class="switcher__role">{{ ('role.' + p.role + 'Label') | translate }}</span>
         </button>
       </div>
 
@@ -103,6 +117,14 @@ import { arrayRemove } from 'firebase/firestore';
           <mat-icon>add</mat-icon>
           <span>{{ 'projectSwitcher.new' | translate }}</span>
         </button>
+
+        <!-- 追加：プロジェクト名変更（管理者のみ） -->
+        <button mat-stroked-button type="button" (click)="renameProject()"
+          [disabled]="renaming || loading || !canRename || !(isOnline$ | async)">
+          <mat-icon>edit</mat-icon>
+          <span>{{ 'projectSwitcher.rename' | translate }}</span>
+        </button>
+
         <button mat-stroked-button color="warn" type="button" (click)="deleteProject()" [disabled]="deleting || loading || !canDelete || !(isOnline$ | async)">
           <mat-icon>delete</mat-icon>
           <span>{{ 'projectSwitcher.delete' | translate }}</span>
@@ -124,6 +146,7 @@ export class ProjectSwitcher implements OnDestroy {
   creating = false;
   deleting = false;
   leaving  = false;
+  renaming = false; // ← 追加
 
   isOnline$!: Observable<boolean>;
   private onlineNow = true;
@@ -150,41 +173,30 @@ export class ProjectSwitcher implements OnDestroy {
     this.stopMembershipsListWatch = onSnapshot(
       colRef,
       async (snap) => {
-        // memberships → MyProject[] へ変換（プロジェクト名の解決込み）
         const items = await Promise.all(
           snap.docs.map(async (d) => {
             const pid  = d.id;
             const role = (d.data() as any)?.role ?? 'viewer';
-            // プロジェクトが削除済みなら null を返して後で落とす
             const pSnap = await getDoc(doc(this.fs as any, `projects/${pid}`)).catch(() => null);
             if (!pSnap?.exists()) return null;
             const name = (pSnap.data() as any)?.meta?.name ?? '(no name)';
             return { pid, name, role } as MyProject;
           })
         );
-  
         const list = (items.filter(Boolean) as MyProject[]);
-  
-        // 現在選択中が消えたかを検知
         const removedCurrent = this.selected && !list.some(p => p.pid === this.selected);
-  
-        // 一覧を即時反映
         this.projects = list;
-  
+
         if (removedCurrent) {
-          // 選択中がなくなったら即座に退避（ホームへ）
           this.handleProjectLost('deleted');
         } else {
           this.cdr.markForCheck();
         }
       },
-      // エラー時は最終手段として一度だけ読み直し
       (_err) => this.reload(uid)
     );
   }
-  
 
-  // --- プロジェクト喪失時の集中処理（ホームへ退避） ---
   private handleProjectLost(_reason: 'removed'|'deleted'|'error') {
     this.current.set(null);
     this.selected = null;
@@ -193,30 +205,22 @@ export class ProjectSwitcher implements OnDestroy {
     this.stopMembershipWatch = undefined;
     this.stopMembershipsListWatch = undefined;
     this.cdr.markForCheck();
-
-    // 表示中ページの購読を即座に破棄させるためホームに遷移
     this.router.navigateByUrl('/', { replaceUrl: true });
-
-    // 軽い通知（後で MatSnackBar に差し替え可）
     try { alert(this.i18n.instant('projectSwitcher.alert.projectLost')); } catch {}
   }
 
   ngOnInit() {
-    // オンライン状態
     this.isOnline$ = this.network.isOnline$;
     this.isOnline$.subscribe(v => { this.onlineNow = !!v; });
 
-    // UID 監視：サインイン/アウトに追従
     this.authSub = this.authSvc.uid$.subscribe(async (uid) => {
       if (uid === this.currentUid) return;
       this.currentUid = uid ?? null;
 
-      // 既存 watch の張り替え
       this.stopMembershipWatch = undefined;
       this.stopMembershipsListWatch = undefined;
 
       if (!uid) {
-        // サインアウト
         this.projects = [];
         this.current.set(null);
         this.selected = null;
@@ -226,7 +230,6 @@ export class ProjectSwitcher implements OnDestroy {
         return;
       }
 
-      // サインイン：一覧ウォッチ開始＆初期ロード
       this.startMembershipsListWatch(uid);
       await this.reload(uid);
 
@@ -276,8 +279,9 @@ export class ProjectSwitcher implements OnDestroy {
     if (this.liveRole) return this.liveRole;
     return this.projects.find(p => p.pid === this.selected)?.role ?? null;
   }
-  get canDelete() { return this.selectedRole === 'admin'; }
-  get canLeave()  { return this.selectedRole === 'member' || this.selectedRole === 'viewer'; }
+  get canDelete()  { return this.selectedRole === 'admin'; }
+  get canLeave()   { return this.selectedRole === 'member' || this.selectedRole === 'viewer'; }
+  get canRename()  { return this.selectedRole === 'admin'; } // ← 追加
 
   private startMembershipWatch(pid: string, uid: string) {
     const ref = doc(this.fs as any, `projects/${pid}/members/${uid}`);
@@ -288,7 +292,6 @@ export class ProjectSwitcher implements OnDestroy {
           this.handleProjectLost('removed');
           return;
         }
-        // ← 追加：liveRole を “実ドキュメント” から更新
         const data = snap.data() as any;
         this.liveRole = (data?.role ?? null) as any;
         this.cdr.markForCheck();
@@ -354,6 +357,41 @@ export class ProjectSwitcher implements OnDestroy {
       alert(this.i18n.instant('projectSwitcher.alert.created'));
     } finally {
       this.creating = false; this.cdr.markForCheck();
+    }
+  }
+
+  // === 追加：プロジェクト名変更 ===
+  async renameProject() {
+    if (!await this.requireOnline()) return;
+    try {
+      this.renaming = true; this.cdr.markForCheck();
+      const u = (this.authSvc as any).auth?.currentUser;
+      const pid = this.selected;
+      if (!u || !pid) return;
+
+      // 管理者チェック
+      const memberSnap = await getDoc(doc(this.fs as any, `projects/${pid}/members/${u.uid}`));
+      const myRole = memberSnap.exists() ? (memberSnap.data() as any).role : null;
+      if (myRole !== 'admin') { alert(this.i18n.instant('projectSwitcher.alert.renameOnlyAdmin')); return; }
+
+      // 現在名の取得
+      const projSnap = await getDoc(doc(this.fs as any, `projects/${pid}`));
+      const currentName = projSnap.exists() ? ((projSnap.data() as any)?.meta?.name ?? '') : '';
+
+      const newName = prompt(this.i18n.instant('projectSwitcher.prompt.rename'), currentName || 'Project');
+      if (!newName || newName.trim() === currentName) return;
+
+      await setDoc(
+        doc(this.fs as any, `projects/${pid}`),
+        { meta: { name: newName.trim(), updatedAt: serverTimestamp() } },
+        { merge: true }
+      );
+
+      // 表示更新
+      await this.reload(u.uid);
+      alert(this.i18n.instant('projectSwitcher.alert.renamed'));
+    } finally {
+      this.renaming = false; this.cdr.markForCheck();
     }
   }
 

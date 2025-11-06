@@ -23,20 +23,62 @@ service cloud.firestore {
       return newRole in ['admin', 'member', 'viewer'];
     }
 
-    // ---- プロジェクトツリー ----
     match /projects/{projectId} {
 
-      // Analytics summary (集計結果のダッシュボード用：全体)
+      // ===== Invites（招待リンク）=====
+      // 招待ドキュメントの妥当性チェック
+      function validInvite(d) {
+        return d.keys().hasOnly([
+          'email',        // 招待先メール（必須）
+          'role',         // 付与ロール（必須）
+          'createdBy',    // 作成者UID（必須）
+          'createdAt',    // 作成時刻（必須）
+          // 以下は任意
+          'status',       // 'active' | 'revoked' | 'accepted' など
+          'expiresAt',    // 期限（epoch秒 or timestamp）
+          'acceptedBy',   // 受諾者UID
+          'acceptedAt'    // 受諾時刻
+        ])
+        && (d.email is string) && d.email.size() > 3 && d.email.size() <= 320
+        && isValidRole(d.role)
+        && (d.createdBy is string) && d.createdBy == request.auth.uid
+        && (d.createdAt is timestamp)
+        && (!('status' in d) || (d.status is string && d.status.size() <= 30))
+        && (!('expiresAt' in d) || (d.expiresAt is timestamp))
+        && (!('acceptedBy' in d) || (d.acceptedBy is string))
+        && (!('acceptedAt' in d) || (d.acceptedAt is timestamp));
+      }
+
+      // 管理者 or 招待された本人のみ招待の中身を見られる
+      match /invites/{inviteId} {
+        allow read: if isAdmin(projectId)
+                    || (isSignedIn()
+                        && request.auth.token.email != null
+                        && resource.data.email == request.auth.token.email);
+
+        // 作成：管理者のみ・payload検証
+        allow create: if isAdmin(projectId)
+                      && validInvite(request.resource.data);
+
+        // 更新：管理者のみ・一部フィールドのみ変更可（取り消し/期限延長/ロール調整/受諾記録）
+        allow update: if isAdmin(projectId)
+                      && request.resource.data.diff(resource.data).changedKeys()
+                         .hasOnly(['status','expiresAt','role','acceptedBy','acceptedAt'])
+                      && (!('role' in request.resource.data) || isValidRole(request.resource.data.role));
+
+        // 削除：管理者のみ
+        allow delete: if isAdmin(projectId);
+      }
+
+      // ===== Analytics（既存）=====
       match /analytics/currentSummary {
         allow read: if isMember(projectId);
         allow create, update, delete: if false;
       }
-
-      // Analytics per-user（個人用サマリー：本人のみ閲覧可）
       match /analyticsPerUser/{uid} {
         allow read: if isMember(projectId)
                     && request.auth != null
-                    && request.auth.uid == uid; // 管理者にも読ませる場合は「|| isAdmin(projectId)」を追加
+                    && request.auth.uid == uid;
         allow create, update, delete: if false;
       }
 
@@ -54,7 +96,7 @@ service cloud.firestore {
         allow create, update, delete: if false;
       }
 
-      // 新規プロジェクトの作成
+      // 新規プロジェクト作成
       allow create: if isSignedIn()
         && request.resource.data.keys().hasOnly(['meta'])
         && request.resource.data.meta.keys().hasOnly(['name','createdBy','createdAt'])
@@ -63,11 +105,11 @@ service cloud.firestore {
       // 既存プロジェクトの更新/削除は admin のみ
       allow update, delete: if isAdmin(projectId);
 
-      // members 管理
+      // ===== members（既存）=====
       match /members/{uid} {
         allow read: if isMember(projectId);
 
-        // --- (1) 本人が displayName / email を更新 ---
+        // (1) 本人が displayName / email を更新
         allow update: if isSignedIn()
           && request.auth.uid == uid
           && request.resource.data.diff(resource.data).changedKeys().hasOnly(['displayName','email'])
@@ -77,12 +119,12 @@ service cloud.firestore {
           && request.auth.token.email != null
           && request.resource.data.email == request.auth.token.email;
 
-        // --- (2) admin 作成（初回プロジェクト or admin招待） ---
+        // (2) admin 作成（自己作成 or admin招待）
         allow create: if isSignedIn()
           && request.auth.uid == uid
           && request.resource.data.role == 'admin'
           && (
-            // 自己作成（プロジェクト作成時）
+            // 自己作成
             request.resource.data.keys().hasOnly(['role','joinedAt','displayName','email'])
             ||
             // 招待経由の admin 付与
@@ -91,11 +133,11 @@ service cloud.firestore {
               && request.auth.token.email != null
               && exists(/databases/$(database)/documents/projects/$(projectId)/invites/$(request.resource.data.inviteId))
               && get(/databases/$(database)/documents/projects/$(projectId)/invites/$(request.resource.data.inviteId)).data.email
-                == request.auth.token.email
+                 == request.auth.token.email
             )
           );
 
-        // --- (3) member/viewer の招待登録 ---
+        // (3) member/viewer の招待登録
         allow create: if isSignedIn()
           && request.auth.uid == uid
           && (request.resource.data.role in ['member','viewer'])
@@ -103,57 +145,35 @@ service cloud.firestore {
           && request.auth.token.email != null
           && exists(/databases/$(database)/documents/projects/$(projectId)/invites/$(request.resource.data.inviteId))
           && get(/databases/$(database)/documents/projects/$(projectId)/invites/$(request.resource.data.inviteId)).data.email
-            == request.auth.token.email;
+             == request.auth.token.email;
 
-        // --- (4) 管理者によるロール変更 ---
+        // (4) 管理者によるロール変更（role のみ）
         allow update: if isAdmin(projectId)
-        // 変更点は role のみ（joinedAt / displayName / email は変更不可）
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['role'])
-        && isValidRole(request.resource.data.role);
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly(['role'])
+          && isValidRole(request.resource.data.role);
 
-        // --- (5) 削除権限 ---
+        // (5) 削除
         allow delete: if isAdmin(projectId);
       }
 
-
-      // --- カンバン列(boardColumns)のバリデーション ---
+      // --- カンバン列（既存）---
       function isValidBoardColumn(col) {
         return col.keys().hasOnly([
-          'columnId',
-          'title',
-          'order',
-          'categoryHint',
-          'progressHint'
+          'columnId','title','order','categoryHint','progressHint'
         ])
-        && (!('title' in col)
-          || ((col.title is string)
-              && col.title.size() >= 0
-              && col.title.size() <= 120))
-        && (!('order' in col)
-          || (col.order is int || col.order is float))
-        && (!('categoryHint' in col)
-          || (col.categoryHint in ['not_started','in_progress','done']))
-        && (!('progressHint' in col)
-          || ((col.progressHint is int || col.progressHint is float)
-              && col.progressHint >= 0
-              && col.progressHint <= 100))
-        && (!('columnId' in col)
-          || (col.columnId is string && col.columnId.size() > 0 && col.columnId.size() <= 200));
+        && (!('title' in col) || ((col.title is string) && col.title.size() >= 0 && col.title.size() <= 120))
+        && (!('order' in col) || (col.order is int || col.order is float))
+        && (!('categoryHint' in col) || (col.categoryHint in ['not_started','in_progress','done']))
+        && (!('progressHint' in col) || ((col.progressHint is int || col.progressHint is float) && col.progressHint >= 0 && col.progressHint <= 100))
+        && (!('columnId' in col) || (col.columnId is string && col.columnId.size() > 0 && col.columnId.size() <= 200));
       }
-
       match /boardColumns/{columnId} {
-        // 読み取り：メンバーならOK
         allow read: if isMember(projectId);
-
-        // 作成・更新：エディターかつpayloadが妥当
-        allow create, update: if isEditor(projectId)
-          && isValidBoardColumn(request.resource.data);
-
-        // 削除：エディターならOK
+        allow create, update: if isEditor(projectId) && isValidBoardColumn(request.resource.data);
         allow delete: if isEditor(projectId);
       }
 
-      // Problems
+      // Problems / Issues / Tasks（既存）
       match /problems/{problemId} {
         allow read: if isMember(projectId);
 
@@ -166,12 +186,8 @@ service cloud.firestore {
             && (!('solution' in def) || (def.solution is string && def.solution.matches('^[\\s\\S]{0,1000}$')))
             && (!('updatedBy' in def) || def.updatedBy == request.auth.uid);
         }
-
         function validAttachmentData(d) {
-          return d.keys().hasOnly([
-                   'name','contentType','size','storagePath','downloadURL',
-                   'createdAt','updatedAt','createdBy'
-                 ])
+          return d.keys().hasOnly(['name','contentType','size','storagePath','downloadURL','createdAt','updatedAt','createdBy'])
                  && (d.name is string) && d.name.size() > 0 && d.name.size() <= 200
                  && (d.contentType is string) && d.contentType.size() > 0
                  && ((d.size is int) || (d.size is float)) && d.size >= 0 && d.size <= 20 * 1024 * 1024
@@ -181,11 +197,7 @@ service cloud.firestore {
         }
 
         allow create, update: if isEditor(projectId)
-          && (
-            !('problemDef' in request.resource.data)
-            || validProblemDef(request.resource.data.problemDef)
-          );
-
+          && ( !('problemDef' in request.resource.data) || validProblemDef(request.resource.data.problemDef) );
         allow delete: if isEditor(projectId);
 
         match /attachments/{attId} {
@@ -201,19 +213,13 @@ service cloud.firestore {
 
         match /comments/{commentId} {
           allow read: if isMember(projectId);
-          allow create: if isEditor(projectId)
-                        && request.resource.data.authorId == request.auth.uid;
-          allow update, delete: if (
-            (request.auth != null && resource.data.authorId == request.auth.uid)
-            || isAdmin(projectId)
-          );
+          allow create: if isEditor(projectId) && request.resource.data.authorId == request.auth.uid;
+          allow update, delete: if ((request.auth != null && resource.data.authorId == request.auth.uid) || isAdmin(projectId));
         }
 
         match /issues/{issueId} {
           allow read: if isMember(projectId);
-          // リンク機能を廃止したため、links の検証は削除
           allow create, update: if isEditor(projectId);
-
           allow delete: if isEditor(projectId);
 
           match /attachments/{attId} {
@@ -229,12 +235,8 @@ service cloud.firestore {
 
           match /comments/{commentId} {
             allow read: if isMember(projectId);
-            allow create: if isEditor(projectId)
-                          && request.resource.data.authorId == request.auth.uid;
-            allow update, delete: if (
-              (request.auth != null && resource.data.authorId == request.auth.uid)
-              || isAdmin(projectId)
-            );
+            allow create: if isEditor(projectId) && request.resource.data.authorId == request.auth.uid;
+            allow update, delete: if ((request.auth != null && resource.data.authorId == request.auth.uid) || isAdmin(projectId));
           }
 
           match /tasks/{taskId} {
@@ -254,48 +256,35 @@ service cloud.firestore {
 
             match /comments/{commentId} {
               allow read: if isMember(projectId);
-              allow create: if isEditor(projectId)
-                            && request.resource.data.authorId == request.auth.uid;
-              allow update, delete: if (
-                (request.auth != null && resource.data.authorId == request.auth.uid)
-                || isAdmin(projectId)
-              );
+              allow create: if isEditor(projectId) && request.resource.data.authorId == request.auth.uid;
+              allow update, delete: if ((request.auth != null && resource.data.authorId == request.auth.uid) || isAdmin(projectId));
             }
           }
         }
       }
-    } // end match /projects/{projectId}
+    } // end /projects/{projectId}
 
     // ---- users コレクション（本人専用のサブコレクション制御）----
     match /users/{uid} {
       allow read, write: if false;
 
       match /memberships/{projectId} {
-        // 読み取り：本人のみ
         allow read: if isSignedIn() && request.auth.uid == uid;
-        // 作成：本人のみ（招待受諾など）
         allow create: if isSignedIn() && request.auth.uid == uid;
-        // 更新：本人 もしくは 管理者。ただし管理者は role 以外をいじれない
         allow update: if isSignedIn() && (
-          // 本人が自由に更新（従来どおり）
-          request.auth.uid == uid
-          ||
-          // 管理者は role だけ変更可
+          request.auth.uid == uid ||
           ( isAdmin(projectId)
             && request.resource.data.diff(resource.data).changedKeys().hasOnly(['role'])
             && isValidRole(request.resource.data.role)
           )
         );
-        // 削除：本人 or 管理者（従来どおり）
         allow delete: if isSignedIn() && (request.auth.uid == uid || isAdmin(projectId));
       }
 
-       match /fcmTokens/{token} {
-          // 自分自身のみ読み取り可（get / list の両方を含む）
-          allow read: if isSignedIn() && request.auth.uid == uid;
-          // 作成・更新・削除も自分自身のみ
-          allow create, update, delete: if isSignedIn() && request.auth.uid == uid;
-        }
+      match /fcmTokens/{token} {
+        allow read: if isSignedIn() && request.auth.uid == uid;
+        allow create, update, delete: if isSignedIn() && request.auth.uid == uid;
+      }
 
       match /fcmStatus/{docId} {
         allow read: if isSignedIn() && request.auth.uid == uid;
@@ -313,6 +302,7 @@ service cloud.firestore {
     }
   }
 }
+
 
 
 

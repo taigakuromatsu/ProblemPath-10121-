@@ -48,29 +48,27 @@
   </header>
 
   <!-- Alerts -->
-<div class="page-alerts" *ngIf="auth.loggedIn$ | async">
-  <!-- オフライン -->
-  <mat-card class="card alert-card alert-card--offline" *ngIf="!(isOnline$ | async)">
-    <mat-icon>signal_wifi_off</mat-icon>
-    <span>{{ 'warn.offlineEditBlocked' | translate }}</span>
-  </mat-card>
+  <div class="page-alerts" *ngIf="auth.loggedIn$ | async">
+    <mat-card class="card alert-card alert-card--offline" *ngIf="!(isOnline$ | async)">
+      <mat-icon>signal_wifi_off</mat-icon>
+      <span>{{ 'warn.offlineEditBlocked' | translate }}</span>
+    </mat-card>
 
-  <!-- プロジェクト喪失（削除 / 権限喪失） -->
-  <mat-card class="card alert-card alert-card--lost" *ngIf="(hint$ | async) === 'projectLost'">
-    <mat-icon>info</mat-icon>
-    <span>{{ 'home.projectLost' | translate }}</span>
-  </mat-card>
+    <mat-card class="card alert-card alert-card--lost" *ngIf="(hint$ | async) === 'projectLost'">
+      <mat-icon>info</mat-icon>
+      <span>{{ 'home.projectLost' | translate }}</span>
+    </mat-card>
 
-  <!-- 純粋に Viewer のときだけ -->
-  <mat-card class="card alert-card alert-card--viewer" *ngIf="(hint$ | async) === 'viewer'">
-    <mat-icon>visibility</mat-icon>
-    <span>{{ 'warn.viewerOnly' | translate }}</span>
-  </mat-card>
-</div>
+    <mat-card class="card alert-card alert-card--viewer" *ngIf="(hint$ | async) === 'viewer'">
+      <mat-icon>visibility</mat-icon>
+      <span>{{ 'warn.viewerOnly' | translate }}</span>
+    </mat-card>
+  </div>
 
   <ng-container *ngIf="auth.loggedIn$ | async; else guestState">
     <div class="home-layout">
       <div class="utility-grid">
+        <!-- 招待 -->
         <mat-card class="card util-card invite-card" *ngIf="(members.isAdmin$ | async)">
           <div class="section-header">
             <div>
@@ -105,7 +103,7 @@
           </div>
         </mat-card>
 
-        <!-- メンバー管理（設定カードの位置に置換） -->
+        <!-- メンバー管理（2カラム分に拡張） -->
         <mat-card class="card util-card members-card">
           <div class="section-header">
             <div>
@@ -115,7 +113,7 @@
               <p class="section-subtitle">メンバー一覧の閲覧は全員可。ロール変更・削除は管理者のみ。</p>
             </div>
             <div class="section-actions no-wrap">
-              <!-- ここは将来「CSV出力」などを置けるよう確保。今は空のまま -->
+              <!-- 予備領域（CSV出力など） -->
             </div>
           </div>
 
@@ -184,12 +182,12 @@
           </div>
         </mat-card>
 
-
-        <mat-card class="card util-card language-card">
+        <!-- 言語とテーマ（縦積み） -->
+        <mat-card class="card util-card theme-card lang-theme-card">
           <div class="section-header">
             <div>
               <h2 class="section-title section-title--info no-truncate">
-                <mat-icon aria-hidden="true">language</mat-icon> {{ 'settings.languageTitle' | translate }}
+                <mat-icon aria-hidden="true">tune</mat-icon> 言語とテーマ
               </h2>
             </div>
           </div>
@@ -197,6 +195,7 @@
           <mat-divider></mat-divider>
 
           <div class="section-body">
+            <!-- 言語 -->
             <mat-form-field appearance="outline" class="full-width">
               <mat-label>{{ 'settings.languageSelect' | translate }}</mat-label>
               <mat-select [(ngModel)]="lang" (selectionChange)="onLangChange($event.value)">
@@ -205,21 +204,8 @@
               </mat-select>
               <mat-icon matSuffix>expand_more</mat-icon>
             </mat-form-field>
-          </div>
-        </mat-card>
 
-        <mat-card class="card util-card theme-card">
-          <div class="section-header">
-            <div>
-              <h2 class="section-title section-title--info no-truncate">
-                <mat-icon aria-hidden="true">dark_mode</mat-icon> {{ 'settings.themeTitle' | translate }}
-              </h2>
-            </div>
-          </div>
-
-          <mat-divider></mat-divider>
-
-          <div class="section-body">
+            <!-- テーマ -->
             <mat-form-field appearance="outline" class="full-width">
               <mat-label>{{ 'settings.themeSelect' | translate }}</mat-label>
               <mat-select [(ngModel)]="themeMode" (selectionChange)="onThemeChange($event.value)">
@@ -233,6 +219,7 @@
         </mat-card>
       </div>
 
+      <!-- 問題セクション（以下は既存のまま） -->
       <mat-card class="card problem-card">
         <div class="section-header problem-card__header">
           <div>
@@ -345,8 +332,6 @@
                       </div>
                     </header>
 
-                    <!-- → リンク機能は廃止 -->
-
                     <section class="issue-tasks">
                       <header class="tasks-header">
                         <h4 class="section-title section-title--info no-truncate">
@@ -354,6 +339,7 @@
                         </h4>
                       </header>
 
+                      <!-- （以下タスクUIは現状維持） -->
                       <form class="task-form" *ngIf="members.isEditor$ | async" (ngSubmit)="createTask(pid, i.id!)">
                         <div class="task-form__row">
                           <input [(ngModel)]="taskTitle[i.id!]" name="taskTitle-{{ i.id }}" [placeholder]="'task.placeholderNewTitle' | translate" required (ngModelChange)="onTaskTitleChange(i.id!, taskTitle[i.id!])" />
@@ -410,7 +396,6 @@
                               <span class="task-title text-1line no-truncate">{{ t.title }}</span>
                               <span class="task-template-chip" *ngIf="t.recurrenceTemplate">{{ 'recurrence.templateChip' | translate }}</span>
                             </div>
-                            <!-- テンプレの設定を見える化 -->
                             <div class="task-recur-meta" *ngIf="t.recurrenceTemplate">
                               <small>
                                 {{ 'recurrence.start' | translate }}: {{ t.recurrenceAnchorDate || '—' }}
@@ -458,7 +443,7 @@
         </ng-container>
       </mat-card>
     </div>
-    
+
     <!-- New Problem Dialog -->
     <div class="overlay" *ngIf="newProblemOpen">
       <div class="dialog">
@@ -552,5 +537,6 @@
     </mat-card>
   </ng-template>
 </section>
+
 
 

@@ -5,12 +5,14 @@ import { doc as nativeDoc } from 'firebase/firestore';
 import { docData as rxDocData } from 'rxfire/firestore';
 import { Observable, of } from 'rxjs';
 import { map, catchError, take } from 'rxjs/operators';
+import { Auth } from '@angular/fire/auth';
 
 export type InviteRole = 'admin'|'member'|'viewer';
 
 @Injectable({ providedIn: 'root' })
 export class InvitesService {
   private fs = inject(Firestore);
+  private auth = inject(Auth);
 
   private randomToken(len = 32): string {
     const arr = new Uint8Array(len);
@@ -22,14 +24,23 @@ export class InvitesService {
   async create(projectId: string, email: string, role: InviteRole) {
     const token = this.randomToken(24); // ドキュメントID = トークン
     const ref = doc(this.fs as any, `projects/${projectId}/invites/${token}`);
+
+    const uid = this.auth.currentUser?.uid || null;
+    if (!uid) throw new Error('Not signed in');
+
+    // ルールの validInvite() に完全準拠：
+    // keys は ['email','role','createdBy','createdAt','status','expiresAt','acceptedBy','acceptedAt'] のみ。
+    // 作成時は最小限だけ書く（余計なフィールドは書かない）。
     await setDoc(ref, {
       email,
       role,
+      createdBy: uid,
       createdAt: serverTimestamp(),
-      createdBy: null, // （必要ならUIDを入れてもOK）
-      redeemedBy: null,
-      redeemedAt: null,
+      status: 'active',
+      // expiresAt: serverTimestamp(), // 必要なら有効期限を別途設定
+      // acceptedBy/acceptedAt は受諾時にのみ付与
     });
+
     const origin = window.location.origin;
     return `${origin}/join?pid=${encodeURIComponent(projectId)}&token=${encodeURIComponent(token)}`;
   }
@@ -41,7 +52,7 @@ export class InvitesService {
       take(1),
       map((data: any) => {
         if (!data) return null;
-        if (data.redeemedBy) return null; // 使用済み扱い
+        if (data.acceptedBy) return null; // 使用済み扱い（ルールのキーに合わせる）
         return { id: token, ...data };
       }),
       catchError(err => {
@@ -57,14 +68,14 @@ export class InvitesService {
     const snap = await getDoc(ref);
     if (!snap.exists()) return null;
     const data = snap.data() as any;
-    if (data.redeemedBy) return null; // 使用済み扱い
+    if (data.acceptedBy) return null; // 使用済み扱い（ルールのキーに合わせる）
     return { id: token, ...data };
   }
 
-  /** 使用済みにマーキング（お好みで削除でもOK） */
+  /** 使用済みにマーキング（受諾記録） */
   async markRedeemed(projectId: string, token: string, uid: string) {
-    // シンプルに削除派
     const ref = doc(this.fs as any, `projects/${projectId}/invites/${token}`);
-    await setDoc(ref, { redeemedBy: uid, redeemedAt: serverTimestamp() }, { merge: true });
+    await setDoc(ref, { acceptedBy: uid, acceptedAt: serverTimestamp(), status: 'accepted' }, { merge: true });
   }
 }
+
