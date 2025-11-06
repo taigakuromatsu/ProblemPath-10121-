@@ -212,10 +212,18 @@ service cloud.firestore {
         }
 
         match /comments/{commentId} {
-          allow read: if isMember(projectId);
-          allow create: if isEditor(projectId) && request.resource.data.authorId == request.auth.uid;
-          allow update, delete: if ((request.auth != null && resource.data.authorId == request.auth.uid) || isAdmin(projectId));
-        }
+            allow read: if isMember(projectId);
+            allow create: if isEditor(projectId) && request.resource.data.authorId == request.auth.uid;
+            // 作成者のみ編集可。編集できる項目は body / updatedAt のみ
+            allow update: if isSignedIn()
+                          && resource.data.authorId == request.auth.uid
+                          && request.resource.data.diff(resource.data).changedKeys().hasOnly(['body','updatedAt'])
+                          && (request.resource.data.body is string)
+                          && request.resource.data.body.size() > 0
+                          && request.resource.data.body.size() <= 2000;
+            // 作成者のみ削除可（admin でも不可）
+            allow delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+          }
 
         match /issues/{issueId} {
           allow read: if isMember(projectId);

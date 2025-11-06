@@ -27,11 +27,11 @@
   gap: clamp(8px, 1vw, 12px);
   padding: clamp(12px, 1vw, 18px);
   border-radius: 14px;
-  border: 1px solid color-mix(in srgb, #e6e8ef 70%, transparent);
-  background: color-mix(in srgb, var(--surface) 97%, var(--accent-blue) 3%);
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.05);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--fg) 8%, transparent);
 }
-.intro-text h1 { margin: 0; font-size: var(--fs-t); line-height: 1.3; }
+.intro-text h1 { margin: 0; font-size: var(--fs-t); line-height: 1.3; color: var(--fg); }
 
 .intro-text h1.section-title--hero {
   font-size: clamp(20px, 3.6vw, 28px);
@@ -43,7 +43,7 @@
   }
 }
 
-.page-subtitle { margin: 0; color: var(--muted); }
+.page-subtitle { margin: 0; color: var(--pp-muted-fg); }
 
 .page-alerts {
   display: flex;
@@ -115,10 +115,10 @@
 .home-page .intro-card,
 .home-page .util-card,
 .home-page .problem-card {
-  background: #ffffff;
-  border: 1px solid #e6e8ef;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 14px;
-  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 18px 36px color-mix(in srgb, var(--fg) 8%, transparent);
   padding: clamp(16px, 1.8vw, 24px);
   display: flex;
   flex-direction: column;
@@ -127,20 +127,20 @@
 .home-page .intro-card { gap: clamp(12px, 1.2vw, 18px); align-self: stretch; }
 
 .util-card.invite-card {
-  border-color: color-mix(in srgb, var(--accent-blue) 32%, #e6e8ef 68%);
-  box-shadow: 0 16px 40px rgba(37, 99, 235, 0.18);
+  border-color: color-mix(in srgb, var(--accent-blue) 32%, var(--border) 68%);
+  box-shadow: 0 16px 40px color-mix(in srgb, var(--accent-blue) 30%, transparent);
 }
 .util-card.prefs-card {
-  border-color: color-mix(in srgb, var(--accent-blue) 22%, #e6e8ef 78%);
-  background: color-mix(in srgb, #f8fbff 75%, #ffffff 25%);
+  border-color: color-mix(in srgb, var(--accent-blue) 22%, var(--border) 78%);
+  background: color-mix(in srgb, var(--surface-subtle) 75%, var(--surface) 25%);
 }
 .util-card.language-card {
-  border-color: color-mix(in srgb, #7c3aed 32%, #e6e8ef 68%);
-  box-shadow: 0 14px 36px rgba(124, 58, 237, 0.18);
+  border-color: color-mix(in srgb, #7c3aed 32%, var(--border) 68%);
+  box-shadow: 0 14px 36px color-mix(in srgb, #7c3aed 30%, transparent);
 }
 .util-card.theme-card {
-  border-color: color-mix(in srgb, #16a34a 32%, #e6e8ef 68%);
-  box-shadow: 0 14px 36px rgba(22, 163, 74, 0.18);
+  border-color: color-mix(in srgb, #16a34a 32%, var(--border) 68%);
+  box-shadow: 0 14px 36px color-mix(in srgb, #16a34a 30%, transparent);
 }
 
 .section-header {
@@ -154,9 +154,9 @@
 }
 .section-header > * { min-width: 0; max-width: 100%; box-sizing: border-box; }
 
-.section-title { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
+.section-title { display: inline-flex; align-items: center; gap: 8px; margin: 0; color: var(--fg); }
 .section-title mat-icon { font-size: 20px; height: 20px; width: 20px; }
-.section-subtitle { margin: clamp(4px, 0.6vw, 8px) 0 0; color: var(--muted); }
+.section-subtitle { margin: clamp(4px, 0.6vw, 8px) 0 0; color: var(--pp-muted-fg); }
 
 .section-actions,
 .actions {
@@ -178,8 +178,8 @@
 
 /* ===== 下段（問題カードなど）は既存の見た目を維持 ===== */
 .problem-card__section { display: flex; flex-direction: column; gap: clamp(12px, 1.2vw, 20px); }
-.problem-card__divider { margin: clamp(16px, 2vw, 28px) 0; border-color: #eef1f5; }
-.home-page mat-divider { border-color: #eef1f5; }
+.problem-card__divider { margin: clamp(16px, 2vw, 28px) 0; border-color: var(--divider); }
+.home-page mat-divider { border-color: var(--divider); }
 
 /* 共通フォーム */
 .full-width { width: 100%; }
@@ -251,8 +251,8 @@
 .issue-list { display: flex; flex-direction: column; gap: var(--gap-2); }
 .issue-item {
   display: flex; flex-direction: column; gap: var(--gap-2);
-  padding: clamp(12px, 1.2vw, 16px); border: 1px solid #dbe4ff; border-radius: 12px;
-  background: color-mix(in srgb, #eef5ff 90%, #ffffff 10%);
+  padding: clamp(12px, 1.2vw, 16px); border: 1px solid var(--border); border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-subtle) 90%, var(--surface) 10%);
 }
 .issue-header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--gap-2); align-items: center; }
 .issue-header h3 { margin: 0; font-size: var(--fs-t); }
@@ -262,7 +262,7 @@
 .task-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--gap-2); }
 .task-item {
   display: flex; flex-direction: column; gap: var(--gap-2);
-  padding: clamp(12px, 1.2vw, 16px); border: 1px solid #e6e8ef; border-radius: 12px; background: #ffffff;
+  padding: clamp(12px, 1.2vw, 16px); border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
 }
 .task-main { display: flex; flex-wrap: wrap; gap: var(--gap-1); align-items: baseline; }
 .task-title { font-weight: 600; font-size: var(--fs-t); }
@@ -279,8 +279,8 @@
 /* 設定プレビュー */
 .prefs-card pre {
   margin: 0; padding: clamp(12px, 1.1vw, 16px);
-  border: 1px solid color-mix(in srgb, var(--accent-blue) 25%, #dbeafe 75%);
-  border-radius: 12px; background: color-mix(in srgb, #eef5ff 85%, #ffffff 15%);
+  border: 1px solid var(--border);
+  border-radius: 12px; background: var(--surface-subtle);
   font-size: calc(12px * var(--m)); max-height: clamp(220px, 24vh, 320px); overflow: auto;
 }
 
@@ -339,7 +339,7 @@
 }
 
 /* ===== Members table ===== */
-.members-card { border-color: color-mix(in srgb, var(--accent-blue) 22%, #e6e8ef 78%); }
+.members-card { border-color: color-mix(in srgb, var(--accent-blue) 22%, var(--border) 78%); }
 .members-table-wrap { overflow: auto; max-width: 100%; }
 .members-table {
   width: 100%;
@@ -348,10 +348,10 @@
   table-layout: fixed;        /* 列幅を安定させる */
 }
 .members-table th, .members-table td {
-  padding: 8px 10px; border-bottom: 1px solid #eef1f5; vertical-align: middle;
+  padding: 8px 10px; border-bottom: 1px solid var(--divider); vertical-align: middle;
 }
 .members-table thead th {
-  font-weight: 600; color: #475569; background: #f8fafc; position: sticky; top: 0; z-index: 1;
+  font-weight: 600; color: var(--pp-muted-fg); background: var(--surface-subtle); position: sticky; top: 0; z-index: 1;
 }
 
 /* 折り返し禁止＋省略（表示名・メール） */

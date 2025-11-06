@@ -480,13 +480,25 @@ rememberPickedNames(ev: Event) {
       
       // --- 不要になった件数購読の掃除（Issue が減った場合） ---
       const aliveIssueIds = new Set(kids.map(k => k.id));
+      
+      // ツリー全体に id が存在するかのヘルパ
+      const existsInTree = (targetId: string) =>
+        this.data.some(p =>
+          p.id === targetId ||
+          (p.children ?? []).some(i =>
+            i.id === targetId ||
+            (i.children ?? []).some(t => t.id === targetId)
+          )
+        );
+
       for (const [id, sub] of this.commentCountSubs.entries()) {
-        if (id !== pNode.id && !aliveIssueIds.has(id) && (this.data.findIndex(n => n.id === id) === -1)) {
+          // Problem配下の "消えた Issue" だけを掃除。Taskはここで触らない（Task側の購読で掃除する）
+          if (id !== pNode.id && !aliveIssueIds.has(id) && !existsInTree(id)) {
           sub.unsubscribe(); this.commentCountSubs.delete(id);
         }
       }
       for (const [id, sub] of this.attachmentCountSubs.entries()) {
-        if (id !== pNode.id && !aliveIssueIds.has(id) && (this.data.findIndex(n => n.id === id) === -1)) {
+        if (id !== pNode.id && !aliveIssueIds.has(id) && !existsInTree(id)) {
           sub.unsubscribe(); this.attachmentCountSubs.delete(id);
         }
       }
@@ -761,7 +773,7 @@ rememberPickedNames(ev: Event) {
   }
 
   async deleteComment(id: string){
-    if (!(await this.requireCanEdit())) return;
+    if (!(await this.requireOnline())) return;
     const node = this.selectedNode; if (!node) return;
     const t = await this.toTarget(node); if (!t) return;
     await this.comments.delete(t, id);
@@ -892,7 +904,7 @@ rememberPickedNames(ev: Event) {
   }
 
   async saveEdit(){
-    if (!(await this.requireCanEdit())) return;
+    if (!(await this.requireOnline())) return;
     if (this.commentSaveTimer) { clearTimeout(this.commentSaveTimer); this.commentSaveTimer = null; }
     const node = this.selectedNode; if (!node || !this.editingId || !this.newBody.trim()) return;
     const t = await this.toTarget(node); if (!t) return;
@@ -1015,7 +1027,17 @@ rememberPickedNames(ev: Event) {
       this.lastPickedNames = []; // アップロード完了で一旦クリア
     }
   }
-  
+
+    // コメント編集/削除用：オンラインのみ確認
+    private async requireOnline(): Promise<boolean> {
+      const online = await firstValueFrom(this.isOnline$);
+      if (!online) {
+        this.snack.open(this.tr.instant('warn.offlineNoEdit'), 'OK', { duration: 3000 });
+        return false;
+      }
+      return true;
+    }
+    
   
   async removeAttachment(a: AttachmentDoc) {
     if (!(await this.requireCanEdit())) return;

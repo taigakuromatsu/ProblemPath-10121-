@@ -46,7 +46,10 @@ html.dark {
   --surface: #ffffff;
   --surface-subtle: #f1f3f6;
   --fg: #111111;
+  --text: #111111;
+  --foreground: #111111;
   --muted: #6b7280;
+  --pp-muted-fg: #6b7280;
   --border: rgba(17, 24, 39, 0.08);
   --divider: rgba(17, 24, 39, 0.1);
   --shadow: 0 6px 20px rgba(15, 23, 42, 0.08);
@@ -60,7 +63,10 @@ html.dark {
   --surface: #2a2d33;
   --surface-subtle: #22242a;
   --fg: #e6eaf0;
-  --muted: #9da5b4;
+  --text: #e6eaf0;
+  --foreground: #e6eaf0;
+  --muted: #b8c0d0;
+  --pp-muted-fg: #b8c0d0;
   --border: rgba(230, 234, 240, 0.14);
   --divider: rgba(230, 234, 240, 0.1);
   --shadow: 0 10px 24px rgba(2, 6, 23, 0.45);

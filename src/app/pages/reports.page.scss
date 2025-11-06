@@ -13,12 +13,12 @@
 .page__subtitle,
 .page__subsubtitle {
   margin: 0;
-  color: var(--pp-muted-fg, rgba(0, 0, 0, 0.56));
+  color: var(--pp-muted-fg);
 }
 .page__project {
   font-size: 1rem;
   margin: 0;
-  color: var(--pp-muted-fg, rgb(0, 0, 0));
+  color: var(--pp-muted-fg);
 }
 
 /* actions */
@@ -56,8 +56,8 @@
 }
 
 .report-card {
-  background: var(--pp-card-bg, #fff);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 10px 12px;
   cursor: pointer;
@@ -65,16 +65,16 @@
   outline: none;
 }
 .report-card:hover {
-  box-shadow: 0 2px 10px rgba(0,0,0,.06);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--fg) 8%, transparent);
   transform: translateY(-1px);
 }
 .report-card:focus {
-  outline: 3px solid rgba(63, 81, 181, 0.25); /* indigo focus ring */
+  outline: 3px solid color-mix(in srgb, var(--accent-blue) 45%, transparent);
   outline-offset: 2px;
 }
 .report-card.active {
-  border-color: rgba(63, 81, 181, 0.55);
-  box-shadow: 0 2px 10px rgba(63,81,181,.12);
+  border-color: color-mix(in srgb, var(--accent-blue) 55%, transparent);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--accent-blue) 20%, transparent);
 }
 
 .report-card__title {
@@ -82,6 +82,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap; /* 1行省略 */
+  color: var(--fg);
 }
 .report-card__meta {
   margin-top: 4px;
@@ -89,7 +90,7 @@
   align-items: center;
   gap: 6px;
   font-size: 0.875rem;
-  color: var(--pp-muted-fg, rgba(0, 0, 0, 0.56));
+  color: var(--pp-muted-fg);
 }
 .report-card__meta .dot { opacity: 0.4; }
 
@@ -97,11 +98,12 @@
 .reports-page__preview-body {
   white-space: pre-wrap;
   line-height: 1.6;
+  color: var(--fg);
 }
 
 /* misc */
 .muted {
-  color: var(--pp-muted-fg, rgba(0, 0, 0, 0.56));
+  color: var(--pp-muted-fg);
   margin: 16px 0 0;
 }
 

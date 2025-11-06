@@ -11,7 +11,7 @@
   line-height: 1.5;
   min-height: 100vh;
   min-width: 0;
-  background: color-mix(in srgb, var(--background, #f4f6fb) 92%, var(--surface, #ffffff) 8%);
+  background: var(--bg);
 }
 
 .page-header {
@@ -33,9 +33,13 @@
   min-width: 0;
 }
 
+.page-titles .section-title {
+  color: var(--fg);
+}
+
 .page-subtitle {
   margin: 0;
-  color: var(--muted);
+  color: var(--pp-muted-fg);
   font-size: clamp(14px, 1.15vw, 16px);
   line-height: 1.6;
 }
@@ -69,7 +73,7 @@
   align-items: center;
   gap: clamp(8px, 1vw, 16px);
   font-size: clamp(13px, 1.05vw, 16px);
-  color: color-mix(in srgb, var(--muted, #5f6b7a) 80%, var(--foreground, #1f2933) 20%);
+  color: var(--pp-muted-fg);
   text-transform: none;
 }
 
