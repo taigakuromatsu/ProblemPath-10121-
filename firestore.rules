@@ -202,13 +202,21 @@ service cloud.firestore {
 
         match /attachments/{attId} {
           allow read: if isMember(projectId);
+
+          // 作成: Editor かつ validAttachmentData（= createdBy は自分）
           allow create: if isEditor(projectId) && validAttachmentData(request.resource.data);
-          allow update: if isEditor(projectId)
+
+          // 更新: アップロードした本人のみ名前変更可
+          allow update: if isSignedIn()
+            && resource.data.createdBy == request.auth.uid
             && request.resource.data.keys().hasOnly(['name','updatedAt'])
             && (request.resource.data.name is string)
             && request.resource.data.name.size() > 0
             && request.resource.data.name.size() <= 200;
-          allow delete: if isEditor(projectId);
+
+          // 削除: アップロードした本人のみ
+          allow delete: if isSignedIn()
+            && resource.data.createdBy == request.auth.uid;
         }
 
         match /comments/{commentId} {
@@ -233,12 +241,16 @@ service cloud.firestore {
           match /attachments/{attId} {
             allow read: if isMember(projectId);
             allow create: if isEditor(projectId) && validAttachmentData(request.resource.data);
-            allow update: if isEditor(projectId)
+
+            allow update: if isSignedIn()
+              && resource.data.createdBy == request.auth.uid
               && request.resource.data.keys().hasOnly(['name','updatedAt'])
               && (request.resource.data.name is string)
               && request.resource.data.name.size() > 0
               && request.resource.data.name.size() <= 200;
-            allow delete: if isEditor(projectId);
+
+            allow delete: if isSignedIn()
+              && resource.data.createdBy == request.auth.uid;
           }
 
           match /comments/{commentId} {
@@ -254,12 +266,16 @@ service cloud.firestore {
             match /attachments/{attId} {
               allow read: if isMember(projectId);
               allow create: if isEditor(projectId) && validAttachmentData(request.resource.data);
-              allow update: if isEditor(projectId)
+
+              allow update: if isSignedIn()
+                && resource.data.createdBy == request.auth.uid
                 && request.resource.data.keys().hasOnly(['name','updatedAt'])
                 && (request.resource.data.name is string)
                 && request.resource.data.name.size() > 0
                 && request.resource.data.name.size() <= 200;
-              allow delete: if isEditor(projectId);
+
+              allow delete: if isSignedIn()
+                && resource.data.createdBy == request.auth.uid;
             }
 
             match /comments/{commentId} {

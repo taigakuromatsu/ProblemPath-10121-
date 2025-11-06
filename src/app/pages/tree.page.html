@@ -296,8 +296,24 @@
                     <div class="empty-state" *ngIf="!ats.length">{{ 'common.none' | translate }}</div>
                     <div class="attachment-item" *ngFor="let a of ats">
                       <div class="attachment-actions">
-                        <a *ngIf="a.downloadURL" mat-stroked-button [href]="a.downloadURL" target="_blank" rel="noopener">{{ 'files.open' | translate }}</a>
-                        <button mat-button color="warn" type="button" (click)="removeAttachment(a)" [disabled]="!(canEdit$ | async)">{{ 'common.delete' | translate }}</button>
+                        <a *ngIf="a.downloadURL"
+                           mat-stroked-button
+                           [href]="a.downloadURL"
+                           target="_blank"
+                           rel="noopener">
+                          {{ 'files.open' | translate }}
+                        </a>
+                    
+                        <!-- 削除ボタン: 作成者本人 & 編集権限ありのときだけ表示 -->
+                        <button
+                          mat-button
+                          color="warn"
+                          type="button"
+                          (click)="removeAttachment(a)"
+                          *ngIf="(auth.uid$ | async) === a.createdBy && (canEdit$ | async)"
+                        >
+                          {{ 'common.delete' | translate }}
+                        </button>
                       </div>
                     </div>
                   </div>

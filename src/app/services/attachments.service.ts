@@ -91,7 +91,10 @@ export class AttachmentsService {
 
     const storageRef = sRef(this.storage, storagePath);
     const task = uploadBytesResumable(storageRef, file, {
-      contentType: file.type || 'application/octet-stream'
+      contentType: file.type || 'application/octet-stream',
+      customMetadata: {
+        createdBy,
+      },
     });
 
     // 進捗＆エラーログ

@@ -1,32 +1,27 @@
 // src/app/guards/project.guard.ts
 import { inject } from '@angular/core';
 import { CanActivateFn, Router, UrlTree } from '@angular/router';
-import { Auth } from '@angular/fire/auth';
 import { CurrentProjectService } from '../services/current-project.service';
-import { TranslateService } from '@ngx-translate/core';
+import { map, take } from 'rxjs/operators';
 
 /**
  * プロジェクト選択が必須のページを保護するガード。
- * - 未ログイン or 現在プロジェクトなし → Home へ退避
+ * - authGuard でログイン済み前提
+ * - 現在プロジェクトなし → Home へ退避
  */
-export const projectGuard: CanActivateFn = (): boolean | UrlTree => {
+export const projectGuard: CanActivateFn = () => {
   const router = inject(Router);
-  const auth = inject(Auth);
   const current = inject(CurrentProjectService);
-  const i18n = inject(TranslateService);
 
-  // 念のため：未ログインは Home へ（authGuard が先に弾く想定だが保険）
-  if (!auth.currentUser) {
-    return router.createUrlTree(['/']);
-  }
-
-  // プロジェクト未選択なら退避
-  const pid = current.getSync();
-  if (!pid) {
-    // 軽い通知（必要なら MatSnackBar に差し替え可）
-    try { alert(i18n.instant('guard.projectRequired')); } catch {}
-    return router.createUrlTree(['/']);
-  }
-
-  return true;
+  return current.projectId$.pipe(
+    take(1),
+    map(pid => {
+      if (!pid) {
+        // プロジェクト未選択 → Home (またはプロジェクト選択ページ) に誘導
+        const tree: UrlTree = router.createUrlTree(['/']);
+        return tree;
+      }
+      return true;
+    })
+  );
 };

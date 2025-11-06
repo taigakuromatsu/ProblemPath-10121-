@@ -2,26 +2,45 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // Storage ルールでは Firestore に触れないため、ここでは「サインイン済み」を最低条件にする
     function isSignedIn() { return request.auth != null; }
 
-    // Problem 添付
+    // 共通: オブジェクト所有者判定（metadata.createdBy を利用）
+    function isOwner() {
+      return resource.metadata.createdBy == request.auth.uid;
+    }
+
+    // Problem attachments
     match /projects/{projectId}/problems/{problemId}/attachments/{fileName=**} {
-      allow read:  if isSignedIn();
-      allow write: if isSignedIn();
+      allow read: if isSignedIn();
+
+      // create/update/delete すべて「サインイン済み かつ 自分のファイル」に限定
+      allow write: if isSignedIn() && (
+        // create or update: 新しいメタデータ側の createdBy が自分
+        (request.resource != null && request.resource.metadata.createdBy == request.auth.uid)
+        ||
+        // delete: 既存オブジェクトの createdBy が自分
+        (request.resource == null && isOwner())
+      );
     }
 
-    // Issue 添付（※ problems の下に issues がある階層に合わせる）
+    // Issue attachments
     match /projects/{projectId}/problems/{problemId}/issues/{issueId}/attachments/{fileName=**} {
-      allow read:  if isSignedIn();
-      allow write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (
+        (request.resource != null && request.resource.metadata.createdBy == request.auth.uid)
+        || (request.resource == null && isOwner())
+      );
     }
 
-    // Task 添付（※ problems/{p}/issues/{i}/tasks/{t}/attachments/...）
+    // Task attachments
     match /projects/{projectId}/problems/{problemId}/issues/{issueId}/tasks/{taskId}/attachments/{fileName=**} {
-      allow read:  if isSignedIn();
-      allow write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (
+        (request.resource != null && request.resource.metadata.createdBy == request.auth.uid)
+        || (request.resource == null && isOwner())
+      );
     }
   }
 }
+
 

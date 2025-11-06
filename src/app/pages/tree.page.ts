@@ -1077,22 +1077,39 @@ rememberPickedNames(ev: Event) {
     }
     
   
-  async removeAttachment(a: AttachmentDoc) {
-    if (!(await this.requireCanEdit())) return;
-    if (!this.selectedNode) return;
-    const ok = confirm(this.tr.instant('attach.confirm.deleteFile', { name: a.name }));
-    if (!ok) return;
-  
-    const t = await this.toAttachmentTarget(this.selectedNode);
-    if (!t || !a.id) return;
-    try {
-      await this.attachments.remove(t, a.id, a.storagePath);
-      this.bumpAttachCount(this.selectedNode, -1);
-    } catch (e) {
-      console.error(e);
-      this.snack.open(this.tr.instant('common.deleteFailed'), 'OK', { duration: 3000 });
+    private async requireAttachmentOwner(a: AttachmentDoc): Promise<boolean> {
+      const uid = await firstValueFrom(this.auth.uid$);
+      if (!uid || a.createdBy !== uid) {
+        this.snack.open(
+          this.tr.instant('attach.err.onlyOwnerDelete')
+          || 'このファイルはアップロードした本人のみ削除できます',
+          'OK',
+          { duration: 3000 }
+        );
+        return false;
+      }
+      return true;
     }
-  }
+    
+    async removeAttachment(a: AttachmentDoc) {
+      if (!(await this.requireCanEdit())) return;
+      if (!(await this.requireAttachmentOwner(a))) return;
+      if (!this.selectedNode) return;
+    
+      const ok = confirm(this.tr.instant('attach.confirm.deleteFile', { name: a.name }));
+      if (!ok) return;
+    
+      const t = await this.toAttachmentTarget(this.selectedNode);
+      if (!t || !a.id) return;
+    
+      try {
+        await this.attachments.remove(t, a.id, a.storagePath);
+        this.bumpAttachCount(this.selectedNode, -1);
+      } catch (e) {
+        console.error(e);
+        this.snack.open(this.tr.instant('common.deleteFailed'), 'OK', { duration: 3000 });
+      }
+    }
   
   // TreePage クラス内に追加
 private attachBadgeStreams(node: TreeNode) {
