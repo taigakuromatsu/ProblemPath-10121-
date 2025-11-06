@@ -1,4 +1,3 @@
-// src/app/pages/schedule.page.ts
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { AsyncPipe, NgFor, NgIf, NgClass, NgSwitch, NgSwitchCase, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -8,6 +7,10 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatNativeDateModule, DateAdapter } from '@angular/material/core';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { Firestore } from '@angular/fire/firestore';
 import { doc, getDoc, collection, getDocs, query as nativeQuery } from 'firebase/firestore';
@@ -60,30 +63,29 @@ interface MemberOption {
   templateUrl: './schedule.page.html',
   styleUrls: ['./schedule.page.scss'],
   imports: [
-    AsyncPipe,
-    NgFor,
-    NgIf,
-    NgClass,
-    NgSwitch,
-    NgSwitchCase,
-    NgTemplateOutlet, // *ngTemplateOutlet 用
+    AsyncPipe, NgFor, NgIf, NgClass, NgSwitch, NgSwitchCase, NgTemplateOutlet,
     FormsModule,
-    MatButtonModule,
-    MatButtonToggleModule,
-    MatCardModule,
-    MatIconModule,
-    MatSelectModule,
-    MatTooltipModule,
+    MatButtonModule, MatButtonToggleModule, MatCardModule, MatIconModule,
+    MatSelectModule, MatTooltipModule,
+    // ▼ 追加（マイページと同じ Datepicker 群）
+    MatFormFieldModule, MatInputModule, MatDatepickerModule, MatNativeDateModule,
     TranslateModule,
-    TaskRowComponent,
-    TaskCalendarComponent,
+    TaskRowComponent, TaskCalendarComponent,
   ],
 })
 export class SchedulePage implements OnInit, OnDestroy {
   vm$: Observable<Vm> = of(EMPTY_VM);
+
   openOnly = true;
   tagQuery = '';
   selectedAssignees: string[] = [];
+
+  // ▼ マイページと同じ「表示用 Date」と「クエリ文字列(YYYY-MM-DD)」
+  displayStartDate: Date | null = null;
+  displayEndDate: Date | null = null;
+  startRange = '';
+  endRange = '';
+
   viewMode: 'list' | 'calendar' = 'list';
   calendarMonth = new Date();
 
@@ -108,27 +110,71 @@ export class SchedulePage implements OnInit, OnDestroy {
     filter(Boolean),
   );
 
-  /** 保存のデバウンス用タイマー */
   private dueDateTimers = new Map<string, any>();
-  /** 体感チラつき対策：同一タスクの連打抑止（保存完了まで busy） */
   private inFlight = new Set<string>();
 
-  // TS2729 回避：ngOnInit で代入
   members$!: Observable<MemberOption[]>;
   memberDirectory$!: Observable<Record<string, string>>;
-
-  isBusy(id?: string): boolean {
-    return !!id && this.inFlight.has(id);
-  }
 
   constructor(
     private tasks: TasksService,
     private currentProject: CurrentProjectService,
     private fs: Firestore,
     private tr: TranslateService,
+    private dateAdapter: DateAdapter<Date>,
   ) {}
 
+  // ===== Date ⇄ YYYY-MM-DD =====
+  private toDate(s?: string | null): Date | null {
+    if (!s) return null;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+    if (!m) return null;
+    return new Date(+m[1], +m[2] - 1, +m[3]);
+  }
+  private toYmd(d?: Date | null): string {
+    if (!d) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  // ===== 期間UIイベント =====
+  onStartPicked(date: Date | null) {
+    this.displayStartDate = date;
+    this.startRange = date ? this.toYmd(date) : '';
+    this.onDateRangeChange();
+  }
+  onEndPicked(date: Date | null) {
+    this.displayEndDate = date;
+    this.endRange = date ? this.toYmd(date) : '';
+    this.onDateRangeChange();
+  }
+  clearStart() {
+    this.displayStartDate = null;
+    this.startRange = '';
+    this.onDateRangeChange();
+  }
+  clearEnd() {
+    this.displayEndDate = null;
+    this.endRange = '';
+    this.onDateRangeChange();
+  }
+
+  // ===== i18n → Datepicker ロケール追従 =====
+  private applyLocaleFromI18n() {
+    const l = (this.tr.currentLang || '').toLowerCase();
+    this.dateAdapter.setLocale(l.startsWith('en') ? 'en-US' : 'ja-JP');
+  }
+
   ngOnInit(): void {
+    this.applyLocaleFromI18n();
+    this.tr.onLangChange.subscribe(() => this.applyLocaleFromI18n());
+
+    // リロード時の復元
+    this.displayStartDate = this.toDate(this.startRange);
+    this.displayEndDate = this.toDate(this.endRange);
+
     // メンバー
     this.members$ = safeFromProject$(
       this.currentProject.projectId$,
@@ -138,10 +184,7 @@ export class SchedulePage implements OnInit, OnDestroy {
         return (rxCollectionData(q, { idField: 'id' }) as Observable<any[]>).pipe(
           map(docs => docs.map((docSnap: any) => {
             const data: any = docSnap;
-            return {
-              uid: docSnap.id || '',
-              label: data?.displayName || data?.email || docSnap.id || '',
-            } as MemberOption;
+            return { uid: docSnap.id || '', label: data?.displayName || data?.email || docSnap.id || '' } as MemberOption;
           }))
         );
       },
@@ -167,51 +210,34 @@ export class SchedulePage implements OnInit, OnDestroy {
     this.inFlight.clear();
   }
 
-  onViewModeChange(mode: 'list' | 'calendar') {
-    this.viewMode = mode;
-  }
-  onOpenOnlyChange(value: boolean) {
-    this.openOnly = value;
-    this.reload();
-  }
-  onTagQueryChange() {
-    this.reload();
-  }
-  onAssigneeChange() {
-    this.reload();
-  }
-  onMonthChange(date: Date) {
-    this.calendarMonth = date;
-  }
+  // ---- UI handlers ----
+  onViewModeChange(mode: 'list' | 'calendar') { this.viewMode = mode; }
+  onOpenOnlyChange(value: boolean) { this.openOnly = value; this.reload(); }
+  onTagQueryChange() { this.reload(); }
+  onAssigneeChange() { this.reload(); }
+  onDateRangeChange() { this.reload(); }
+  onMonthChange(date: Date) { this.calendarMonth = date; }
 
   trackTask = (_: number, task: Task) => task.id;
 
-  calendarTasks(vm: Vm): Task[] {
-    return [
-      ...vm.overdue,
-      ...vm.today,
-      ...vm.tomorrow,
-      ...vm.thisWeekRest,
-      ...vm.nextWeek,
-      ...vm.later,
-    ].filter(t => !!t.dueDate);
-  }
-  calendarUndated(vm: Vm): Task[] {
-    return [...vm.nodue];
+  isBusy(id?: string): boolean {
+    return !!id && this.inFlight.has(id);
   }
 
+  // ---- Calendar helpers ----
+  calendarTasks(vm: Vm): Task[] {
+    return [
+      ...vm.overdue, ...vm.today, ...vm.tomorrow,
+      ...vm.thisWeekRest, ...vm.nextWeek, ...vm.later,
+    ].filter(t => !!t.dueDate);
+  }
+  calendarUndated(vm: Vm): Task[] { return [...vm.nodue]; }
+
+  // ---- Util ----
   private parseTags(q: string): string[] {
-    return (q || '')
-      .split(/\s+/)
-      .map(s => s.replace(/^#/, '').trim())
-      .filter(Boolean)
-      .slice(0, 10);
+    return (q || '').split(/\s+/).map(s => s.replace(/^#/, '').trim()).filter(Boolean).slice(0, 10);
   }
-  private addDays(base: Date, n: number): Date {
-    const d = new Date(base);
-    d.setDate(d.getDate() + n);
-    return d;
-  }
+  private addDays(base: Date, n: number): Date { const d = new Date(base); d.setDate(d.getDate() + n); return d; }
   private ymd(date: Date): string {
     const y = date.getFullYear();
     const m = `${date.getMonth() + 1}`.padStart(2, '0');
@@ -219,9 +245,7 @@ export class SchedulePage implements OnInit, OnDestroy {
     return `${y}-${m}-${d}`;
   }
   private sameDay(a: Date, b: Date): boolean {
-    return a.getFullYear() === b.getFullYear() &&
-           a.getMonth() === b.getMonth() &&
-           a.getDate() === b.getDate();
+    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
   }
 
   private filterByAssignee(tasks: Task[]): Task[] {
@@ -242,17 +266,15 @@ export class SchedulePage implements OnInit, OnDestroy {
     };
   }
 
-  /** バケット間の重複排除（先勝ち） */
+  /** 重複排除（先勝ち） */
   private dedupeBuckets(vm: Vm): Vm {
     const used = new Set<string>();
-    const take = (xs: Task[]) =>
-      xs.filter(t => {
-        const id = t.id!;
-        if (used.has(id)) return false;
-        used.add(id);
-        return true;
-      });
-
+    const take = (xs: Task[]) => xs.filter(t => {
+      const id = t.id!;
+      if (used.has(id)) return false;
+      used.add(id);
+      return true;
+    });
     return {
       overdue:      take(vm.overdue),
       today:        take(vm.today),
@@ -264,6 +286,10 @@ export class SchedulePage implements OnInit, OnDestroy {
     };
   }
 
+  // 追加: ISO日付のクランプ系（マイページと同じ）
+  private minIso(a: string, b: string) { return a <= b ? a : b; }
+  private validRange(from: string, to: string) { return from <= to; }
+
   reload() {
     const FAR_FUTURE = '9999-12-31';
     const tags = this.parseTags(this.tagQuery);
@@ -273,44 +299,54 @@ export class SchedulePage implements OnInit, OnDestroy {
       switchMap(([pid]) => {
         if (!pid) return of(EMPTY_VM);
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const today = new Date(); today.setHours(0, 0, 0, 0);
         const tomorrow = this.addDays(today, 1);
 
-        const dow = today.getDay(); // 月曜始まり
+        const dow = today.getDay();
         const diffToMon = (dow === 0 ? -6 : 1 - dow);
         const startOfWeek = this.addDays(today, diffToMon);
         const endOfWeek = this.addDays(startOfWeek, 6);
         const startOfNextWeek = this.addDays(endOfWeek, 1);
         const endOfNextWeek = this.addDays(startOfNextWeek, 6);
 
-        // --- 対処B：来週の開始を「明日」と重ならないよう調整 ---
+        // 「明日」が来週月と重なる場合は来週Startを+1日（従来対処を維持）
         let nextWeekStart = startOfNextWeek;
-        if (this.sameDay(tomorrow, startOfNextWeek)) {
-          nextWeekStart = this.addDays(startOfNextWeek, 1); // 明日(月)を除外
-        }
+        if (this.sameDay(tomorrow, startOfNextWeek)) nextWeekStart = this.addDays(startOfNextWeek, 1);
 
-        const overdue$      = this.tasks.listAllOverdue$(pid, this.ymd(today), this.openOnly, tags);
-        const today$        = this.tasks.listAllByDueRange$(pid, this.ymd(today), this.ymd(today), this.openOnly, tags);
-        const tomorrow$     = this.tasks.listAllByDueRange$(pid, this.ymd(tomorrow), this.ymd(tomorrow), this.openOnly, tags);
-        const thisWeekRest$ = this.tasks.listAllByDueRange$(pid, this.ymd(this.addDays(tomorrow, 1)), this.ymd(endOfWeek), this.openOnly, tags);
-        const nextWeek$     = this.tasks.listAllByDueRange$(pid, this.ymd(nextWeekStart), this.ymd(endOfNextWeek), this.openOnly, tags);
-        const later$        = this.tasks.listAllByDueRange$(pid, this.ymd(this.addDays(endOfNextWeek, 1)), FAR_FUTURE, this.openOnly, tags);
+        // 入力レンジ（未指定は最小～最大）
+        const start = this.startRange || '0000-01-01';
+        const end = this.endRange || FAR_FUTURE;
+
+        // 文字列ISOを先に用意
+        const isoToday = this.ymd(today);
+        const isoTomorrow = this.ymd(tomorrow);
+        const isoThisWeekRestStart = this.ymd(this.addDays(tomorrow, 1));
+        const isoEndOfWeek = this.ymd(endOfWeek);
+        const isoStartOfNextWeek = this.ymd(nextWeekStart);
+        const isoEndOfNextWeek = this.ymd(endOfNextWeek);
+        const isoAfterNextWeek = this.ymd(this.addDays(endOfNextWeek, 1));
+
+        const overdue$      = this.tasks.listAllOverdue$(pid, this.minIso(end, isoToday), this.openOnly, tags);
+        const today$        = (start <= isoToday && isoToday <= end)
+                                ? this.tasks.listAllByDueRange$(pid, isoToday, isoToday, this.openOnly, tags)
+                                : of([] as Task[]);
+        const tomorrow$     = (isoTomorrow <= end && start <= isoTomorrow)
+                                ? this.tasks.listAllByDueRange$(pid, isoTomorrow, isoTomorrow, this.openOnly, tags)
+                                : of([] as Task[]);
+        const thisWeekRest$ = (this.validRange(isoThisWeekRestStart, this.minIso(isoEndOfWeek, end)))
+                                ? this.tasks.listAllByDueRange$(pid, isoThisWeekRestStart, this.minIso(isoEndOfWeek, end), this.openOnly, tags)
+                                : of([] as Task[]);
+        const nextWeek$     = (this.validRange(isoStartOfNextWeek, this.minIso(isoEndOfNextWeek, end)))
+                                ? this.tasks.listAllByDueRange$(pid, isoStartOfNextWeek, this.minIso(isoEndOfNextWeek, end), this.openOnly, tags)
+                                : of([] as Task[]);
+        const later$        = (this.validRange(isoAfterNextWeek, end))
+                                ? this.tasks.listAllByDueRange$(pid, isoAfterNextWeek, end, this.openOnly, tags)
+                                : of([] as Task[]);
         const nodue$        = this.tasks.listAllNoDue$(pid, this.openOnly, tags);
 
         return combineLatest([overdue$, today$, tomorrow$, thisWeekRest$, nextWeek$, later$, nodue$]).pipe(
           map(([overdue, todayArr, tomorrowArr, thisWeekRest, nextWeekArr, laterArr, nodue]) => {
-            // まず VM を作る
-            const vmRaw: Vm = {
-              overdue,
-              today: todayArr,
-              tomorrow: tomorrowArr,
-              thisWeekRest,
-              nextWeek: nextWeekArr,
-              later: laterArr,
-              nodue,
-            };
-            // A：バケット間の重複排除 → 担当者フィルタ
+            const vmRaw: Vm = { overdue, today: todayArr, tomorrow: tomorrowArr, thisWeekRest, nextWeek: nextWeekArr, later: laterArr, nodue };
             return this.applyAssigneeFilter(this.dedupeBuckets(vmRaw));
           }),
         );
@@ -323,27 +359,20 @@ export class SchedulePage implements OnInit, OnDestroy {
     this.scheduleDueUpdate(event.task, event.dueDate);
   }
 
-  /** 期日変更のデバウンス＋inFlight管理（体感チラつき対策） */
   private scheduleDueUpdate(task: Task, dueDate: string | null) {
     if (!task?.id || !task.projectId || !task.problemId || !task.issueId) return;
-
     const key = task.id!;
-    // 同一タスクの連打は無視
     const prevTimer = this.dueDateTimers.get(key);
     if (prevTimer) clearTimeout(prevTimer);
-
-    this.inFlight.add(key); // 保存完了まで busy 扱い
-
+    this.inFlight.add(key);
     const timer = setTimeout(() => {
-      this.tasks
-        .update(task.projectId!, task.problemId!, task.issueId!, key, { dueDate })
+      this.tasks.update(task.projectId!, task.problemId!, task.issueId!, key, { dueDate })
         .catch(err => console.error(err))
         .finally(() => {
           this.inFlight.delete(key);
           this.dueDateTimers.delete(key);
         });
     }, 400);
-
     this.dueDateTimers.set(key, timer);
   }
 
@@ -356,11 +385,10 @@ export class SchedulePage implements OnInit, OnDestroy {
     }
   }
 
-  /** +n/-n 日シフト（busy中や無効な期日は無視） */
   shiftTask(task: Task, days: number) {
     if (!task.dueDate) return;
     const id = task.id!;
-    if (this.inFlight.has(id)) return; // 保存中は無視
+    if (this.inFlight.has(id)) return;
     const current = new Date(task.dueDate);
     if (isNaN(current.getTime())) return;
     current.setDate(current.getDate() + days);
@@ -369,21 +397,15 @@ export class SchedulePage implements OnInit, OnDestroy {
 
   setTaskToday(task: Task) {
     const id = task.id!;
-    if (this.inFlight.has(id)) return; // 保存中は無視
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    if (this.inFlight.has(id)) return;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
     this.scheduleDueUpdate(task, this.ymd(today));
   }
 
   private flattenVm(vm: Vm) {
     return [
-      ...vm.overdue,
-      ...vm.today,
-      ...vm.tomorrow,
-      ...vm.thisWeekRest,
-      ...vm.nextWeek,
-      ...vm.later,
-      ...vm.nodue,
+      ...vm.overdue, ...vm.today, ...vm.tomorrow,
+      ...vm.thisWeekRest, ...vm.nextWeek, ...vm.later, ...vm.nodue,
     ];
   }
 
@@ -406,20 +428,10 @@ export class SchedulePage implements OnInit, OnDestroy {
     if (raw === 'done') return 'done';
     if (raw === 'in_progress') return 'inProgress';
     if (raw === 'not_started') return 'notStarted';
-    // 既知以外は未着手扱い
     return 'notStarted';
   }
-
-  private labelStatus(raw: any): string {
-    const key = this.statusI18nKey(raw);
-    return this.tr.instant(`status.${key}`);
-  }
-
-  private labelPriority(raw: any): string {
-    if (!raw) return this.tr.instant('common.none');
-    // raw: 'high' | 'mid' | 'low'
-    return this.tr.instant(`priority.${raw}`);
-  }
+  private labelStatus(raw: any): string { return this.tr.instant(`status.${this.statusI18nKey(raw)}`); }
+  private labelPriority(raw: any): string { return raw ? this.tr.instant(`priority.${raw}`) : this.tr.instant('common.none'); }
 
   private toCsv(tasks: Task[], nameMap: Map<string, string>, dir: Map<string, string>): string {
     const headers = [
@@ -437,59 +449,39 @@ export class SchedulePage implements OnInit, OnDestroy {
       this.tr.instant('schedule.export.headers.createdAt'),
       this.tr.instant('schedule.export.headers.updatedAt'),
     ];
-
     const esc = (v: any) => `"${(v ?? '').toString().replace(/"/g, '""')}"`;
     const fmtTs = (x: any) => {
       const d = x?.toDate?.() ?? (typeof x === 'string' ? new Date(x) : null);
       return d && !isNaN(d as any) ? new Date(d).toISOString().replace('T', ' ').replace('Z', '') : '';
     };
-    const joinAssignees = (xs: any) =>
-      Array.isArray(xs) ? xs.map((u: string) => dir.get(u) ?? u).join(', ') : (xs ?? '');
-
+    const joinAssignees = (xs: any) => Array.isArray(xs) ? xs.map((u: string) => dir.get(u) ?? u).join(', ') : (xs ?? '');
     const rows = tasks.map(t => {
       const pj = t.projectId ? (nameMap.get(`project:${t.projectId}`) ?? t.projectId) : '';
       const pr = (t.projectId && t.problemId) ? (nameMap.get(`problem:${t.projectId}:${t.problemId}`) ?? t.problemId) : '';
       const is = (t.projectId && t.problemId && t.issueId) ? (nameMap.get(`issue:${t.projectId}:${t.problemId}:${t.issueId}`) ?? t.issueId) : '';
-      const statusLabel = this.labelStatus((t as any).status);
-      const priorityLabel = this.labelPriority((t as any).priority);
       return [
-        t.id,
-        t.title,
-        statusLabel,
-        priorityLabel,
-        t.dueDate ?? '',
-        joinAssignees(t.assignees),
-        pj,
-        pr,
-        is,
+        t.id, t.title, this.labelStatus((t as any).status), this.labelPriority((t as any).priority),
+        t.dueDate ?? '', joinAssignees(t.assignees), pj, pr, is,
         Array.isArray(t.tags) ? t.tags.join(', ') : (t.tags ?? ''),
-        (t as any).progress ?? '',
-        fmtTs((t as any).createdAt),
-        fmtTs((t as any).updatedAt),
+        (t as any).progress ?? '', fmtTs((t as any).createdAt), fmtTs((t as any).updatedAt),
       ].map(esc).join(',');
     });
-
     return [headers.join(','), ...rows].join('\n');
   }
 
   private toJson(tasks: Task[], nameMap: Map<string, string>, dir: Map<string, string>): string {
     const mapped = tasks.map(t => ({
-      id: t.id,
-      title: t.title,
-      status: (t as any).status,
-      priority: (t as any).priority ?? null,
+      id: t.id, title: t.title,
+      status: (t as any).status, priority: (t as any).priority ?? null,
       dueDate: t.dueDate ?? null,
       assignees: Array.isArray(t.assignees) ? t.assignees.map(u => dir.get(u) ?? u) : [],
       project: t.projectId ? (nameMap.get(`project:${t.projectId}`) ?? t.projectId) : null,
       problem: (t.projectId && t.problemId) ? (nameMap.get(`problem:${t.projectId}:${t.problemId}`) ?? t.problemId) : null,
       issue: (t.projectId && t.problemId && t.issueId) ? (nameMap.get(`issue:${t.projectId}:${t.problemId}:${t.issueId}`) ?? t.issueId) : null,
-      tags: t.tags ?? [],
-      progress: (t as any).progress ?? null,
+      tags: t.tags ?? [], progress: (t as any).progress ?? null,
       createdAt: (t as any).createdAt?.toDate?.() ?? null,
       updatedAt: (t as any).updatedAt?.toDate?.() ?? null,
-      projectId: t.projectId ?? null,
-      problemId: t.problemId ?? null,
-      issueId: t.issueId ?? null,
+      projectId: t.projectId ?? null, problemId: t.problemId ?? null, issueId: t.issueId ?? null,
     }));
     return JSON.stringify(mapped, null, 2);
   }
@@ -557,5 +549,6 @@ export class SchedulePage implements OnInit, OnDestroy {
     return byUid;
   }
 }
+
 
 

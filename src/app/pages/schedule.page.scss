@@ -14,11 +14,11 @@
 .view-toggle{ display:inline-flex; align-items:center; border-radius:999px; min-width:0; }
 
 /* ── ヘッダー上段レイアウト ─────────────────── */
-/* デフォルト：広い画面は4カラム */
+/* 1:Export / 2:Spacer / 3:表示 / 4:右フィルタ（ここにレンジ/タグ/担当者） */
 .header-grid{
-  --header-mid-gap: clamp(36px, 8vw, 120px);    /* Export と 表示のあいだの“専用”余白 */
+  --header-mid-gap: clamp(36px, 8vw, 120px);
   display:grid;
-  grid-template-columns: max-content var(--header-mid-gap) auto 1fr; /* 1:Export 2:Spacer 3:表示 4:右フィルタ */
+  grid-template-columns: max-content var(--header-mid-gap) auto 1fr;
   column-gap: var(--gap-3);
   align-items:end;
   min-width:0;
@@ -27,7 +27,7 @@
 .center-controls{ grid-column:3; justify-self:start; min-width:0; }
 .right-filters{ grid-column:4; }
 
-/* Export ボックス（横伸びしない） */
+/* Export ボックス */
 .export-card{
   display:inline-flex; align-items:center; gap:var(--gap-2);
   padding:var(--pad-2);
@@ -41,13 +41,13 @@
 /* 表示（中央） */
 .center-controls{
   display:flex; flex-direction:column; gap:var(--gap-1);
-  text-align:left; overflow:hidden;           /* はみ出し防止 */
+  text-align:left; overflow:hidden;
 }
 .center-controls .control-label{ font-weight:600; font-size:var(--fs-b); color:var(--muted); }
 .center-controls .mat-button-toggle-group,
-.center-controls mat-button-toggle-group{ max-width:100%; display:inline-flex; flex-wrap:wrap; } /* 必要なら折返し */
+.center-controls mat-button-toggle-group{ max-width:100%; display:inline-flex; flex-wrap:wrap; }
 
-/* 右：タグ（左）＋担当者（右） */
+/* 右：レンジ + タグ + 担当者 */
 .right-filters{
   display:flex; align-items:end; justify-content:flex-end;
   gap: clamp(16px, 2.5vw, 40px);
@@ -55,41 +55,40 @@
 }
 .filter-group{ display:flex; flex-direction:column; gap:var(--gap-1); min-width:0; }
 .filter-group label{ font-weight:600; font-size:var(--fs-b); }
-.filter-group input{
+
+/* ▼ 追加：日付レンジ（2フィールド横並び） */
+.filter-group.range{ display:flex; flex-direction:row; gap:var(--gap-2); align-items:flex-end; }
+.filter-group.range .date-field{ width:clamp(180px, 14vw, 240px); }
+
+/* タグは .tags クラスで幅を指定（:first-child 依存を廃止） */
+.filter-group.tags input{
   padding:calc(10px * var(--m)) calc(12px * var(--m));
   border-radius:var(--radius); border:1px solid var(--border);
   background:var(--surface); color:inherit; min-width:0; font-size:var(--fs-b); line-height:1.4;
+  width:clamp(220px, 22vw, 340px);
 }
-.filter-group mat-select{ min-width:calc(220px * var(--m)); }
 
-/* タグ：幅を抑えると左端が右へ寄る（右端の位置感は保ちやすい） */
-.right-filters .filter-group:first-child{
-  flex:0 0 clamp(220px, 22vw, 340px);
-}
-.right-filters .filter-group:first-child input,
-.right-filters .filter-group:first-child mat-form-field{ width:100%; }
-
-/* 担当者：最右固定 */
+/* 担当者 */
 .right-filters .assignees{ flex:0 0 clamp(220px, 18vw, 320px); }
 .right-filters .assignees mat-select{ min-width:calc(220px * var(--m)); }
 
 /* ── ラップトップ幅：2段に分けて重なり回避 ───────── */
 @media (max-width: 1400px){
   .header-grid{
-    grid-template-columns: 1fr 1fr;          /* 2カラム×複数行 */
+    grid-template-columns: 1fr 1fr;
     grid-auto-rows: minmax(0, auto);
     column-gap: var(--gap-3);
     row-gap: var(--gap-2);
-    --header-mid-gap: 24px;                  /* 中央の専用余白は小さめに */
+    --header-mid-gap: 24px;
   }
   .export-card{ grid-column:1; grid-row:1; justify-self:start; }
   .center-controls{ grid-column:2; grid-row:1; justify-self:end; max-width:100%; }
   .right-filters{
-    grid-column:1 / -1; grid-row:2;          /* 2行目ぜんぶを使う */
-    justify-content:flex-end; flex-wrap:nowrap; gap:clamp(12px, 2vw, 28px);
+    grid-column:1 / -1; grid-row:2;
+    justify-content:flex-end; flex-wrap:wrap; gap:clamp(12px, 2vw, 28px);
   }
-  /* タグ・担当者の幅も少しだけ絞る */
-  .right-filters .filter-group:first-child{ flex:0 1 clamp(200px, 30vw, 320px); }
+  .filter-group.range .date-field{ width:clamp(180px, 28vw, 240px); }
+  .filter-group.tags input{ width:clamp(200px, 30vw, 320px); }
   .right-filters .assignees{ flex:0 0 clamp(200px, 24vw, 300px); }
 }
 
@@ -98,7 +97,8 @@
   .header-grid{ grid-template-columns:1fr; }
   .export-card, .center-controls, .right-filters{ grid-column:auto; grid-row:auto; justify-self:start; }
   .right-filters{ justify-content:flex-start; flex-wrap:wrap; gap:var(--gap-2); }
-  .right-filters .filter-group:first-child,
+  .filter-group.range{ flex:1 1 100%; }
+  .filter-group.tags,
   .right-filters .assignees{ flex:1 1 100%; }
 }
 

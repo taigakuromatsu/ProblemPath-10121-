@@ -1,3 +1,4 @@
+
 <div class="schedule-page">
   <section class="page-header card">
     <div class="headline">
@@ -16,7 +17,7 @@
         </mat-button-toggle>
       </mat-button-toggle-group>
     </div>
-    
+
     <div class="header-grid">
       <!-- 左：データエキスポート -->
       <section class="export-card" aria-labelledby="export-title">
@@ -29,7 +30,7 @@
           <button mat-stroked-button (click)="exportCurrent('json')">{{ 'schedule.export.json' | translate }}</button>
         </div>
       </section>
-  
+
       <!-- 中央：表示（未完了のみ / すべて） -->
       <section class="center-controls">
         <label class="control-label">{{ 'schedule.view.label' | translate }}</label>
@@ -38,17 +39,68 @@
           <mat-button-toggle [value]="false">{{ 'schedule.view.all' | translate }}</mat-button-toggle>
         </mat-button-toggle-group>
       </section>
-  
-      <!-- 右：タグ検索 + 担当者 -->
+
+      <!-- 右：日付レンジ + タグ + 担当者 -->
       <section class="right-filters">
-        <div class="filter-group">
+        <!-- ▼ 追加：開始日・終了日（マイページと同UI） -->
+        <div class="filter-group range">
+          <!-- Start -->
+          <mat-form-field appearance="outline" class="date-field">
+            <mat-label>{{ 'myTasks.range.start' | translate }}</mat-label>
+            <input
+              matInput
+              [matDatepicker]="startPicker"
+              [(ngModel)]="displayStartDate"
+              (ngModelChange)="onStartPicked($event)"
+              (keydown.escape)="clearStart()"
+            />
+            <button
+              mat-icon-button
+              matSuffix
+              type="button"
+              aria-label="{{ 'common.clear' | translate }}"
+              *ngIf="displayStartDate"
+              (click)="clearStart()">
+              <mat-icon>close</mat-icon>
+            </button>
+            <mat-datepicker-toggle matSuffix [for]="startPicker"></mat-datepicker-toggle>
+            <mat-datepicker #startPicker></mat-datepicker>
+          </mat-form-field>
+
+          <!-- End -->
+          <mat-form-field appearance="outline" class="date-field">
+            <mat-label>{{ 'myTasks.range.end' | translate }}</mat-label>
+            <input
+              matInput
+              [matDatepicker]="endPicker"
+              [(ngModel)]="displayEndDate"
+              (ngModelChange)="onEndPicked($event)"
+              (keydown.escape)="clearEnd()"
+            />
+            <button
+              mat-icon-button
+              matSuffix
+              type="button"
+              aria-label="{{ 'common.clear' | translate }}"
+              *ngIf="displayEndDate"
+              (click)="clearEnd()">
+              <mat-icon>close</mat-icon>
+            </button>
+            <mat-datepicker-toggle matSuffix [for]="endPicker"></mat-datepicker-toggle>
+            <mat-datepicker #endPicker></mat-datepicker>
+          </mat-form-field>
+        </div>
+
+        <!-- タグ -->
+        <div class="filter-group tags">
           <label>{{ 'schedule.tags.label' | translate }}</label>
           <input type="text"
                  [(ngModel)]="tagQuery"
                  (ngModelChange)="onTagQueryChange()"
                  [placeholder]="'schedule.tags.placeholder' | translate" />
         </div>
-  
+
+        <!-- 担当者 -->
         <div class="filter-group assignees">
           <label>{{ 'schedule.assignees.label' | translate }}</label>
           <mat-select multiple
@@ -113,7 +165,6 @@
           (shiftDays)="shiftTask($event.task, $event.days)"
           (setToday)="setTaskToday($event)"
         ></pp-task-row>
-
       </div>
     </mat-card>
   </div>
