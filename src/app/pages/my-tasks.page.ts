@@ -86,6 +86,17 @@ export class MyTasksPage implements OnInit, OnDestroy {
   viewMode: 'list' | 'calendar' = 'list';
   calendarMonth = new Date();
 
+  clearStart() {
+    this.displayStartDate = null;
+    this.startRange = '';
+    this.onDateRangeChange();
+  }
+  clearEnd() {
+    this.displayEndDate = null;
+    this.endRange = '';
+    this.onDateRangeChange();
+  }
+
   readonly sections: SectionDef[] = [
     { key: 'overdue',      icon: 'warning_amber',      label: 'myTasks.overdue',      accent: 'danger' },
     { key: 'today',        icon: 'today',              label: 'myTasks.today',        accent: 'info'   },

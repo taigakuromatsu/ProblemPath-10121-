@@ -245,6 +245,9 @@
             <p class="section-subtitle text-2line">{{ 'home.problemSelectLead' | translate }}</p>
           </div>
           <div class="section-actions">
+            <button mat-stroked-button color="warn" type="button" (click)="removeSelected()" [disabled]="!(canEdit$ | async) || !selectedProblemId">
+              {{ 'home.deleteSelectedProblem' | translate }}
+            </button>
             <button mat-stroked-button type="button" (click)="openNewProblemDialog()" [disabled]="!(canEdit$ | async)">
               ＋ {{ 'common.createNew' | translate }}
             </button>

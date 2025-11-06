@@ -42,6 +42,7 @@
     "problemSelectLead": "ここで選んだ Problem の配下を管理します。",
     "problemSelectLabel": "Problem を選択",
     "noProblemsYet": "まだ Problem がありません。「新規作成」から追加してください。",
+    "deleteSelectedProblem": "選択中の問題を削除",
     "confirm": {
       "deleteProblemAndChildren": "この Problem（配下の Issue と Task を含む）を削除しますか？"
     }

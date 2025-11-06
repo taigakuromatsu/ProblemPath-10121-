@@ -42,6 +42,7 @@
       "problemSelectLead": "Manage Issues/Tasks under the selected Problem.",
       "problemSelectLabel": "Select a Problem",
       "noProblemsYet": "No Problems yet. Create one from “New”.",
+      "deleteSelectedProblem": "Delete selected problem",
       "confirm": {
         "deleteProblemAndChildren": "Delete this Problem and all its children (Issues/Tasks)?"
       }

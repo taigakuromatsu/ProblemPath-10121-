@@ -599,8 +599,11 @@ endModel: Record<string, Date | null> = {};
     if (!(await this.requireOnline())) return;
     if (!confirm(this.i18n.instant('home.confirm.deleteProblemAndChildren'))) return;
     const problemId = this.selectedProblemId!;
+    // 問題のタイトルを取得して削除メッセージに使用
+    const problemDoc = await firstValueFrom(this.selectedProblemDoc$);
+    const problemTitle = problemDoc?.title || '(Problem)';
     this.withPid(async pid => {
-      await this.softDeleteWithUndo('problem', { projectId: pid, problemId }, '(Problem)');
+      await this.softDeleteWithUndo('problem', { projectId: pid, problemId }, problemTitle);
       this.selectedProblemId = null;
       this.selectedProblem$.next(null);
     });
