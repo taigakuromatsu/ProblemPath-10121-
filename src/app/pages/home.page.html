@@ -1,9 +1,22 @@
 <section class="home-page">
   <header class="page-header">
     <div class="intro-text">
-      <h1 class="section-title section-title--info no-truncate">{{ 'home.title' | translate }}</h1>
-      <p class="page-subtitle text-2line">{{ 'home.lead' | translate }}</p>
+      <h1 class="section-title section-title--info section-title--hero no-truncate">
+        {{ 'home.title' | translate }}
+      </h1>
+    
+      <!-- 追記: 概要 -->
+      <p class="page-subtitle">{{ 'home.intro.main' | translate }}</p>
+    
+      <!-- 追記: 3階層の説明（行頭記号はテキストで。リストは使わず既存の見た目のまま） -->
+      <p class="page-subtitle">・{{ 'home.intro.problem' | translate }}</p>
+      <p class="page-subtitle">・{{ 'home.intro.issue' | translate }}</p>
+      <p class="page-subtitle">・{{ 'home.intro.task' | translate }}</p>
+    
+      <!-- 追記: アクション誘導 -->
+      <p class="page-subtitle">{{ 'home.intro.action' | translate }}</p>
     </div>
+    
 
     <mat-card class="card intro-card notif-card" *ngIf="auth.loggedIn$ | async">
       <div class="section-header">
@@ -108,9 +121,9 @@
           <div class="section-header">
             <div>
               <h2 class="section-title section-title--info no-truncate">
-                <mat-icon aria-hidden="true">group</mat-icon> メンバー管理
+                <mat-icon aria-hidden="true">group</mat-icon> {{ 'home.members.title' | translate }}
               </h2>
-              <p class="section-subtitle">メンバー一覧の閲覧は全員可。ロール変更・削除は管理者のみ。</p>
+              <p class="section-subtitle">{{ 'home.members.lead' | translate }}</p>
             </div>
             <div class="section-actions no-wrap">
               <!-- 予備領域（CSV出力など） -->
@@ -124,17 +137,17 @@
               <table class="members-table" aria-label="members">
                 <thead>
                   <tr>
-                    <th>表示名</th>
-                    <th>メール</th>
-                    <th>ロール</th>
-                    <th class="col-actions">操作</th>
+                    <th>{{ 'home.members.columns.displayName' | translate }}</th>
+                    <th>{{ 'home.members.columns.email' | translate }}</th>
+                    <th>{{ 'home.members.columns.role' | translate }}</th>
+                    <th class="col-actions">{{ 'home.members.columns.actions' | translate }}</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr *ngFor="let m of (membersList$ | async)">
                     <td class="name">
                       <span class="text-1line no-truncate">{{ m.displayName || '（未設定）' }}</span>
-                      <span class="me-chip" *ngIf="(myUid$ | async) === m.uid">あなた</span>
+                      <span class="me-chip" *ngIf="(myUid$ | async) === m.uid">{{ 'home.members.you' | translate }}</span>
                     </td>
                     <td class="email"><span class="text-1line no-truncate">{{ m.email || '—' }}</span></td>
                     <td class="role">
@@ -165,19 +178,19 @@
                         color="warn"
                         type="button"
                         class="no-wrap"
-                        *ngIf="members.isAdmin$ | async"
+                        *ngIf="(members.isAdmin$ | async)"
                         (click)="removeMember(m)"
                         [disabled]="
                           ((adminCount$ | async) === 1 && m.role === 'admin') ||
                           ((myUid$ | async) === m.uid)
                         "
                       >
-                        削除
+                        {{ 'common.delete' | translate }}
                       </button>
                     </td>
                   </tr>
                   <tr *ngIf="!(membersList$ | async)?.length">
-                    <td colspan="4" class="empty-state">メンバーがいません</td>
+                    <td colspan="4" class="empty-state">{{ 'home.members.none' | translate }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -190,7 +203,7 @@
           <div class="section-header">
             <div>
               <h2 class="section-title section-title--info no-truncate">
-                <mat-icon aria-hidden="true">tune</mat-icon> 言語とテーマ
+                <mat-icon aria-hidden="true">tune</mat-icon> {{ 'home.langThemeTitle' | translate }}
               </h2>
             </div>
           </div>
@@ -347,13 +360,28 @@
                         <div class="task-form__row">
                           <input [(ngModel)]="taskTitle[i.id!]" name="taskTitle-{{ i.id }}" [placeholder]="'task.placeholderNewTitle' | translate" required (ngModelChange)="onTaskTitleChange(i.id!, taskTitle[i.id!])" />
                           <mat-form-field appearance="outline" class="date-field date-field--sm">
-                            <input matInput [matDatepicker]="duePicker"
-                                   [value]="taskDueDate[i.id!] ? toDate(taskDueDate[i.id!]) : null"
-                                   (dateChange)="onDuePicked(i.id!, $event.value)"
-                                   [placeholder]="'task.duePlaceholder' | translate">
+                            <input
+                              matInput
+                              [matDatepicker]="duePicker"
+                              [(ngModel)]="dueModel[i.id!]"
+                              (ngModelChange)="onDueModelChange(i.id!, $event)"
+                              [placeholder]="'task.duePlaceholder' | translate"
+                              (keydown.escape)="clearDue(i.id!)" />
+                          
+                            <button
+                              mat-icon-button
+                              matSuffix
+                              type="button"
+                              aria-label="Clear date"
+                              *ngIf="dueModel[i.id!]"
+                              (click)="clearDue(i.id!)">
+                              <mat-icon>close</mat-icon>
+                            </button>
+                          
                             <mat-datepicker-toggle matSuffix [for]="duePicker"></mat-datepicker-toggle>
                             <mat-datepicker #duePicker></mat-datepicker>
                           </mat-form-field>
+                          
                           <button mat-stroked-button type="submit" [disabled]="!(canEdit$ | async)">＋ {{ 'task.add' | translate }}</button>
                         </div>
                         <div class="task-form__recurrence">
@@ -378,12 +406,27 @@
                             <span class="task-form__recurrence-field">
                               <label>{{ 'recurrence.endDate' | translate }}</label>
                               <mat-form-field appearance="outline" class="date-field date-field--sm">
-                                <input matInput [matDatepicker]="endPicker"
-                                       [value]="taskRecurrenceEndDate[i.id!] ? toDate(taskRecurrenceEndDate[i.id!]) : null"
-                                       (dateChange)="onRecurEndPicked(i.id!, $event.value)">
+                                <input
+                                  matInput
+                                  [matDatepicker]="endPicker"
+                                  [(ngModel)]="endModel[i.id!]"
+                                  (ngModelChange)="onEndModelChange(i.id!, $event)"
+                                  (keydown.escape)="clearEnd(i.id!)" />
+                              
+                                <button
+                                  mat-icon-button
+                                  matSuffix
+                                  type="button"
+                                  aria-label="Clear end date"
+                                  *ngIf="endModel[i.id!]"
+                                  (click)="clearEnd(i.id!)">
+                                  <mat-icon>close</mat-icon>
+                                </button>
+                              
                                 <mat-datepicker-toggle matSuffix [for]="endPicker"></mat-datepicker-toggle>
                                 <mat-datepicker #endPicker></mat-datepicker>
                               </mat-form-field>
+                              
                             </span>
                             <span class="task-form__recurrence-hint">
                               {{ 'recurrence.hintShort' | translate }}

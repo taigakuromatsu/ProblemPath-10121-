@@ -1,6 +1,26 @@
 {
   "home": {
     "title": "Home",
+    "intro": {
+      "main": "A problem-solving task management app that integrates thinking and execution with three levels",
+      "problem": "Problem: Define the root problem to be solved",
+      "issue": "Issue: Tasks and strategies needed to solve the problem",
+      "task": "Task: Specific work to be executed",
+      "action": "Select a Problem on the Home page and edit its child Issues / Tasks."
+    },
+    "langThemeTitle": "Language and Theme",
+    "members": {
+      "title": "Member Management",
+      "lead": "View member lists is available to all. Role change and deletion are only available to admins.",
+      "columns": {
+        "displayName": "Display Name",
+        "email": "Email",
+        "role": "Role",
+        "actions": "Actions"
+      },
+      "you": "You",
+      "none": "No members yet"
+    },
     "lead": "Select a Problem and edit its child Issues / Tasks.",
     "needSignIn": "Sign-in is required to edit. Use the “Sign in” button above.",
     "viewOnlyHint": "You can view via Tree / Board / Schedule.",

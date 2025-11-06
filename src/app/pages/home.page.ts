@@ -136,6 +136,31 @@ export class HomePage implements OnInit, OnDestroy {
   getRoleLabelKey(role: Role | null | undefined): string | null {
     return role ? (this.roleLabelMap[role] ?? null) : null;
   }
+  
+// 追加: 疑似日付入力のモデル（null 可）
+dueModel: Record<string, Date | null> = {};
+endModel: Record<string, Date | null> = {};
+
+  // 追加: 双方向モデル → 既存の文字列マップへ反映
+  onDueModelChange(issueId: string, d: Date | null) {
+    this.dueModel[issueId] = d;
+    this.taskDueDate[issueId] = d ? this.toYmd(d) : '';
+  }
+  onEndModelChange(issueId: string, d: Date | null) {
+    this.endModel[issueId] = d;
+    this.taskRecurrenceEndDate[issueId] = d ? this.toYmd(d) : '';
+  }
+
+  // 追加: 明示クリア（ボタン/キー操作用）
+  clearDue(issueId: string) {
+    this.dueModel[issueId] = null;
+    this.taskDueDate[issueId] = '';
+  }
+  clearEnd(issueId: string) {
+    this.endModel[issueId] = null;
+    this.taskRecurrenceEndDate[issueId] = '';
+  }
+
 
   constructor(
     public prefs: PrefsService,

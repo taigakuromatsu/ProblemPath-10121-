@@ -1,6 +1,26 @@
 {
   "home": {
     "title": "ホーム",
+    "intro": {
+      "main": "思考と実行をつなぐ、3階層の問題解決型課題管理アプリ",
+      "problem": "Problem：解決すべき根本問題を定義",
+      "issue":   "Issue：問題を解決するために必要な課題・方針",
+      "task":    "Task：実行する具体的な作業",
+      "action":  "ホームページで Problem を選択・新規作成して、その配下の Issue / Task を編集できます。"
+    },
+    "langThemeTitle": "言語とテーマ",
+    "members": {
+      "title": "メンバー管理",
+      "lead": "メンバー一覧の閲覧は全員可。ロール変更・削除は管理者のみ。",
+      "columns": {
+        "displayName": "表示名",
+        "email": "メール",
+        "role": "ロール",
+        "actions": "操作"
+      },
+    "you": "あなた",
+    "none": "メンバーがいません"
+    },
     "lead": "ここで 問題（Problem） を選んで、その配下の 課題（Issue） / タスク（Task） を編集します。",
     "needSignIn": "編集にはサインインが必要です。右上の「サインイン」からログインしてください。",
     "viewOnlyHint": "閲覧は ツリー / ボード / スケジュール で可能です。",

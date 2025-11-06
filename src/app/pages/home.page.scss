@@ -10,6 +10,8 @@
   box-sizing: border-box;
 }
 
+
+
 .page-header {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
@@ -30,6 +32,16 @@
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.05);
 }
 .intro-text h1 { margin: 0; font-size: var(--fs-t); line-height: 1.3; }
+
+.intro-text h1.section-title--hero {
+  font-size: clamp(20px, 3.6vw, 28px);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: .01em;
+  @media (min-width: 1400px) {
+    font-size: 32px;
+  }
+}
 
 .page-subtitle { margin: 0; color: var(--muted); }
 
@@ -308,7 +320,7 @@
 }
 
 :host ::ng-deep .date-field--sm .mdc-text-field { min-height: 26px; height: 26px; }
-:host ::ng-deep .date-field--sm .mdc-text-field__input { height: 36px; padding-top: 6px; padding-bottom: 6px; font-size: 13px; }
+:host ::ng-deep .date-field--sm .mdc-text-field__input { height: 36px; padding-top: 6px; padding-bottom: 6px; font-size: 13px; transform: translateY(-4px); }
 :host ::ng-deep .date-field--sm .mat-mdc-form-field-infix { padding-top: 0; padding-bottom: 0; }
 
 :host ::ng-deep .mat-datepicker-content .mat-calendar { font-size: 12px; }
