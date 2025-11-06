@@ -514,6 +514,65 @@
   background: #fff4f2; color: #9c2b0b; border-color: #f6d1c8;
 }
 
+/* ===== Members table ===== */
+.members-card { border-color: color-mix(in srgb, var(--accent-blue) 22%, #e6e8ef 78%); }
+
+.members-table-wrap {
+  overflow: auto;
+  max-width: 100%;
+}
+
+.members-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.members-table th,
+.members-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #eef1f5;
+  vertical-align: middle;
+}
+
+.members-table thead th {
+  font-weight: 600;
+  color: #475569;
+  background: #f8fafc;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.members-table td.name { max-width: 220px; }
+.members-table td.email { max-width: 280px; }
+.members-table td.role { width: 160px; }
+.members-table .col-actions { width: 110px; text-align: right; }
+
+.role-select {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font: inherit;
+  white-space: nowrap; /* 折り返し禁止 */
+}
+
+.role-readonly { white-space: nowrap; }
+
+.me-chip {
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: color-mix(in srgb, var(--accent-blue) 18%, var(--surface) 82%);
+  color: color-mix(in srgb, var(--accent-blue) 70%, #0f172a 30%);
+}
+
+.no-wrap { white-space: nowrap; }
+.section-actions.no-wrap { white-space: nowrap; }
+
+
 
 @media (max-width: 720px) {
   .home-page {

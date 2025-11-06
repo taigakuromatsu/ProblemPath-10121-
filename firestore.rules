@@ -107,12 +107,12 @@ service cloud.firestore {
 
         // --- (4) 管理者によるロール変更 ---
         allow update: if isAdmin(projectId)
-          && request.resource.data.keys().hasOnly(['role','joinedAt'])
-          && isValidRole(request.resource.data.role);
+        // 変更点は role のみ（joinedAt / displayName / email は変更不可）
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['role'])
+        && isValidRole(request.resource.data.role);
 
         // --- (5) 削除権限 ---
-        allow delete: if (isSignedIn() && request.auth.uid == uid && resource.data.role in ['member','viewer'])
-                      || isAdmin(projectId);
+        allow delete: if isAdmin(projectId);
       }
 
 

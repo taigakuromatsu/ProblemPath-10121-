@@ -105,22 +105,85 @@
           </div>
         </mat-card>
 
-        <mat-card class="card util-card prefs-card">
+        <!-- メンバー管理（設定カードの位置に置換） -->
+        <mat-card class="card util-card members-card">
           <div class="section-header">
             <div>
               <h2 class="section-title section-title--info no-truncate">
-                <mat-icon aria-hidden="true">tune</mat-icon> {{ 'settings.titlePreview' | translate }}
+                <mat-icon aria-hidden="true">group</mat-icon> メンバー管理
               </h2>
-              <p class="section-subtitle">{{ 'settings.lead' | translate }}</p>
+              <p class="section-subtitle">メンバー一覧の閲覧は全員可。ロール変更・削除は管理者のみ。</p>
+            </div>
+            <div class="section-actions no-wrap">
+              <!-- ここは将来「CSV出力」などを置けるよう確保。今は空のまま -->
             </div>
           </div>
 
           <mat-divider></mat-divider>
 
           <div class="section-body">
-            <pre>{{ (prefs.prefs$ | async) | json }}</pre>
+            <div class="members-table-wrap">
+              <table class="members-table" aria-label="members">
+                <thead>
+                  <tr>
+                    <th>表示名</th>
+                    <th>メール</th>
+                    <th>ロール</th>
+                    <th class="col-actions">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let m of (membersList$ | async)">
+                    <td class="name">
+                      <span class="text-1line no-truncate">{{ m.displayName || '（未設定）' }}</span>
+                      <span class="me-chip" *ngIf="(myUid$ | async) === m.uid">あなた</span>
+                    </td>
+                    <td class="email"><span class="text-1line no-truncate">{{ m.email || '—' }}</span></td>
+                    <td class="role">
+                      <ng-container *ngIf="members.isAdmin$ | async; else roleReadOnly">
+                        <select
+                          [ngModel]="m.role"
+                          (ngModelChange)="changeMemberRole(m, $event)"
+                          class="role-select no-wrap"
+                        >
+                          <option *ngFor="let r of roleOptions" [value]="r.value">
+                            {{ r.labelKey | translate }}
+                          </option>
+                        </select>
+                      </ng-container>
+                      <ng-template #roleReadOnly>
+                        <span *ngIf="getRoleLabelKey(m.role) as key; else dash">
+                          {{ key | translate }}
+                        </span>
+                        <ng-template #dash>—</ng-template>
+                      </ng-template>
+                    </td>
+                    <td class="col-actions">
+                      <button
+                        mat-stroked-button
+                        color="warn"
+                        type="button"
+                        class="no-wrap"
+                        *ngIf="members.isAdmin$ | async"
+                        (click)="removeMember(m)"
+                        [disabled]="
+                          ((adminCount$ | async) === 1 && m.role === 'admin') ||
+                          ((myUid$ | async) === m.uid)
+                        "
+                      >
+                        削除
+                      </button>
+                    </td>
+                  </tr>
+                  <tr *ngIf="!(membersList$ | async)?.length">
+                    <td colspan="4" class="empty-state">メンバーがいません</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </mat-card>
+
 
         <mat-card class="card util-card language-card">
           <div class="section-header">

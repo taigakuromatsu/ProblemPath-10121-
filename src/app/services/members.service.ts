@@ -1,8 +1,14 @@
-// members.service.ts
-import { Injectable } from '@angular/core';
-import { Firestore } from '@angular/fire/firestore';
-import { doc as nativeDoc } from 'firebase/firestore';
-import { docData as rxDocData } from 'rxfire/firestore';
+import { Injectable, inject } from '@angular/core';
+import { Firestore, writeBatch } from '@angular/fire/firestore';
+import {
+  collection as nativeCollection,
+  doc as nativeDoc,
+  updateDoc as nativeUpdateDoc,
+  deleteDoc as nativeDeleteDoc,
+  query as nativeQuery,
+  orderBy as nativeOrderBy,
+} from 'firebase/firestore';
+import { collectionData as rxCollectionData, docData as rxDocData } from 'rxfire/firestore';
 import { Observable, of, combineLatest } from 'rxjs';
 import { map, switchMap, shareReplay, distinctUntilChanged, catchError } from 'rxjs/operators';
 
@@ -10,20 +16,26 @@ import { CurrentProjectService } from './current-project.service';
 import { AuthService } from './auth.service';
 
 export type Role = 'admin' | 'member' | 'viewer';
+export type Member = {
+  uid: string;
+  role: Role;
+  displayName?: string;
+  email?: string;
+  joinedAt?: any;
+};
 
 @Injectable({ providedIn: 'root' })
 export class MembersService {
-  // フィールドは「型だけ」宣言
-  readonly role$!: Observable<Role | null>;
-  readonly isAdmin$!: Observable<boolean>;
-  readonly isEditor$!: Observable<boolean>;
+  private fs = inject(Firestore);
+  private current = inject(CurrentProjectService);
+  private auth = inject(AuthService);
 
-  constructor(
-    private fs: Firestore,
-    private current: CurrentProjectService,
-    private auth: AuthService
-  ) {
-    // ここで代入（＝初期化順の警告を回避）
+  // 自分のロール
+  readonly role$: Observable<Role | null>;
+  readonly isAdmin$: Observable<boolean>;
+  readonly isEditor$: Observable<boolean>;
+
+  constructor() {
     this.role$ = combineLatest([this.current.projectId$, this.auth.uid$]).pipe(
       switchMap(([pid, uid]) => {
         if (!pid || !uid) return of<Role | null>(null);
@@ -36,7 +48,7 @@ export class MembersService {
           })
         );
       }),
-      distinctUntilChanged((a, b) => a === b),
+      distinctUntilChanged(),
       shareReplay({ bufferSize: 1, refCount: true })
     );
 
@@ -52,4 +64,48 @@ export class MembersService {
       shareReplay({ bufferSize: 1, refCount: true })
     );
   }
+
+  /** メンバー一覧（displayName → role → joinedAt 相当の順で見やすく） */
+  list$(projectId: string | null): Observable<Member[]> {
+    if (!projectId) return of([]);
+    const col = nativeCollection(this.fs as any, `projects/${projectId}/members`);
+    // Firestoreの安定並びのため role/uid でフォールバック
+    const q = nativeQuery(col, nativeOrderBy('displayName'), nativeOrderBy('role'), nativeOrderBy('joinedAt'));
+    return rxCollectionData(q, { idField: 'uid' }).pipe(
+      map((docs: any[]) =>
+        docs.map(d => ({
+          uid: d.uid,
+          role: (d.role ?? 'viewer') as Role,
+          displayName: d.displayName ?? '',
+          email: d.email ?? '',
+          joinedAt: d.joinedAt,
+        }))
+      ),
+      catchError(err => {
+        console.warn('[MembersService.list$]', { projectId }, err);
+        return of([]);
+      })
+    );
+  }
+
+  /** ロール変更（adminのみルールで許可済み） */
+  async updateRole(projectId: string, targetUid: string, next: Role): Promise<void> {
+    const ref = nativeDoc(this.fs as any, `projects/${projectId}/members/${targetUid}`);
+    await nativeUpdateDoc(ref as any, { role: next });
+  }
+
+  /**
+   * メンバー削除（admin）
+   * - projects/{pid}/members/{uid}
+   * - users/{uid}/memberships/{pid} も合わせて削除（ルールで admin 可）
+   */
+  async removeMembership(projectId: string, targetUid: string): Promise<void> {
+    const b = writeBatch(this.fs as any);
+    const projRef = nativeDoc(this.fs as any, `projects/${projectId}/members/${targetUid}`);
+    const userRef = nativeDoc(this.fs as any, `users/${targetUid}/memberships/${projectId}`);
+    b.delete(projRef as any);
+    b.delete(userRef as any);
+    await b.commit();
+  }
 }
+

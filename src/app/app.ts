@@ -158,7 +158,6 @@ export class EditNameDialog {
     MatSidenavModule, MatToolbarModule, MatIconModule, MatButtonModule,
     MatDialogModule, MatSnackBarModule,
     ProjectSwitcher, TranslateModule,
-    EmailLoginDialog, EditNameDialog
   ],
   styles: [`
     /* ヘッダー：Grid（左=auto / 中央=1fr / 右=auto） */

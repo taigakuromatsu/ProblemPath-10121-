@@ -39,6 +39,8 @@ import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule, DateAdapter } from '@angular/material/core';
 import { FcmTokensService } from '../services/fcm-tokens.service';
 import { safeFromProject$ } from '../utils/rx-safe';
+import { MatTableModule } from '@angular/material/table';
+import {Role, Member} from '../services/members.service';
 
 // ---- このページ専用の拡張型 ----
 type ProblemWithDef = Problem & {
@@ -60,10 +62,10 @@ type HomeViewHint = 'none' | 'viewer' | 'projectLost';
   standalone: true,
   selector: 'pp-home',
   imports: [
-    RouterLink, AsyncPipe, NgFor, NgIf, JsonPipe, DatePipe, CommonModule, FormsModule,
+    RouterLink, AsyncPipe, NgFor, NgIf, DatePipe, CommonModule, FormsModule,
     MatButtonModule, MatSelectModule, MatFormFieldModule, MatIconModule, 
     MatCardModule, MatChipsModule, MatSnackBarModule, TranslateModule,
-    MatDividerModule, AiIssueSuggestComponent, MatInputModule, MatDatepickerModule, MatNativeDateModule
+    MatDividerModule, AiIssueSuggestComponent, MatInputModule, MatDatepickerModule, MatNativeDateModule, MatTableModule
   ],
   templateUrl: './home.page.html',
   styleUrls: ['./home.page.scss']
@@ -110,6 +112,30 @@ export class HomePage implements OnInit, OnDestroy {
   // --- FCM 状態（users/{uid}/fcmStatus/app） ---
   fcmStatus$!: Observable<{ enabled?: boolean; lastTokenSavedAt?: any; lastError?: string } | null>;
 
+    // ===== 追加: メンバー管理 =====
+    membersList$!: Observable<Member[]>;
+    adminCount$!: Observable<number>;
+    myUid$!: Observable<string | null>;   // ← フィールド宣言だけ。constructorで代入
+
+    // セレクト用ロール候補（翻訳キーを保持）
+    readonly roleOptions: Array<{ value: Role; labelKey: string }> = [
+      { value: 'admin',  labelKey: 'role.adminLabel'  },
+      { value: 'member', labelKey: 'role.memberLabel' },
+      { value: 'viewer', labelKey: 'role.viewerLabel' },
+    ];
+
+    // 高速参照用マップ（role -> 翻訳キー）
+    private readonly roleLabelMap: Record<Role, string> = {
+      admin:  'role.adminLabel',
+      member: 'role.memberLabel',
+      viewer: 'role.viewerLabel',
+    };
+
+    // テンプレから呼ぶ用（純関数）
+    getRoleLabelKey(role: Role | null | undefined): string | null {
+      return role ? (this.roleLabelMap[role] ?? null) : null;
+    }
+
   constructor(
     public prefs: PrefsService,
     private theme: ThemeService,
@@ -135,6 +161,17 @@ export class HomePage implements OnInit, OnDestroy {
     this.canEdit$ = combineLatest([this.members.isEditor$, this.network.isOnline$]).pipe(
       map(([isEditor, online]) => !!isEditor && !!online)
     );
+
+    this.myUid$ = this.auth.uid$;
+    
+    // 追加: メンバー一覧とadmin数
+    this.membersList$ = this.currentProject.projectId$.pipe(
+      switchMap(pid => this.members.list$(pid))
+    );
+    this.adminCount$ = this.membersList$.pipe(
+      map(list => list.filter(m => m.role === 'admin').length)
+    );
+    
   }
 
   /** 翻訳キーが未登録の時に fallback を返す（テンプレ用） */
@@ -285,6 +322,59 @@ export class HomePage implements OnInit, OnDestroy {
       })
     );
   }
+
+    // ===== メンバー管理：ロール変更 =====
+    async changeMemberRole(target: Member, next: Role) {
+      if (!(await this.requireOnline())) return;
+      const pid = this.currentProject.getSync();
+      if (!pid) { alert(this.i18n.instant('common.projectNotSelected')); return; }
+  
+      // 最後のadmin保護：targetがadmin→別ロール かつ adminが1人だけ の場合は拒否
+      const admins = await firstValueFrom(this.adminCount$);
+      if (target.role === 'admin' && next !== 'admin' && admins <= 1) {
+        this.snack.open(this.i18n.instant('warn.lastAdminGuard'), undefined, { duration: 3000 });
+        return;
+      }
+  
+      // 自分を降格させると見え方が変わるので簡易確認
+      const myUid = await firstValueFrom(this.auth.uid$);
+      if (target.uid === myUid && next !== 'admin') {
+        const ok = confirm(this.i18n.instant('member.confirmDemoteSelf', { role: next }));
+        if (!ok) return;
+      }
+  
+      try {
+        await this.members.updateRole(pid, target.uid, next);
+        this.snack.open(this.i18n.instant('member.roleUpdated'), undefined, { duration: 2000 });
+      } catch (e) {
+        console.error(e);
+        this.snack.open(this.i18n.instant('error.failed'), undefined, { duration: 2500 });
+      }
+    }
+  
+    // ===== メンバー管理：削除 =====
+    async removeMember(target: Member) {
+      if (!(await this.requireOnline())) return;
+      const pid = this.currentProject.getSync();
+      if (!pid) { alert(this.i18n.instant('common.projectNotSelected')); return; }
+  
+      const admins = await firstValueFrom(this.adminCount$);
+      if (target.role === 'admin' && admins <= 1) {
+        this.snack.open(this.i18n.instant('warn.lastAdminGuard'), undefined, { duration: 3000 });
+        return;
+      }
+  
+      const ok = confirm(this.i18n.instant('member.confirmRemove', { name: target.displayName || target.email || target.uid }));
+      if (!ok) return;
+  
+      try {
+        await this.members.removeMembership(pid, target.uid);
+        this.snack.open(this.i18n.instant('member.removed'), undefined, { duration: 2000 });
+      } catch (e) {
+        console.error(e);
+        this.snack.open(this.i18n.instant('error.failed'), undefined, { duration: 2500 });
+      }
+    }
 
   // HomePage クラス内のどこかに追加
   toDate(s?: string | null): Date | null {
