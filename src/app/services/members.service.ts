@@ -1,3 +1,4 @@
+// src/app/services/members.service.ts
 import { Injectable, inject } from '@angular/core';
 import { Firestore, writeBatch } from '@angular/fire/firestore';
 import {
@@ -88,11 +89,21 @@ export class MembersService {
     );
   }
 
-  /** ロール変更（adminのみルールで許可済み） */
-  async updateRole(projectId: string, targetUid: string, next: Role): Promise<void> {
-    const ref = nativeDoc(this.fs as any, `projects/${projectId}/members/${targetUid}`);
-    await nativeUpdateDoc(ref as any, { role: next });
-  }
+    /** ロール変更（adminのみルールで許可済み） */
+    async updateRole(projectId: string, targetUid: string, next: Role): Promise<void> {
+      // projects 側と users 側を “同一バッチ”で更新して表示と実体のズレを防ぐ
+      const b = writeBatch(this.fs as any);
+      const projRef = nativeDoc(this.fs as any, `projects/${projectId}/members/${targetUid}`);
+      const userRef = nativeDoc(this.fs as any, `users/${targetUid}/memberships/${projectId}`);
+  
+      // projects 側は必ず存在する想定なので update
+      (b as any).update(projRef, { role: next });
+  
+      // users 側は存在しないケースがあり得るので merge set
+      (b as any).set(userRef, { role: next }, { merge: true });
+  
+      await (b as any).commit();
+    }
 
   /**
    * メンバー削除（admin）

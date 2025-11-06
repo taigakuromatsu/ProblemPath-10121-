@@ -271,9 +271,22 @@ service cloud.firestore {
       allow read, write: if false;
 
       match /memberships/{projectId} {
-        allow read:   if isSignedIn() && request.auth.uid == uid;
+        // 読み取り：本人のみ
+        allow read: if isSignedIn() && request.auth.uid == uid;
+        // 作成：本人のみ（招待受諾など）
         allow create: if isSignedIn() && request.auth.uid == uid;
-        allow update: if isSignedIn() && request.auth.uid == uid;
+        // 更新：本人 もしくは 管理者。ただし管理者は role 以外をいじれない
+        allow update: if isSignedIn() && (
+          // 本人が自由に更新（従来どおり）
+          request.auth.uid == uid
+          ||
+          // 管理者は role だけ変更可
+          ( isAdmin(projectId)
+            && request.resource.data.diff(resource.data).changedKeys().hasOnly(['role'])
+            && isValidRole(request.resource.data.role)
+          )
+        );
+        // 削除：本人 or 管理者（従来どおり）
         allow delete: if isSignedIn() && (request.auth.uid == uid || isAdmin(projectId));
       }
 

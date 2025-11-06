@@ -132,6 +132,7 @@ export class ProjectSwitcher implements OnDestroy {
   private stopMembershipsListWatch?: () => void;
   private authSub?: Subscription;
   private currentUid: string | null = null;
+  private liveRole: 'admin'|'member'|'viewer'|null = null;
 
   constructor(
     private current: CurrentProjectService,
@@ -188,6 +189,7 @@ export class ProjectSwitcher implements OnDestroy {
     this.current.set(null);
     this.selected = null;
     this.prevSelected = null;
+    this.liveRole = null;
     this.stopMembershipWatch = undefined;
     this.stopMembershipsListWatch = undefined;
     this.cdr.markForCheck();
@@ -264,12 +266,14 @@ export class ProjectSwitcher implements OnDestroy {
     this.current.set(pid);
     this.selected = pid;
     this.prevSelected = pid;
+    this.liveRole = null;
     this.stopMembershipWatch = undefined;
     if (pid && this.currentUid) this.startMembershipWatch(pid, this.currentUid);
     this.cdr.markForCheck();
   }
 
   private get selectedRole(): 'admin'|'member'|'viewer'|null {
+    if (this.liveRole) return this.liveRole;
     return this.projects.find(p => p.pid === this.selected)?.role ?? null;
   }
   get canDelete() { return this.selectedRole === 'admin'; }
@@ -282,7 +286,12 @@ export class ProjectSwitcher implements OnDestroy {
       (snap) => {
         if (!snap.exists()) {
           this.handleProjectLost('removed');
+          return;
         }
+        // ← 追加：liveRole を “実ドキュメント” から更新
+        const data = snap.data() as any;
+        this.liveRole = (data?.role ?? null) as any;
+        this.cdr.markForCheck();
       },
       (_err: any) => {
         this.handleProjectLost('error');
