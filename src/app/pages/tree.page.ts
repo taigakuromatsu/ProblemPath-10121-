@@ -515,18 +515,18 @@ rememberPickedNames(ev: Event) {
   private attachTaskSubscription(problemId: string, issueNode: TreeNode) {
     const key = `${problemId}_${issueNode.id}`;
     this.taskSubs.get(key)?.unsubscribe();
-
+  
     const tasks$ = safeFromProject$(
       this.currentProject.projectId$,
       pid => this.tasks.listByIssue$(pid, problemId, issueNode.id),
       [] as Task[]
     );
+  
     const sub = combineLatest([tasks$, this.auth.loggedIn$]).pipe(
       switchMap(([tasks, isIn]) => isIn ? of(tasks) : of([] as Task[]))
-    ).subscribe(async tasks => {
-            // ← ここでテンプレートを除外
-            const visible = (tasks ?? []).filter(t => this.isRealTask(t));
-            const kids: TreeNode[] = visible.map(t => ({
+    ).subscribe(tasks => {
+      const visible = (tasks ?? []).filter(t => this.isRealTask(t));
+      const kids: TreeNode[] = visible.map(t => ({
         id: t.id!,
         name: t.title,
         kind: 'task',
@@ -535,56 +535,74 @@ rememberPickedNames(ev: Event) {
         parentProblemId: problemId,
         task: t
       }));
-
+  
       const pIdx = this.data.findIndex(p => p.id === problemId);
-      if (pIdx !== -1) {
-        const iIdx = this.data[pIdx].children?.findIndex(i => i.id === issueNode.id) ?? -1;
-        if (iIdx !== -1) {
-          const issueTaskStatuses = kids.map(k => k.status!).filter(Boolean) as Status[];
-          const issueStatus = this.decideAggregateStatus(issueTaskStatuses);
-
-          const newIssue = { ...this.data[pIdx].children![iIdx], children: kids, status: issueStatus };
-          const newProblems = [...this.data];
-          const newIssues = [
-            ...newProblems[pIdx].children!.slice(0, iIdx),
-            newIssue,
-            ...newProblems[pIdx].children!.slice(iIdx + 1)
-          ];
-          newProblems[pIdx] = { ...newProblems[pIdx], children: newIssues };
-          this.data = newProblems;
-
-          this.tree.dataNodes = [...this.data];
-          this.dataSource.data = [...this.data];
-          this.ensureInitialExpansion();
-
-          // 件数ロード：当該Issue＋子Task
-          try {
-            // 当該 Issue
-            this.attachBadgeStreams(issueNode);
-            // 子 Task
-            kids.forEach(k => this.attachBadgeStreams(k));
-          } catch {}
-          
-          // --- 不要になった件数購読の掃除（Task が減った場合） ---
-          const aliveTaskIds = new Set(kids.map(k => k.id));
-          for (const [id, sub] of this.commentCountSubs.entries()) {
-            // 当該 Issue 配下の Task で生きていないものを掃除
-            if (!aliveTaskIds.has(id) && this.data.every(p => (p.children ?? []).every(i => (i.children ?? []).every(t => t.id !== id)))) {
-              sub.unsubscribe(); this.commentCountSubs.delete(id);
-            }
-          }
-          for (const [id, sub] of this.attachmentCountSubs.entries()) {
-            if (!aliveTaskIds.has(id) && this.data.every(p => (p.children ?? []).every(i => (i.children ?? []).every(t => t.id !== id)))) {
-              sub.unsubscribe(); this.attachmentCountSubs.delete(id);
-            }
-          }
-          this.recomputeProblemStatus(problemId);
+      if (pIdx === -1) return;
+  
+      const iIdx = this.data[pIdx].children?.findIndex(i => i.id === issueNode.id) ?? -1;
+      if (iIdx === -1) return;
+  
+      // Issueの集約ステータス
+      const issueTaskStatuses = kids.map(k => k.status!).filter(Boolean) as Status[];
+      const issueStatus = this.decideAggregateStatus(issueTaskStatuses);
+  
+      const newIssue: TreeNode = {
+        ...this.data[pIdx].children![iIdx],
+        children: kids,
+        status: issueStatus,
+      };
+  
+      const newProblems = [...this.data];
+      const newIssues = [
+        ...newProblems[pIdx].children!.slice(0, iIdx),
+        newIssue,
+        ...newProblems[pIdx].children!.slice(iIdx + 1),
+      ];
+      newProblems[pIdx] = { ...newProblems[pIdx], children: newIssues };
+      this.data = newProblems;
+  
+      this.tree.dataNodes = [...this.data];
+      this.dataSource.data = [...this.data];
+      this.ensureInitialExpansion();
+  
+      // バッジ購読：Issue自身と子Task
+      try {
+        this.attachBadgeStreams(newIssue);
+        kids.forEach(k => this.attachBadgeStreams(k));
+      } catch { /* noop */ }
+  
+      // --- 不要になった件数購読の掃除（ツリーに存在しないノードだけ） ---
+      const existsInTree = (targetId: string) =>
+        this.data.some(p =>
+          p.id === targetId ||
+          (p.children ?? []).some(i =>
+            i.id === targetId ||
+            (i.children ?? []).some(t => t.id === targetId)
+          )
+        );
+  
+      for (const [id, s] of this.commentCountSubs.entries()) {
+        if (!existsInTree(id)) {
+          s.unsubscribe();
+          this.commentCountSubs.delete(id);
         }
       }
+  
+      for (const [id, s] of this.attachmentCountSubs.entries()) {
+        if (!existsInTree(id)) {
+          s.unsubscribe();
+          this.attachmentCountSubs.delete(id);
+        }
+      }
+  
+      this.recomputeProblemStatus(problemId);
     });
-
+  
     this.taskSubs.set(key, sub);
   }
+  
+          
+      
 
   // --- Dashboard state ---
   showDash = false;
@@ -738,32 +756,52 @@ rememberPickedNames(ev: Event) {
     });
   }
 
-   private async toAttachmentTarget(node: TreeNode): Promise<AttachmentTarget | null> {
-       // 実体の形は同じなので型を合わせて返す
-       const t = await this.toTarget(node);
-       return (t as unknown) as AttachmentTarget | null;
-     }
-  
+   // TreePage 内 toTarget を差し替え
+    private async toTarget(node: TreeNode): Promise<CommentTarget | null> {
+      const projectId = await firstValueFrom(this.currentProject.projectId$);
+      if (!projectId) return null;
 
-  // コメントターゲットを算出
-  private async toTarget(node: TreeNode): Promise<CommentTarget | null> {
-    const projectId = await firstValueFrom(this.currentProject.projectId$);
-    if (!projectId) return null;
+      if (node.kind === 'problem') {
+        return { kind: 'problem', projectId, problemId: node.id };
+      }
 
-    if (node.kind === 'problem') {
-      return { kind:'problem', projectId, problemId: node.id };
+      if (node.kind === 'issue') {
+        // parentId が無い場合は this.data から解決
+        const problemId = node.parentId
+          ?? this.data.find(p => (p.children ?? []).some(i => i.id === node.id))?.id;
+        if (!problemId) return null;
+        return { kind: 'issue', projectId, problemId, issueId: node.id };
+      }
+
+      // task
+      const problem = this.data.find(p =>
+        (p.children ?? []).some(i =>
+          (i.children ?? []).some(t => t.id === node.id)
+        )
+      );
+      const issue = problem?.children?.find(i =>
+        (i.children ?? []).some(t => t.id === node.id)
+      );
+
+      const problemId = node.parentProblemId ?? problem?.id;
+      const issueId   = node.parentIssueId   ?? issue?.id;
+
+      if (!problemId || !issueId) return null;
+      return {
+        kind: 'task',
+        projectId,
+        problemId,
+        issueId,
+        taskId: node.id
+      };
     }
-    if (node.kind === 'issue') {
-      return { kind:'issue', projectId, problemId: node.parentId!, issueId: node.id };
+
+    // 添付も同様に this.toTarget ベースで
+    private async toAttachmentTarget(node: TreeNode): Promise<AttachmentTarget | null> {
+      const t = await this.toTarget(node);
+      return t as AttachmentTarget | null;
     }
-    return {
-      kind:'task',
-      projectId,
-      problemId: node.parentProblemId!,
-      issueId: node.parentIssueId!,
-      taskId: node.id
-    };
-  }
+
 
   // ノード選択→コメント購読
 
