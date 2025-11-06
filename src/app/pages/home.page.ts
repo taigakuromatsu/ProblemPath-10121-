@@ -27,12 +27,11 @@ import { DraftsService } from '../services/drafts.service';
 import { NetworkService } from '../services/network.service';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { MessagingService, FcmNotice } from '../services/messaging.service';
-import { Firestore, doc } from '@angular/fire/firestore';
+import { Firestore } from '@angular/fire/firestore';
 import { docData as rxDocData } from 'rxfire/firestore';
 import { doc as nativeDoc } from 'firebase/firestore';
 import { MatDividerModule } from '@angular/material/divider';
 import { AiService } from '../services/ai.service';
-import { TranslatePipe } from '@ngx-translate/core';
 import { AiIssueSuggestComponent } from '../components/ai-issue-suggest.component';
 import { MatInputModule } from '@angular/material/input';
 import { MatDatepickerModule } from '@angular/material/datepicker';
@@ -40,7 +39,7 @@ import { MatNativeDateModule, DateAdapter } from '@angular/material/core';
 import { FcmTokensService } from '../services/fcm-tokens.service';
 import { safeFromProject$ } from '../utils/rx-safe';
 import { MatTableModule } from '@angular/material/table';
-import {Role, Member} from '../services/members.service';
+import { Role, Member } from '../services/members.service';
 
 // ---- このページ専用の拡張型 ----
 type ProblemWithDef = Problem & {
@@ -55,7 +54,6 @@ type ProblemWithDef = Problem & {
 };
 
 type EditProblemField = 'phenomenon' | 'cause' | 'solution' | 'goal';
-
 type HomeViewHint = 'none' | 'viewer' | 'projectLost';
 
 @Component({
@@ -63,7 +61,7 @@ type HomeViewHint = 'none' | 'viewer' | 'projectLost';
   selector: 'pp-home',
   imports: [
     RouterLink, AsyncPipe, NgFor, NgIf, DatePipe, CommonModule, FormsModule,
-    MatButtonModule, MatSelectModule, MatFormFieldModule, MatIconModule, 
+    MatButtonModule, MatSelectModule, MatFormFieldModule, MatIconModule,
     MatCardModule, MatChipsModule, MatSnackBarModule, TranslateModule,
     MatDividerModule, AiIssueSuggestComponent, MatInputModule, MatDatepickerModule, MatNativeDateModule, MatTableModule
   ],
@@ -74,7 +72,7 @@ export class HomePage implements OnInit, OnDestroy {
 
   readonly NEW_OPTION_VALUE = '__NEW__';
 
-  hint$!: Observable<HomeViewHint>; 
+  hint$!: Observable<HomeViewHint>;
 
   problems$!: Observable<Problem[]>;
   selectedProblemId: string | null = null;
@@ -112,29 +110,32 @@ export class HomePage implements OnInit, OnDestroy {
   // --- FCM 状態（users/{uid}/fcmStatus/app） ---
   fcmStatus$!: Observable<{ enabled?: boolean; lastTokenSavedAt?: any; lastError?: string } | null>;
 
-    // ===== 追加: メンバー管理 =====
-    membersList$!: Observable<Member[]>;
-    adminCount$!: Observable<number>;
-    myUid$!: Observable<string | null>;   // ← フィールド宣言だけ。constructorで代入
+  // ===== メンバー管理 =====
+  membersList$!: Observable<Member[]>;
+  adminCount$!: Observable<number>;
+  myUid$!: Observable<string | null>;
 
-    // セレクト用ロール候補（翻訳キーを保持）
-    readonly roleOptions: Array<{ value: Role; labelKey: string }> = [
-      { value: 'admin',  labelKey: 'role.adminLabel'  },
-      { value: 'member', labelKey: 'role.memberLabel' },
-      { value: 'viewer', labelKey: 'role.viewerLabel' },
-    ];
+  // UI一時上書き: uid -> role
+  uiRoleOverride: Partial<Record<string, Role>> = {};
 
-    // 高速参照用マップ（role -> 翻訳キー）
-    private readonly roleLabelMap: Record<Role, string> = {
-      admin:  'role.adminLabel',
-      member: 'role.memberLabel',
-      viewer: 'role.viewerLabel',
-    };
+  // セレクト用ロール候補（翻訳キーを保持）
+  readonly roleOptions: Array<{ value: Role; labelKey: string }> = [
+    { value: 'admin',  labelKey: 'role.adminLabel'  },
+    { value: 'member', labelKey: 'role.memberLabel' },
+    { value: 'viewer', labelKey: 'role.viewerLabel' },
+  ];
 
-    // テンプレから呼ぶ用（純関数）
-    getRoleLabelKey(role: Role | null | undefined): string | null {
-      return role ? (this.roleLabelMap[role] ?? null) : null;
-    }
+  // 高速参照用マップ（role -> 翻訳キー）
+  private readonly roleLabelMap: Record<Role, string> = {
+    admin:  'role.adminLabel',
+    member: 'role.memberLabel',
+    viewer: 'role.viewerLabel',
+  };
+
+  // テンプレから呼ぶ用（純関数）
+  getRoleLabelKey(role: Role | null | undefined): string | null {
+    return role ? (this.roleLabelMap[role] ?? null) : null;
+  }
 
   constructor(
     public prefs: PrefsService,
@@ -163,16 +164,43 @@ export class HomePage implements OnInit, OnDestroy {
     );
 
     this.myUid$ = this.auth.uid$;
-    
+
     // 追加: メンバー一覧とadmin数
     this.membersList$ = this.currentProject.projectId$.pipe(
-      switchMap(pid => this.members.list$(pid))
+      switchMap(pid => this.members.list$(pid)),
     );
+
+    // メンバー一覧が更新されたら、上書きマップを掃除（サーバー真実に同化）
+    this.membersList$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(list => {
+        const set = new Set(list.map(m => m.uid));
+        // 消えたUIDの上書きを削除
+        for (const k of Object.keys(this.uiRoleOverride)) {
+          if (!set.has(k)) delete this.uiRoleOverride[k];
+        }
+        // サーバー値と一致しているものは上書きを削除（無駄な残りを消す）
+        for (const m of list) {
+          const cur = this.uiRoleOverride[m.uid];
+          if (cur !== undefined && cur === m.role) {
+            delete this.uiRoleOverride[m.uid];
+          }
+        }
+      });
+
     this.adminCount$ = this.membersList$.pipe(
       map(list => list.filter(m => m.role === 'admin').length)
     );
-    
+
+    this.lastAdminUid$ = this.membersList$.pipe(
+      map(list => {
+        const admins = list.filter(m => m.role === 'admin');
+        return admins.length === 1 ? admins[0].uid : null;
+      })
+    );
   }
+
+  lastAdminUid$!: Observable<string | null>;
 
   /** 翻訳キーが未登録の時に fallback を返す（テンプレ用） */
   t(key: string, fallback: string): string {
@@ -189,7 +217,6 @@ export class HomePage implements OnInit, OnDestroy {
   }
 
   lang: 'ja' | 'en' = 'ja';
-
   themeMode: 'light' | 'dark' | 'system' = 'system';
 
   async ngOnInit() {
@@ -213,6 +240,7 @@ export class HomePage implements OnInit, OnDestroy {
           this.selectedProblemId = null;
           this.selectedProblem$.next(null);
           this.tasksMap = {};
+          this.uiRoleOverride = {}; // ログアウトで上書きもクリア
         }
       });
 
@@ -283,10 +311,9 @@ export class HomePage implements OnInit, OnDestroy {
     // --- FCM: 既に権限があればトークン取得＆保存（UI表示はしない） ---
     try {
       this.fcmToken = await this.msg.getTokenIfGranted();
-     // ★ トークンが取れているなら、現在のアプリ言語で fcmTokens に upsert
-     if (this.fcmToken) {
-       await this.fcmTokens.ensureRegistered();
-     }
+      if (this.fcmToken) {
+        await this.fcmTokens.ensureRegistered();
+      }
     } catch {}
 
     // フォアグラウンド通知の購読（最新20件）
@@ -305,81 +332,93 @@ export class HomePage implements OnInit, OnDestroy {
         );
       })
     );
+
     this.hint$ = combineLatest([this.currentProject.projectId$, this.auth.uid$]).pipe(
       switchMap(([pid, uid]) => {
-        // プロジェクト未選択 or 未ログイン → 何も出さない
         if (!pid || pid === 'default' || !uid) return of<HomeViewHint>('none');
-    
-        // メンバーシップを直接確認（存在しない/読めない＝喪失）
         const ref = nativeDoc(this.fs as any, `projects/${pid}/members/${uid}`);
         return rxDocData(ref).pipe(
           map((m: any | undefined) => {
-            if (!m) return 'projectLost' as HomeViewHint;       // 削除 or 権限喪失
-            return m.role === 'viewer' ? 'viewer' : 'none';      // 純粋なViewer
+            if (!m) return 'projectLost' as HomeViewHint;
+            return m.role === 'viewer' ? 'viewer' : 'none';
           }),
-          catchError(() => of<HomeViewHint>('projectLost'))      // permission-denied も喪失扱い
+          catchError(() => of<HomeViewHint>('projectLost'))
         );
       })
     );
   }
 
-    // ===== メンバー管理：ロール変更 =====
-    async changeMemberRole(target: Member, next: Role) {
-      const prev = target.role;            // ← 変更前を保持
-    
-      if (!(await this.requireOnline())) return;
-      const pid = this.currentProject.getSync();
-      if (!pid) { alert(this.i18n.instant('common.projectNotSelected')); return; }
-    
-      // 最後のadmin保護：発動したらUIも即座に元へ戻す
-      const admins = await firstValueFrom(this.adminCount$);
-      if (target.role === 'admin' && next !== 'admin' && admins <= 1) {
-        target.role = prev;                // ← UIを巻き戻す
-        this.snack.open(this.i18n.instant('warn.lastAdminGuard'), undefined, { duration: 3000 });
+  // ===== メンバー管理：UI一時上書き付きのロール変更 =====
+  async onRolePicked(target: Member, next: Role) {
+    const prev = target.role;
+    const pid = this.currentProject.getSync();
+    if (!pid) { alert(this.i18n.instant('common.projectNotSelected')); return; }
+    if (!(await this.requireOnline())) return;
+
+    // 最後のadmin保護：発動したらUIも即座に「admin」に固定
+    const admins = await firstValueFrom(this.adminCount$);
+    if (target.role === 'admin' && next !== 'admin' && admins <= 1) {
+      this.uiRoleOverride[target.uid] = 'admin';
+      this.snack.open(this.i18n.instant('warn.lastAdminGuard'), undefined, { duration: 3000 });
+      return;
+    }
+
+    // 自分降格の確認（キャンセル時は元へ）
+    const myUid = await firstValueFrom(this.auth.uid$);
+    if (target.uid === myUid && next !== 'admin') {
+      const ok = confirm(this.i18n.instant('member.confirmDemoteSelf', { role: next }));
+      if (!ok) {
+        this.uiRoleOverride[target.uid] = prev; // 明示的に巻き戻す
         return;
       }
-    
-      // 自分降格の確認（キャンセル時も戻す）
-      const myUid = await firstValueFrom(this.auth.uid$);
-      if (target.uid === myUid && next !== 'admin') {
-        const ok = confirm(this.i18n.instant('member.confirmDemoteSelf', { role: next }));
-        if (!ok) { target.role = prev; return; }     // ← 戻す
-      }
-    
-      try {
-        await this.members.updateRole(pid, target.uid, next);
-        this.snack.open(this.i18n.instant('member.roleUpdated'), undefined, { duration: 2000 });
-      } catch (e) {
-        // 失敗（permission-denied等）はUIを元へ
-        target.role = prev;                // ← 戻す
-        console.error(e);
-        this.snack.open(this.i18n.instant('error.failed'), undefined, { duration: 2500 });
-      }
     }
-  
-    // ===== メンバー管理：削除 =====
-    async removeMember(target: Member) {
-      if (!(await this.requireOnline())) return;
-      const pid = this.currentProject.getSync();
-      if (!pid) { alert(this.i18n.instant('common.projectNotSelected')); return; }
-  
-      const admins = await firstValueFrom(this.adminCount$);
-      if (target.role === 'admin' && admins <= 1) {
-        this.snack.open(this.i18n.instant('warn.lastAdminGuard'), undefined, { duration: 3000 });
-        return;
-      }
-  
-      const ok = confirm(this.i18n.instant('member.confirmRemove', { name: target.displayName || target.email || target.uid }));
-      if (!ok) return;
-  
-      try {
-        await this.members.removeMembership(pid, target.uid);
-        this.snack.open(this.i18n.instant('member.removed'), undefined, { duration: 2000 });
-      } catch (e) {
-        console.error(e);
-        this.snack.open(this.i18n.instant('error.failed'), undefined, { duration: 2500 });
-      }
+
+    // 楽観的UI
+    this.uiRoleOverride[target.uid] = next;
+
+    try {
+      await this.members.updateRole(pid, target.uid, next);
+      // サーバーのpushで正が流れてくるので上書きは消す
+      delete this.uiRoleOverride[target.uid];
+      this.snack.open(this.i18n.instant('member.roleUpdated'), undefined, { duration: 2000 });
+    } catch (e) {
+      // 失敗（permission-denied等）はUIを元へ
+      this.uiRoleOverride[target.uid] = prev;
+      console.error(e);
+      this.snack.open(this.i18n.instant('error.failed'), undefined, { duration: 2500 });
     }
+  }
+
+  /** 互換: 既存テンプレ呼び出しがある場合に備えて委譲 */
+  async changeMemberRole(target: Member, next: Role) {
+    return this.onRolePicked(target, next);
+  }
+
+  // ===== メンバー管理：削除 =====
+  async removeMember(target: Member) {
+    if (!(await this.requireOnline())) return;
+    const pid = this.currentProject.getSync();
+    if (!pid) { alert(this.i18n.instant('common.projectNotSelected')); return; }
+
+    const admins = await firstValueFrom(this.adminCount$);
+    if (target.role === 'admin' && admins <= 1) {
+      this.snack.open(this.i18n.instant('warn.lastAdminGuard'), undefined, { duration: 3000 });
+      return;
+    }
+
+    const ok = confirm(this.i18n.instant('member.confirmRemove', { name: target.displayName || target.email || target.uid }));
+    if (!ok) return;
+
+    try {
+      await this.members.removeMembership(pid, target.uid);
+      // サーバーが正なので上書きは不要だが一応掃除
+      delete this.uiRoleOverride[target.uid];
+      this.snack.open(this.i18n.instant('member.removed'), undefined, { duration: 2000 });
+    } catch (e) {
+      console.error(e);
+      this.snack.open(this.i18n.instant('error.failed'), undefined, { duration: 2500 });
+    }
+  }
 
   // HomePage クラス内のどこかに追加
   toDate(s?: string | null): Date | null {
@@ -610,7 +649,7 @@ export class HomePage implements OnInit, OnDestroy {
       alert(this.t('recurrence.anchorRequired', '繰り返しを設定するには初回期日が必要です'));
       return;
     }
-    
+
     const payload: Partial<Task> = {
       title: t,
       dueDate: dueRaw ? dueRaw : null,
@@ -963,6 +1002,7 @@ export class HomePage implements OnInit, OnDestroy {
     this.fgSub?.unsubscribe();
   }
 }
+
 
 
 

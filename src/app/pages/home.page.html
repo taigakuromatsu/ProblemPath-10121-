@@ -140,11 +140,14 @@
                     <td class="role">
                       <ng-container *ngIf="members.isAdmin$ | async; else roleReadOnly">
                         <select
-                          [ngModel]="m.role"
-                          (ngModelChange)="changeMemberRole(m, $event)"
+                          [ngModel]="uiRoleOverride[m.uid] ?? m.role"
+                          (ngModelChange)="onRolePicked(m, $event)"
                           class="role-select no-wrap"
+                          [disabled]="!(members.isAdmin$ | async) || ((lastAdminUid$ | async) === m.uid)"
                         >
-                          <option *ngFor="let r of roleOptions" [value]="r.value">
+                          <option *ngFor="let r of roleOptions"
+                                  [value]="r.value"
+                                  [disabled]="((lastAdminUid$ | async) === m.uid) && r.value !== 'admin'">
                             {{ r.labelKey | translate }}
                           </option>
                         </select>
