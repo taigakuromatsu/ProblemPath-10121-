@@ -43,6 +43,11 @@
       "problemSelectLabel": "Select a Problem",
       "noProblemsYet": "No Problems yet. Create one from “New”.",
       "deleteSelectedProblem": "Delete selected problem",
+      "range": {
+        "label": "Task display period",
+        "start": "Start date",
+        "end": "End date"
+      },
       "confirm": {
         "deleteProblemAndChildren": "Delete this Problem and all its children (Issues/Tasks)?"
       }
@@ -543,7 +548,8 @@
   },
   "export": {
     "csv": "CSV",
-    "json": "JSON"
+    "json": "JSON",
+    "title": "Data export"
   },
   "join": {
     "title": "Join Project",

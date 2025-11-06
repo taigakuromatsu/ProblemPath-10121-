@@ -288,36 +288,37 @@ export class SchedulePage implements OnInit, OnDestroy {
 
   // 追加: ISO日付のクランプ系（マイページと同じ）
   private minIso(a: string, b: string) { return a <= b ? a : b; }
+  private maxIso(a: string, b: string) { return a >= b ? a : b; }
   private validRange(from: string, to: string) { return from <= to; }
 
   reload() {
     const FAR_FUTURE = '9999-12-31';
     const tags = this.parseTags(this.tagQuery);
     const params$ = this.midnightTick$.pipe(startWith(null));
-
+  
     this.vm$ = combineLatest([this.currentProject.projectId$, params$]).pipe(
       switchMap(([pid]) => {
         if (!pid) return of(EMPTY_VM);
-
+  
         const today = new Date(); today.setHours(0, 0, 0, 0);
         const tomorrow = this.addDays(today, 1);
-
+  
         const dow = today.getDay();
         const diffToMon = (dow === 0 ? -6 : 1 - dow);
         const startOfWeek = this.addDays(today, diffToMon);
         const endOfWeek = this.addDays(startOfWeek, 6);
         const startOfNextWeek = this.addDays(endOfWeek, 1);
         const endOfNextWeek = this.addDays(startOfNextWeek, 6);
-
-        // 「明日」が来週月と重なる場合は来週Startを+1日（従来対処を維持）
+  
+        // 「明日」が来週月と重なる場合は来週Startを+1日（従来対処のまま）
         let nextWeekStart = startOfNextWeek;
         if (this.sameDay(tomorrow, startOfNextWeek)) nextWeekStart = this.addDays(startOfNextWeek, 1);
-
+  
         // 入力レンジ（未指定は最小～最大）
         const start = this.startRange || '0000-01-01';
         const end = this.endRange || FAR_FUTURE;
-
-        // 文字列ISOを先に用意
+  
+        // ISO文字列
         const isoToday = this.ymd(today);
         const isoTomorrow = this.ymd(tomorrow);
         const isoThisWeekRestStart = this.ymd(this.addDays(tomorrow, 1));
@@ -325,25 +326,46 @@ export class SchedulePage implements OnInit, OnDestroy {
         const isoStartOfNextWeek = this.ymd(nextWeekStart);
         const isoEndOfNextWeek = this.ymd(endOfNextWeek);
         const isoAfterNextWeek = this.ymd(this.addDays(endOfNextWeek, 1));
-
-        const overdue$      = this.tasks.listAllOverdue$(pid, this.minIso(end, isoToday), this.openOnly, tags);
-        const today$        = (start <= isoToday && isoToday <= end)
-                                ? this.tasks.listAllByDueRange$(pid, isoToday, isoToday, this.openOnly, tags)
-                                : of([] as Task[]);
-        const tomorrow$     = (isoTomorrow <= end && start <= isoTomorrow)
-                                ? this.tasks.listAllByDueRange$(pid, isoTomorrow, isoTomorrow, this.openOnly, tags)
-                                : of([] as Task[]);
-        const thisWeekRest$ = (this.validRange(isoThisWeekRestStart, this.minIso(isoEndOfWeek, end)))
-                                ? this.tasks.listAllByDueRange$(pid, isoThisWeekRestStart, this.minIso(isoEndOfWeek, end), this.openOnly, tags)
-                                : of([] as Task[]);
-        const nextWeek$     = (this.validRange(isoStartOfNextWeek, this.minIso(isoEndOfNextWeek, end)))
-                                ? this.tasks.listAllByDueRange$(pid, isoStartOfNextWeek, this.minIso(isoEndOfNextWeek, end), this.openOnly, tags)
-                                : of([] as Task[]);
-        const later$        = (this.validRange(isoAfterNextWeek, end))
-                                ? this.tasks.listAllByDueRange$(pid, isoAfterNextWeek, end, this.openOnly, tags)
-                                : of([] as Task[]);
-        const nodue$        = this.tasks.listAllNoDue$(pid, this.openOnly, tags);
-
+  
+        // ---- start/end でクランプしたクエリに統一 ----
+  
+        // 1) 今日まで（start～min(end, today)）を一度に取り、overdue / today に分割
+        const toTodayStart = start;
+        const toTodayEnd = this.minIso(end, isoToday);
+        const allToToday$ = (toTodayStart <= toTodayEnd)
+          ? this.tasks.listAllByDueRange$(pid, toTodayStart, toTodayEnd, this.openOnly, tags)
+          : of([] as Task[]);
+        const overdue$ = allToToday$.pipe(map(xs => xs.filter(x => (x.dueDate ?? '') < isoToday)));
+        const today$   = allToToday$.pipe(map(xs => xs.filter(x => x.dueDate === isoToday)));
+  
+        // 2) 明日（start <= 明日 <= end のとき）
+        const tomorrow$ = (start <= isoTomorrow && isoTomorrow <= end)
+          ? this.tasks.listAllByDueRange$(pid, isoTomorrow, isoTomorrow, this.openOnly, tags)
+          : of([] as Task[]);
+  
+        // 3) 今週の残り [max(start, 今週残り開始) .. min(end, 週末)]
+        const wRestStart = this.maxIso(start, isoThisWeekRestStart);
+        const wRestEnd   = this.minIso(end, isoEndOfWeek);
+        const thisWeekRest$ = (wRestStart <= wRestEnd)
+          ? this.tasks.listAllByDueRange$(pid, wRestStart, wRestEnd, this.openOnly, tags)
+          : of([] as Task[]);
+  
+        // 4) 来週 [max(start, 来週開始) .. min(end, 来週末)]
+        const nextStart = this.maxIso(start, isoStartOfNextWeek);
+        const nextEnd   = this.minIso(end, isoEndOfNextWeek);
+        const nextWeek$ = (nextStart <= nextEnd)
+          ? this.tasks.listAllByDueRange$(pid, nextStart, nextEnd, this.openOnly, tags)
+          : of([] as Task[]);
+  
+        // 5) 以降 [max(start, 来週末+1) .. end]
+        const laterStart = this.maxIso(start, isoAfterNextWeek);
+        const later$ = (laterStart <= end)
+          ? this.tasks.listAllByDueRange$(pid, laterStart, end, this.openOnly, tags)
+          : of([] as Task[]);
+  
+        // 6) 期限なし（そのまま）
+        const nodue$ = this.tasks.listAllNoDue$(pid, this.openOnly, tags);
+  
         return combineLatest([overdue$, today$, tomorrow$, thisWeekRest$, nextWeek$, later$, nodue$]).pipe(
           map(([overdue, todayArr, tomorrowArr, thisWeekRest, nextWeekArr, laterArr, nodue]) => {
             const vmRaw: Vm = { overdue, today: todayArr, tomorrow: tomorrowArr, thisWeekRest, nextWeek: nextWeekArr, later: laterArr, nodue };
@@ -354,6 +376,7 @@ export class SchedulePage implements OnInit, OnDestroy {
       shareReplay({ bufferSize: 1, refCount: true }),
     );
   }
+  
 
   onDueDateChange(event: { task: Task; dueDate: string | null }) {
     this.scheduleDueUpdate(event.task, event.dueDate);

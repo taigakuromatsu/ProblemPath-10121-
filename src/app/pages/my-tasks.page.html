@@ -18,80 +18,90 @@
       </mat-button-toggle-group>
     </div>
 
-    <div class="toolbar">
-      <div class="export">
-        <button mat-stroked-button (click)="exportCurrent('csv')"
-                [attr.aria-label]="'export.csv' | translate">
-          {{ 'export.csv' | translate }}
-        </button>
-        <button mat-stroked-button (click)="exportCurrent('json')"
-                [attr.aria-label]="'export.json' | translate">
-          {{ 'export.json' | translate }}
-        </button>
-      </div>
+    <div class="header-grid">
+      <!-- 左：データエキスポート -->
+      <section class="export-card" aria-labelledby="export-title">
+        <div class="group-title" id="export-title">
+          <mat-icon fontSet="material-icons-outlined">download</mat-icon>
+          <span>{{ 'export.title' | translate }}</span>
+        </div>
+        <div class="group-actions">
+          <button mat-stroked-button (click)="exportCurrent('csv')"
+                  [attr.aria-label]="'export.csv' | translate">
+            {{ 'export.csv' | translate }}
+          </button>
+          <button mat-stroked-button (click)="exportCurrent('json')"
+                  [attr.aria-label]="'export.json' | translate">
+            {{ 'export.json' | translate }}
+          </button>
+        </div>
+      </section>
 
-      <div class="filters">
-        <!-- Start date -->
+      <!-- 中央：表示（未完了のみ / すべて） -->
+      <section class="center-controls">
+        <label class="control-label">{{ 'filter.show' | translate }}</label>
+        <mat-button-toggle-group [(ngModel)]="openOnly" (change)="onOpenOnlyChange($event.value)">
+          <mat-button-toggle [value]="true">{{ 'filter.openOnly' | translate }}</mat-button-toggle>
+          <mat-button-toggle [value]="false">{{ 'filter.all' | translate }}</mat-button-toggle>
+        </mat-button-toggle-group>
+      </section>
+
+      <!-- 右：日付レンジ + タグ -->
+      <section class="right-filters">
+        <!-- 開始日・終了日 -->
         <div class="filter-group range">
-          <mat-form-field appearance="outline" class="date-field">
-            <mat-label>{{ 'myTasks.range.start' | translate }}</mat-label>
-            <input
-              matInput
-              [matDatepicker]="startPicker"
-              [(ngModel)]="displayStartDate"
-              (ngModelChange)="onStartPicked($event)"
-              (keydown.escape)="clearStart()"
-            />
-            <!-- クリアボタン -->
-            <button
-              mat-icon-button
-              matSuffix
-              type="button"
-              aria-label="{{ 'common.clear' | translate }}"
-              *ngIf="displayStartDate"
-              (click)="clearStart()">
-              <mat-icon>close</mat-icon>
-            </button>
-        
-            <mat-datepicker-toggle matSuffix [for]="startPicker"></mat-datepicker-toggle>
-            <mat-datepicker #startPicker></mat-datepicker>
-          </mat-form-field>
+          <label class="range-label">{{ 'schedule.range.label' | translate }}</label>
+          <div class="range-fields">
+            <!-- Start -->
+            <mat-form-field appearance="outline" class="date-field">
+              <mat-label>{{ 'myTasks.range.start' | translate }}</mat-label>
+              <input
+                matInput
+                [matDatepicker]="startPicker"
+                [(ngModel)]="displayStartDate"
+                (ngModelChange)="onStartPicked($event)"
+                (keydown.escape)="clearStart()"
+              />
+              <button
+                mat-icon-button
+                matSuffix
+                type="button"
+                aria-label="{{ 'common.clear' | translate }}"
+                *ngIf="displayStartDate"
+                (click)="clearStart()">
+                <mat-icon>close</mat-icon>
+              </button>
+              <mat-datepicker-toggle matSuffix [for]="startPicker"></mat-datepicker-toggle>
+              <mat-datepicker #startPicker></mat-datepicker>
+            </mat-form-field>
+
+            <!-- End -->
+            <mat-form-field appearance="outline" class="date-field">
+              <mat-label>{{ 'myTasks.range.end' | translate }}</mat-label>
+              <input
+                matInput
+                [matDatepicker]="endPicker"
+                [(ngModel)]="displayEndDate"
+                (ngModelChange)="onEndPicked($event)"
+                (keydown.escape)="clearEnd()"
+              />
+              <button
+                mat-icon-button
+                matSuffix
+                type="button"
+                aria-label="{{ 'common.clear' | translate }}"
+                *ngIf="displayEndDate"
+                (click)="clearEnd()">
+                <mat-icon>close</mat-icon>
+              </button>
+              <mat-datepicker-toggle matSuffix [for]="endPicker"></mat-datepicker-toggle>
+              <mat-datepicker #endPicker></mat-datepicker>
+            </mat-form-field>
+          </div>
         </div>
 
-        <!-- End date -->
-        <div class="filter-group range">
-          <mat-form-field appearance="outline" class="date-field">
-            <mat-label>{{ 'myTasks.range.end' | translate }}</mat-label>
-            <input
-              matInput
-              [matDatepicker]="endPicker"
-              [(ngModel)]="displayEndDate"
-              (ngModelChange)="onEndPicked($event)"
-              (keydown.escape)="clearEnd()"
-            />
-            <!-- クリアボタン -->
-            <button
-              mat-icon-button
-              matSuffix
-              type="button"
-              aria-label="{{ 'common.clear' | translate }}"
-              *ngIf="displayEndDate"
-              (click)="clearEnd()">
-              <mat-icon>close</mat-icon>
-            </button>
-        
-            <mat-datepicker-toggle matSuffix [for]="endPicker"></mat-datepicker-toggle>
-            <mat-datepicker #endPicker></mat-datepicker>
-          </mat-form-field>
-        </div>
-        <div class="filter-group">
-          <label>{{ 'filter.show' | translate }}</label>
-          <mat-button-toggle-group [(ngModel)]="openOnly" (change)="onOpenOnlyChange($event.value)">
-            <mat-button-toggle [value]="true">{{ 'filter.openOnly' | translate }}</mat-button-toggle>
-            <mat-button-toggle [value]="false">{{ 'filter.all' | translate }}</mat-button-toggle>
-          </mat-button-toggle-group>
-        </div>
-        <div class="filter-group">
+        <!-- タグ -->
+        <div class="filter-group tags">
           <label>{{ 'filter.tags' | translate }}</label>
           <input
             type="text"
@@ -100,7 +110,7 @@
             [placeholder]="'filter.tagsPlaceholder' | translate"
           />
         </div>
-      </div>
+      </section>
     </div>
   </section>
 

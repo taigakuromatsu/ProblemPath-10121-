@@ -425,6 +425,11 @@
   },
   "schedule": {
     "subtitle": "プロジェクト全体のタスクと期限をまとめて確認できます。",
+    "range": {
+      "label": "タスク表示期間",
+      "start": "表示開始日",
+      "end": "表示終了日"
+    },
     "export": {
       "csv": "CSV",
       "json": "JSON",
@@ -532,7 +537,8 @@
   },
   "export": {
     "csv": "CSV",
-    "json": "JSON"
+    "json": "JSON",
+    "title": "データエキスポート"
   },
   "join": {
     "title": "プロジェクトに参加",

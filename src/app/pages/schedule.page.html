@@ -44,51 +44,54 @@
       <section class="right-filters">
         <!-- ▼ 追加：開始日・終了日（マイページと同UI） -->
         <div class="filter-group range">
-          <!-- Start -->
-          <mat-form-field appearance="outline" class="date-field">
-            <mat-label>{{ 'myTasks.range.start' | translate }}</mat-label>
-            <input
-              matInput
-              [matDatepicker]="startPicker"
-              [(ngModel)]="displayStartDate"
-              (ngModelChange)="onStartPicked($event)"
-              (keydown.escape)="clearStart()"
-            />
-            <button
-              mat-icon-button
-              matSuffix
-              type="button"
-              aria-label="{{ 'common.clear' | translate }}"
-              *ngIf="displayStartDate"
-              (click)="clearStart()">
-              <mat-icon>close</mat-icon>
-            </button>
-            <mat-datepicker-toggle matSuffix [for]="startPicker"></mat-datepicker-toggle>
-            <mat-datepicker #startPicker></mat-datepicker>
-          </mat-form-field>
+          <label class="range-label">{{ 'schedule.range.label' | translate }}</label>
+          <div class="range-fields">
+            <!-- Start -->
+            <mat-form-field appearance="outline" class="date-field">
+              <mat-label>{{ 'myTasks.range.start' | translate }}</mat-label>
+              <input
+                matInput
+                [matDatepicker]="startPicker"
+                [(ngModel)]="displayStartDate"
+                (ngModelChange)="onStartPicked($event)"
+                (keydown.escape)="clearStart()"
+              />
+              <button
+                mat-icon-button
+                matSuffix
+                type="button"
+                aria-label="{{ 'common.clear' | translate }}"
+                *ngIf="displayStartDate"
+                (click)="clearStart()">
+                <mat-icon>close</mat-icon>
+              </button>
+              <mat-datepicker-toggle matSuffix [for]="startPicker"></mat-datepicker-toggle>
+              <mat-datepicker #startPicker></mat-datepicker>
+            </mat-form-field>
 
-          <!-- End -->
-          <mat-form-field appearance="outline" class="date-field">
-            <mat-label>{{ 'myTasks.range.end' | translate }}</mat-label>
-            <input
-              matInput
-              [matDatepicker]="endPicker"
-              [(ngModel)]="displayEndDate"
-              (ngModelChange)="onEndPicked($event)"
-              (keydown.escape)="clearEnd()"
-            />
-            <button
-              mat-icon-button
-              matSuffix
-              type="button"
-              aria-label="{{ 'common.clear' | translate }}"
-              *ngIf="displayEndDate"
-              (click)="clearEnd()">
-              <mat-icon>close</mat-icon>
-            </button>
-            <mat-datepicker-toggle matSuffix [for]="endPicker"></mat-datepicker-toggle>
-            <mat-datepicker #endPicker></mat-datepicker>
-          </mat-form-field>
+            <!-- End -->
+            <mat-form-field appearance="outline" class="date-field">
+              <mat-label>{{ 'myTasks.range.end' | translate }}</mat-label>
+              <input
+                matInput
+                [matDatepicker]="endPicker"
+                [(ngModel)]="displayEndDate"
+                (ngModelChange)="onEndPicked($event)"
+                (keydown.escape)="clearEnd()"
+              />
+              <button
+                mat-icon-button
+                matSuffix
+                type="button"
+                aria-label="{{ 'common.clear' | translate }}"
+                *ngIf="displayEndDate"
+                (click)="clearEnd()">
+                <mat-icon>close</mat-icon>
+              </button>
+              <mat-datepicker-toggle matSuffix [for]="endPicker"></mat-datepicker-toggle>
+              <mat-datepicker #endPicker></mat-datepicker>
+            </mat-form-field>
+          </div>
         </div>
 
         <!-- タグ -->
