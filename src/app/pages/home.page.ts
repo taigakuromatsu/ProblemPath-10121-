@@ -325,28 +325,33 @@ export class HomePage implements OnInit, OnDestroy {
 
     // ===== メンバー管理：ロール変更 =====
     async changeMemberRole(target: Member, next: Role) {
+      const prev = target.role;            // ← 変更前を保持
+    
       if (!(await this.requireOnline())) return;
       const pid = this.currentProject.getSync();
       if (!pid) { alert(this.i18n.instant('common.projectNotSelected')); return; }
-  
-      // 最後のadmin保護：targetがadmin→別ロール かつ adminが1人だけ の場合は拒否
+    
+      // 最後のadmin保護：発動したらUIも即座に元へ戻す
       const admins = await firstValueFrom(this.adminCount$);
       if (target.role === 'admin' && next !== 'admin' && admins <= 1) {
+        target.role = prev;                // ← UIを巻き戻す
         this.snack.open(this.i18n.instant('warn.lastAdminGuard'), undefined, { duration: 3000 });
         return;
       }
-  
-      // 自分を降格させると見え方が変わるので簡易確認
+    
+      // 自分降格の確認（キャンセル時も戻す）
       const myUid = await firstValueFrom(this.auth.uid$);
       if (target.uid === myUid && next !== 'admin') {
         const ok = confirm(this.i18n.instant('member.confirmDemoteSelf', { role: next }));
-        if (!ok) return;
+        if (!ok) { target.role = prev; return; }     // ← 戻す
       }
-  
+    
       try {
         await this.members.updateRole(pid, target.uid, next);
         this.snack.open(this.i18n.instant('member.roleUpdated'), undefined, { duration: 2000 });
       } catch (e) {
+        // 失敗（permission-denied等）はUIを元へ
+        target.role = prev;                // ← 戻す
         console.error(e);
         this.snack.open(this.i18n.instant('error.failed'), undefined, { duration: 2500 });
       }
