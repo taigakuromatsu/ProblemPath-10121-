@@ -223,13 +223,13 @@ export class EditNameDialog {
           <!-- 右：名前変更 → アカウント名 → サインアウト -->
           <div class="topbar-actions" role="group" aria-label="Toolbar actions">
             <ng-container *ngIf="auth.loggedIn$ | async; else signIn">
-              <button mat-stroked-button type="button" class="auth-button auth--compact" (click)="openEditName()">
+              <button mat-stroked-button type="button" class="tab-btn" (click)="openEditName()">
                 名前変更
               </button>
               <span class="user-chip user-chip--compact">
                 {{ (auth.displayName$ | async) || ('auth.signedIn' | translate) }}
               </span>
-              <button mat-stroked-button type="button" class="auth-button auth--compact" (click)="auth.signOut()">
+              <button mat-stroked-button type="button" class="tab-btn" (click)="auth.signOut()">
                 {{ 'auth.signOut' | translate }}
               </button>
             </ng-container>
@@ -239,14 +239,14 @@ export class EditNameDialog {
                 mat-flat-button
                 color="accent"
                 type="button"
-                class="auth-button auth--compact"
+                class="tab-btn"
                 (click)="auth.signInWithGoogle({ forceChoose: true })">
                 Googleでログイン
               </button>
               <button
                 mat-stroked-button
                 type="button"
-                class="auth-button auth--compact"
+                class="tab-btn"
                 (click)="openEmailLogin()">
                 メールでログイン
               </button>
