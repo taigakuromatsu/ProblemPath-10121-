@@ -551,9 +551,9 @@
       "created": "Project created",
       "deleteOnlyAdmin": "Only admins can delete the project",
       "deleted": "Project deleted",
-      "adminCannotLeave": "Admins cannot leave from here",
+      "adminCannotLeave": "Admins cannot leave from the project. Please change to Member role first.",
       "left": "Left the project",
-      "renameOnlyAdmin": "Only admins can rename the project",
+      "renameOnlyAdmin": "Only admins can rename the project. ",
       "renamed": "Project name updated",
       "projectLost": "The selected project has been deleted or your access has been lost. Please select another project from the list or create a new one."
     },

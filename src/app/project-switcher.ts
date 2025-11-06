@@ -120,16 +120,18 @@ import { arrayRemove } from 'firebase/firestore';
 
         <!-- 追加：プロジェクト名変更（管理者のみ） -->
         <button mat-stroked-button type="button" (click)="renameProject()"
-          [disabled]="renaming || loading || !canRename || !(isOnline$ | async)">
+         [disabled]="renaming || loading || !(isOnline$ | async)">
           <mat-icon>edit</mat-icon>
           <span>{{ 'projectSwitcher.rename' | translate }}</span>
         </button>
 
-        <button mat-stroked-button color="warn" type="button" (click)="deleteProject()" [disabled]="deleting || loading || !canDelete || !(isOnline$ | async)">
+        <button mat-stroked-button color="warn" type="button" (click)="deleteProject()"
+         [disabled]="deleting || loading || !(isOnline$ | async)">
           <mat-icon>delete</mat-icon>
           <span>{{ 'projectSwitcher.delete' | translate }}</span>
         </button>
-        <button mat-stroked-button type="button" (click)="leaveProject()" [disabled]="leaving || loading || !canLeave || !(isOnline$ | async)">
+        <button mat-stroked-button type="button" (click)="leaveProject()"
+         [disabled]="leaving || loading || !(isOnline$ | async)">
           <mat-icon>logout</mat-icon>
           <span>{{ 'projectSwitcher.leave' | translate }}</span>
         </button>
