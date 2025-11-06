@@ -270,6 +270,9 @@
 .task-actions { display: flex; flex-wrap: wrap; gap: var(--gap-2); }
 
 /* 招待 */
+.invite-form button[type="button"] {
+  margin-top: 8px;
+}
 .invite-result { display: flex; flex-wrap: wrap; gap: var(--gap-2); align-items: center; }
 .invite-result input { flex: 1 1 200px; }
 
