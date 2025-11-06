@@ -260,41 +260,80 @@ export class MyTasksPage implements OnInit, OnDestroy {
     return out as Vm;
   }
 
+
+  // 追加: ISO日付(YYYY-MM-DD)を比較・クランプする小ユーティリティ
+  private minIso(a: string, b: string) { return a <= b ? a : b; }
+  private maxIso(a: string, b: string) { return a >= b ? a : b; }
+  private validRange(from: string, to: string) { return from <= to; }
+
   // -------- Data load --------
   reload() {
     const FAR = '9999-12-31';
     const tags = this.parseTags(this.tagQuery);
     const params$ = this.midnightTick$.pipe(startWith(null));
-
+  
     this.vm$ = combineLatest([this.current.projectId$, this.auth.uid$, params$]).pipe(
       switchMap(([pid, uid]) => {
         if (!pid || pid === 'default' || !uid) return of(EMPTY_VM);
-
+  
         const today = new Date(); today.setHours(0,0,0,0);
         const tomorrow = this.addDays(today, 1);
-
+  
         const dow = today.getDay();
         const diffToMon = (dow === 0 ? -6 : 1 - dow);
         const startOfWeek = this.addDays(today, diffToMon);
         const endOfWeek = this.addDays(startOfWeek, 6);
         const startOfNextWeek = this.addDays(endOfWeek, 1);
         const endOfNextWeek = this.addDays(startOfNextWeek, 6);
-
+  
         const start = this.startRange || '0000-01-01';
         const end = this.endRange || FAR;
-
+  
+        // 文字列ISOで比較するので YYYY-MM-DD のままでOK
+        const isoToday = this.ymd(today);
+        const isoTomorrow = this.ymd(tomorrow);
+        const isoThisWeekRestStart = this.ymd(this.addDays(tomorrow, 1));
+        const isoEndOfWeek = this.ymd(endOfWeek);
+        const isoStartOfNextWeek = this.ymd(startOfNextWeek);
+        const isoEndOfNextWeek = this.ymd(endOfNextWeek);
+        const isoAfterNextWeek = this.ymd(this.addDays(endOfNextWeek, 1));
+  
         return safeFromProject$(
           this.current.projectId$,
           pid => {
-            const allToToday$ = this.tasks.listMine$(pid, uid, this.openOnly, start, this.ymd(today), tags);
-            const overdue$ = allToToday$.pipe(map(xs => xs.filter(x => (x.dueDate ?? '') < this.ymd(today))));
-            const today$ = allToToday$.pipe(map(xs => xs.filter(x => x.dueDate === this.ymd(today))));
-            const tomorrow$ = this.tasks.listMine$(pid, uid, this.openOnly, this.ymd(tomorrow), this.ymd(tomorrow), tags);
-            const thisWeekRest$ = this.tasks.listMine$(pid, uid, this.openOnly, this.ymd(this.addDays(tomorrow, 1)), this.ymd(endOfWeek), tags);
-            const nextWeek$ = this.tasks.listMine$(pid, uid, this.openOnly, this.ymd(startOfNextWeek), this.ymd(endOfNextWeek), tags);
-            const later$ = this.tasks.listMine$(pid, uid, this.openOnly, this.ymd(this.addDays(endOfNextWeek, 1)), end, tags);
+            // 1) 今日まで（overdue/today用）
+            const allToToday$ = this.tasks.listMine$(pid, uid, this.openOnly, start, this.minIso(end, isoToday), tags);
+            const overdue$ = allToToday$.pipe(map(xs => xs.filter(x => (x.dueDate ?? '') < isoToday)));
+            const today$   = allToToday$.pipe(map(xs => xs.filter(x => x.dueDate === isoToday)));
+  
+            // 2) 明日（終了日を超えるなら空に）
+            const tomorrow$ =
+              (isoTomorrow <= end)
+                ? this.tasks.listMine$(pid, uid, this.openOnly, isoTomorrow, isoTomorrow, tags)
+                : of([] as Task[]);
+  
+            // 3) 今週の残り（[明後日, 週末] を end でクランプ）
+            const wRestEnd = this.minIso(isoEndOfWeek, end);
+            const thisWeekRest$ =
+              (this.validRange(isoThisWeekRestStart, wRestEnd))
+                ? this.tasks.listMine$(pid, uid, this.openOnly, isoThisWeekRestStart, wRestEnd, tags)
+                : of([] as Task[]);
+  
+            // 4) 来週（[来週月, 来週末] を end でクランプ。end が来週月より前なら空）
+            const nextEnd = this.minIso(isoEndOfNextWeek, end);
+            const nextWeek$ =
+              (this.validRange(isoStartOfNextWeek, nextEnd))
+                ? this.tasks.listMine$(pid, uid, this.openOnly, isoStartOfNextWeek, nextEnd, tags)
+                : of([] as Task[]);
+  
+            // 5) 以降（[来週末の翌日, end]。end がそれより前なら空）
+            const later$ =
+              (this.validRange(isoAfterNextWeek, end))
+                ? this.tasks.listMine$(pid, uid, this.openOnly, isoAfterNextWeek, end, tags)
+                : of([] as Task[]);
+  
             const nodue$ = this.tasks.listMineNoDue$(pid, uid, this.openOnly, tags);
-
+  
             return combineLatest([overdue$, today$, tomorrow$, thisWeekRest$, nextWeek$, later$, nodue$]).pipe(
               map(([overdue, todayArr, tomorrowArr, thisWeekRest, nextWeek, later, nodue]) =>
                 this.dedupeVm({ overdue, today: todayArr, tomorrow: tomorrowArr, thisWeekRest, nextWeek, later, nodue })
