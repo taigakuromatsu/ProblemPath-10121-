@@ -37,6 +37,21 @@ export class MessagingService {
     } catch {}
   }
 
+  // 共通の SW registration を取得
+  private async getFcmSwRegistration(): Promise<ServiceWorkerRegistration | null> {
+    if (typeof navigator === 'undefined' || !navigator.serviceWorker) return null;
+
+    // main.ts で登録している scope を明示指定
+    let reg = await navigator.serviceWorker.getRegistration('/firebase-cloud-messaging-push-scope');
+    if (reg) return reg;
+
+    // 念のため未登録環境向けに同じ設定で登録
+    reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+      scope: '/firebase-cloud-messaging-push-scope',
+    });
+    return reg;
+  }
+
   /** すでに通知許可が granted の場合だけ、トークンを返す（あれば保存もする） */
   async getTokenIfGranted(): Promise<string | null> {
     if (!this.messaging) return null;
@@ -46,9 +61,8 @@ export class MessagingService {
     const isSupportedResult = await runInInjectionContext(this.injector, () => isSupported());
     if (!isSupportedResult) return null;
 
-    const swReg =
-      (await navigator.serviceWorker.getRegistration()) ??
-      (await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' }));
+    const swReg = await this.getFcmSwRegistration();
+    if (!swReg) return null;
 
     try {
       const token = await runInInjectionContext(this.injector, () =>
@@ -74,39 +88,52 @@ export class MessagingService {
     if (!this.messaging) {
       throw new Error('FCM is not supported on this browser.');
     }
+  
     const isSupportedResult = await runInInjectionContext(this.injector, () => isSupported());
     if (!isSupportedResult) {
       throw new Error('FCM is not supported on this browser.');
     }
+  
     if (typeof Notification === 'undefined') {
       throw new Error('Notifications API is not available.');
     }
-
+  
     const perm = await Notification.requestPermission();
     if (perm !== 'granted') {
       await this.updateFcmStatus({ enabled: false, lastError: `permission:${perm}` });
       throw new Error(`Permission was not granted: ${perm}`);
     }
-
-    const swReg =
-      (await navigator.serviceWorker.getRegistration()) ??
-      (await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' }));
-
-    const token = await runInInjectionContext(this.injector, () =>
-      getToken(this.messaging!, {
-        vapidKey: (environment as any).messaging?.vapidKey,
-        serviceWorkerRegistration: swReg,
-      })
-    );
-
+  
+    // ★ FCM用 SW registration を共通ユーティリティから取得
+    const swReg = await this.getFcmSwRegistration();
+    if (!swReg) {
+      await this.updateFcmStatus({ enabled: false, lastError: 'sw:none' });
+      throw new Error('Failed to get Service Worker registration.');
+    }
+  
+    let token: string | null = null;
+    try {
+      token = await runInInjectionContext(this.injector, () =>
+        getToken(this.messaging!, {
+          vapidKey: (environment as any).messaging?.vapidKey,
+          serviceWorkerRegistration: swReg,
+        })
+      );
+    } catch (e: any) {
+      console.warn('[FCM] requestPermissionAndGetToken error:', e);
+      await this.updateFcmStatus({ enabled: false, lastError: String(e) });
+      throw new Error('Failed to acquire FCM token.');
+    }
+  
     if (!token) {
       await this.updateFcmStatus({ enabled: false, lastError: 'token:null' });
       throw new Error('Failed to acquire FCM token.');
     }
-
+  
     await this.saveToken(token);
     return token;
   }
+  
 
   /** users/{uid}/fcmTokens/{token} に保存（read禁止ルールに合わせて getDoc は使わない） */
   private async saveToken(token: string): Promise<void> {
@@ -164,13 +191,13 @@ export class MessagingService {
 
       runInInjectionContext(this.injector, () => {
         onMessage(this.messaging!, (payload: any) => {
-          const title: string | undefined = payload?.notification?.title ?? 'ProblemPath';
-          const body: string | undefined = payload?.notification?.body ?? '';
-
+          const title = payload?.notification?.title ?? 'ProblemPath';
+          const body = payload?.notification?.body ?? '';
+        
           this.zone.run(() => {
             this.fg$.next({ title, body }); // アプリ内（FG）通知
           });
-
+        
           // OS通知（見落とし防止）
           try {
             if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
@@ -187,20 +214,18 @@ export class MessagingService {
   // Service Worker からのメッセージリレーをリッスン（BG→FG橋渡し）
   private setupServiceWorkerMessageListener() {
     if (typeof navigator === 'undefined' || !navigator.serviceWorker) return;
-
+  
     navigator.serviceWorker.addEventListener('message', (event: MessageEvent) => {
       if (event.data?.type === 'FCM_BG') {
         const { title, body } = event.data;
-
+  
+        // ★ここ重要★:
+        // BGでの OS 通知は Service Worker 側が showNotification 済みとみなす。
+        // ここではアプリ内（FG）用ストリームに流すだけにして、
+        // new Notification() は呼ばない → 二重三重表示を防ぐ。
         this.zone.run(() => {
-          this.fg$.next({ title, body }); // アプリ内（FG）通知
+          this.fg$.next({ title, body });
         });
-
-        try {
-          if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-            new Notification(title || 'ProblemPath', { body }); // OS通知も併用
-          }
-        } catch {}
       }
     });
   }
