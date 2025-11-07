@@ -53,10 +53,16 @@ service cloud.firestore {
       }
 
       match /invites/{inviteId} {
-        allow read: if isAdmin(projectId)
+          allow read: if
+          // 1. プロジェクト管理者
+          isAdmin(projectId)
+          // 2. ログイン済み & メール一致（従来ロジック）
           || (isSignedIn()
               && request.auth.token.email != null
-              && resource.data.email == request.auth.token.email);
+              && resource.data.email == request.auth.token.email)
+          // 3. まだ使用されていない招待は、トークン(=docId)を知っている人なら誰でも閲覧可
+          //    （token は十分長いランダム値なので事実上秘匿情報扱い）
+          || (!('acceptedBy' in resource.data));
 
         allow create: if isAdmin(projectId)
           && validInvite(request.resource.data);

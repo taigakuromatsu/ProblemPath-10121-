@@ -10,9 +10,13 @@ const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const ANALYTICS_TIME_ZONE = "Asia/Tokyo";
 
 type QueryDocumentSnapshotLike = {
+  id: string;
   data(): Record<string, any>;
   get(fieldPath: string): any;
-  ref: { collection: (path: string) => { get(): Promise<{ docs: QueryDocumentSnapshotLike[] }> } };
+  ref: {
+    collection: (path: string) => { get(): Promise<{ docs: QueryDocumentSnapshotLike[] }> };
+    delete(): Promise<void>;
+  };
 };
 
 // ==== i18n方針 ====
@@ -425,6 +429,25 @@ export const computeAndWriteAnalytics = async (projectId: string) => {
   );
 
   await Promise.all(userWrites);
+  const perUserColRef = firestore.collection(
+    `projects/${projectId}/analyticsPerUser`
+  );
+  const existingPerUserSnap = await perUserColRef.get();
+
+  const cleanupWrites: Promise<unknown>[] = [];
+
+  existingPerUserSnap.forEach((docSnap: QueryDocumentSnapshotLike) => {
+    const uid = docSnap.id;
+    if (!byUser.has(uid)) {
+      // 全タスクが無くなった / 担当でなくなったユーザー
+      // → ドキュメント削除（フロントは EMPTY_MY にフォールバックする）
+      cleanupWrites.push(docSnap.ref.delete());
+    }
+  });
+
+  if (cleanupWrites.length > 0) {
+    await Promise.all(cleanupWrites);
+  }
 };
 
 // Callable
