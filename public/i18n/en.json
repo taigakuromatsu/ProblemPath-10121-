@@ -11,6 +11,7 @@
     "langThemeTitle": "Language and Theme",
     "members": {
       "title": "Member Management",
+      "displayNameUnset": "(Not set)",
       "lead": "View member lists is available to all. Role change and deletion are only available to admins.",
       "columns": {
         "displayName": "Display Name",
@@ -50,6 +51,27 @@
       },
       "confirm": {
         "deleteProblemAndChildren": "Delete this Problem and all its children (Issues/Tasks)?"
+      },
+      "problemTemplate": {
+        "bug": {
+          "titlePlaceholder": "(Ex.) The completion message of the application form is not displayed",
+          "phenomenonPlaceholder": "(Ex.) The completion message is not displayed even if the send button is pressed, and it is not possible to know if the send was successful",
+          "goalPlaceholder": "(Ex.) The completion message is displayed within 3 seconds after sending, and the user is not anxious"
+        },
+        "improve": {
+          "titlePlaceholder": "(Ex.) The weekly report takes too long to complete",
+          "phenomenonPlaceholder": "(Ex.) The weekly report takes 2-3 hours each time, and the work is not done in the main business",
+          "goalPlaceholder": "(Ex.) The report creation time is shortened to within 30 minutes, and the work of the person in charge is reduced"
+        },
+        "other": {
+          "titlePlaceholder": "(Ex.) The response rules are different for each department",
+          "phenomenonPlaceholder": "(Ex.) The response rules are different for each person, and the explanation to the customer is different",
+          "goalPlaceholder": "(Ex.) Document the common rules, so that anyone who responds can give the same explanation"
+        },
+        "common": {
+          "causePlaceholder": "(Opt.) Hypotheses about the occurrence conditions and causes",
+          "solutionPlaceholder": "(Opt.) If there are any ideas for countermeasures, please write them down"
+        }
       }
   },
 
@@ -77,7 +99,8 @@
     "low": "Low"
   },
   "error": {
-    "offlineActionBlocked": "You are offline. Please check your connection and try again."
+    "offlineActionBlocked": "You are offline. Please check your connection and try again.",
+    "failed": "An error occurred. Please try again."
   },
   "toast": {
     "deleted": "Deleted “{{name}}”.",
@@ -108,7 +131,8 @@
     "viewerOnly": "You are a Viewer in this project. Edit buttons are hidden.",
     "offlineComments": "You are offline. You cannot post, edit, or delete comments.",
     "noEditPermission": "You don't have edit permission (Viewer).",
-    "offlineNoEdit": "You are offline and cannot edit."
+    "offlineNoEdit": "You are offline and cannot edit.",
+    "lastAdminGuard": "The last admin cannot be deleted. Please add another admin first."
   },
   "app": {
     "offline": {
@@ -228,7 +252,8 @@
   },
   "template": {
     "bug": "Bug/Issue",
-    "improve": "Improvement/Performance"
+    "improve": "Improvement/Performance",
+    "other": "Other (operation, rules, system, etc.)"
   },
   "field": {
     "titleRequired": "Title (required)",
@@ -307,6 +332,7 @@
     "tagDisabled": "Tags are copied to future instances from the template.",
     "stopAndDeleteConfirm": "Stop recurrence and delete the template. Existing tasks will remain.",
     "endDate": "End date",
+    "endAfterStart": "The end date must be after the start date (first due date).",
     "hintShort": "Creation rules: Daily=create on the same day at 0:05, Weekly=create on the next day after the previous due date, Monthly (1-6 months)=create on the next day after the previous due date, Monthly (7 months or more)=create 6 months before the next due date. Tasks after the end date are not created."
   },
   "tag": {
@@ -316,7 +342,8 @@
     "byEmailTitle": "Invite by Email",
     "createLink": "Create invite link",
     "helpText": "Send the generated URL by email. The recipient opens it, signs in, and joins the project.",
-    "lead": "Invite teammates by email."
+    "lead": "Invite teammates by email.",
+    "emailPlaceholder": "email@example.com"
   },
   "settings": {
     "titlePreview": "Settings (preview only)",
@@ -551,6 +578,12 @@
     "csv": "CSV",
     "json": "JSON",
     "title": "Data export"
+  },
+  "member": {
+    "confirmDemoteSelf": "Change your role to {{role}}? Are you sure?",
+    "roleUpdated": "Role updated",
+    "confirmRemove": "Remove \"{{name}}\" from the members?",
+    "removed": "Member removed"
   },
   "join": {
     "title": "Join Project",

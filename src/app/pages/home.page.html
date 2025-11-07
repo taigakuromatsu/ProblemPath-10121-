@@ -96,7 +96,11 @@
 
           <div class="section-body">
             <form class="inline-form invite-form" (ngSubmit)="$event.preventDefault()">
-              <input [(ngModel)]="inviteEmail" name="inviteEmail" placeholder="email@example.com" />
+              <input
+                [(ngModel)]="inviteEmail"
+                name="inviteEmail"
+                [placeholder]="'invite.emailPlaceholder' | translate"
+              />
               <select [(ngModel)]="inviteRole" name="inviteRole">
                 <option value="admin">{{ 'role.adminLabel' | translate }}</option>
                 <option value="member" selected>{{ 'role.memberLabel' | translate }}</option>
@@ -146,7 +150,9 @@
                 <tbody>
                   <tr *ngFor="let m of (membersList$ | async)">
                     <td class="name">
-                      <span class="text-1line no-truncate">{{ m.displayName || '（未設定）' }}</span>
+                      <span class="text-1line no-truncate">
+                        {{ m.displayName || ('home.members.displayNameUnset' | translate) }}
+                      </span>
                       <span class="me-chip" *ngIf="(myUid$ | async) === m.uid">{{ 'home.members.you' | translate }}</span>
                     </td>
                     <td class="email"><span class="text-1line no-truncate">{{ m.email || '—' }}</span></td>
@@ -367,6 +373,7 @@
                               matInput
                               [matDatepicker]="duePicker"
                               [(ngModel)]="dueModel[i.id!]"
+                              name="taskDue-{{ i.id }}"
                               (ngModelChange)="onDueModelChange(i.id!, $event)"
                               [placeholder]="'task.duePlaceholder' | translate"
                               (keydown.escape)="clearDue(i.id!)" />
@@ -413,6 +420,7 @@
                                   matInput
                                   [matDatepicker]="endPicker"
                                   [(ngModel)]="endModel[i.id!]"
+                                  name="taskRecurrenceEnd-{{ i.id }}"
                                   (ngModelChange)="onEndModelChange(i.id!, $event)"
                                   (keydown.escape)="clearEnd(i.id!)" />
                               
@@ -503,31 +511,57 @@
         <div class="dialog-body">
           <label>
             <span>{{ 'field.titleRequired' | translate }}</span>
-            <input [(ngModel)]="newProblem.title" (ngModelChange)="onNewProblemChange('title', newProblem.title)" />
+            <input
+              [(ngModel)]="newProblem.title"
+              [placeholder]="getProblemPlaceholder('title')"
+              (ngModelChange)="onNewProblemChange('title', newProblem.title)" />
           </label>
           <label class="inline">
             <span>{{ 'field.template' | translate }}</span>
-            <select [(ngModel)]="newProblem.template" (ngModelChange)="applyProblemTemplate($event); onNewProblemChange('template', newProblem.template)">
+            <select
+              [(ngModel)]="newProblem.template"
+              (ngModelChange)="applyProblemTemplate($event); onNewProblemChange('template', newProblem.template)"
+            >
               <option value="bug">{{ 'template.bug' | translate }}</option>
               <option value="improve">{{ 'template.improve' | translate }}</option>
+              <option value="other">{{ 'template.other' | translate }}</option>
             </select>
           </label>
           <label>
             <span>{{ 'problem.phenomenonRequired' | translate }}</span>
-            <textarea rows="3" [(ngModel)]="newProblem.phenomenon" (ngModelChange)="onNewProblemChange('phenomenon', newProblem.phenomenon)"></textarea>
+            <textarea
+              rows="3"
+              [(ngModel)]="newProblem.phenomenon"
+              (ngModelChange)="onNewProblemChange('phenomenon', newProblem.phenomenon)"
+              [placeholder]="getProblemPlaceholder('phenomenon')">
+            </textarea>
           </label>
           <label>
             <span>{{ 'problem.causeOptional' | translate }}</span>
-            <textarea rows="3" [(ngModel)]="newProblem.cause" (ngModelChange)="onNewProblemChange('cause', newProblem.cause)"></textarea>
+            <textarea
+              rows="3"
+              [(ngModel)]="newProblem.cause"
+              (ngModelChange)="onNewProblemChange('cause', newProblem.cause)"
+              [placeholder]="getProblemPlaceholder('cause')">
+            </textarea>
           </label>
           <label>
             <span>{{ 'problem.solutionOptional' | translate }}</span>
-            <textarea rows="3" [(ngModel)]="newProblem.solution" (ngModelChange)="onNewProblemChange('solution', newProblem.solution)"></textarea>
+            <textarea
+              rows="3"
+              [(ngModel)]="newProblem.solution"
+              (ngModelChange)="onNewProblemChange('solution', newProblem.solution)"
+              [placeholder]="getProblemPlaceholder('solution')">
+            </textarea>
           </label>
           <label>
             <span>{{ 'problem.goalRequired' | translate }}</span>
-            <textarea rows="2" [(ngModel)]="newProblem.goal" (ngModelChange)="onNewProblemChange('goal', newProblem.goal)"></textarea>
-            <small>{{ 'hint.goalKpi' | translate }}</small>
+            <textarea
+              rows="2"
+              [(ngModel)]="newProblem.goal"
+              (ngModelChange)="onNewProblemChange('goal', newProblem.goal)"
+              [placeholder]="getProblemPlaceholder('goal')">
+            </textarea>
           </label>
         </div>
         <footer class="dialog-footer">

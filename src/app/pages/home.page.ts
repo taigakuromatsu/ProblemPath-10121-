@@ -53,6 +53,7 @@ type ProblemWithDef = Problem & {
   };
 };
 
+type TemplateKind = 'bug' | 'improve' | 'other';
 type EditProblemField = 'phenomenon' | 'cause' | 'solution' | 'goal';
 type HomeViewHint = 'none' | 'viewer' | 'projectLost';
 
@@ -855,7 +856,7 @@ endModel: Record<string, Date | null> = {};
     cause: '',
     solution: '',
     goal: '',
-    template: 'bug' as 'bug' | 'improve'
+    template: 'bug' as TemplateKind,
   };
 
   // 編集ダイアログ用
@@ -868,15 +869,8 @@ endModel: Record<string, Date | null> = {};
     goal: ''
   };
 
-  applyProblemTemplate(kind: 'bug' | 'improve') {
+  applyProblemTemplate(kind: TemplateKind) {
     this.newProblem.template = kind;
-    if (kind === 'bug') {
-      this.newProblem.phenomenon ||= '（例）保存ボタンを押してもトーストが出ず、再読み込みで初めて反映される';
-      this.newProblem.goal      ||= '（例）保存操作は1秒以内にユーザーへ成功が伝わる（トースト表示／二重送信防止）';
-    } else {
-      this.newProblem.phenomenon ||= '（例）ダッシュボード初回表示が5秒以上かかる';
-      this.newProblem.goal        ||= '（例）p50 1.5秒 / p95 3秒以下';
-    }
   }
 
   openNewProblemDialog() {
@@ -897,7 +891,7 @@ endModel: Record<string, Date | null> = {};
   }
   closeNewProblemDialog() {
     this.newProblemOpen = false;
-    this.newProblem = { title: '', phenomenon: '', cause: '', solution: '', goal: '', template: 'bug' };
+    this.newProblem = { title: '', phenomenon: '', cause: '', solution: '', goal: '', template: 'bug' as TemplateKind };
   }
 
   // 作成保存（バリデーション文言 i18n）
@@ -1029,6 +1023,91 @@ endModel: Record<string, Date | null> = {};
 
     this.fgSub?.unsubscribe();
   }
+
+
+  getProblemPlaceholder(
+    field: 'title' | 'phenomenon' | 'cause' | 'solution' | 'goal'
+  ): string {
+    const kind = this.newProblem.template;
+  
+    // === タイトル ===
+    if (field === 'title') {
+      if (kind === 'bug') {
+        return this.t(
+          'home.problemTemplate.bug.titlePlaceholder',
+          '（例）申請フォーム送信完了メッセージが表示されない'
+        );
+      }
+      if (kind === 'improve') {
+        return this.t(
+          'home.problemTemplate.improve.titlePlaceholder',
+          '（例）週次レポート作業に時間がかかりすぎている'
+        );
+      }
+      // other
+      return this.t(
+        'home.problemTemplate.other.titlePlaceholder',
+        '（例）対応ルールが部署ごとにバラバラで統一されていない'
+      );
+    }
+  
+    // === 現象 ===
+    if (kind === 'bug' && field === 'phenomenon') {
+      return this.t(
+        'home.problemTemplate.bug.phenomenonPlaceholder',
+        '（例）申請フォームの送信ボタンを押しても完了メッセージが出ず、送信できたか分からない'
+      );
+    }
+    if (kind === 'improve' && field === 'phenomenon') {
+      return this.t(
+        'home.problemTemplate.improve.phenomenonPlaceholder',
+        '（例）週次レポート作成に毎回2〜3時間かかり、本来の業務に手が回っていない'
+      );
+    }
+    if (kind === 'other' && field === 'phenomenon') {
+      return this.t(
+        'home.problemTemplate.other.phenomenonPlaceholder',
+        '（例）担当者ごとに対応ルールが違い、お客様への説明内容がバラバラになっている'
+      );
+    }
+  
+    // === 目標 ===
+    if (kind === 'bug' && field === 'goal') {
+      return this.t(
+        'home.problemTemplate.bug.goalPlaceholder',
+        '（例）送信後3秒以内に「送信完了」が表示され、利用者が不安にならない状態にする'
+      );
+    }
+    if (kind === 'improve' && field === 'goal') {
+      return this.t(
+        'home.problemTemplate.improve.goalPlaceholder',
+        '（例）レポート作成時間を30分以内に短縮し、担当者の残業を減らす'
+      );
+    }
+    if (kind === 'other' && field === 'goal') {
+      return this.t(
+        'home.problemTemplate.other.goalPlaceholder',
+        '（例）共通ルールを文書化し、誰が対応しても同じ説明ができる状態にする'
+      );
+    }
+  
+    // === 共通（原因・対策案）===
+    if (field === 'cause') {
+      return this.t(
+        'home.problemTemplate.common.causePlaceholder',
+        '（任意）発生条件や原因の仮説など'
+      );
+    }
+    if (field === 'solution') {
+      return this.t(
+        'home.problemTemplate.common.solutionPlaceholder',
+        '（任意）検討中の対策案があれば記載'
+      );
+    }
+  
+    return '';
+  }
+
 }
 
 

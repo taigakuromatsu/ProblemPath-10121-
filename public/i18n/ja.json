@@ -11,6 +11,7 @@
     "langThemeTitle": "言語とテーマ",
     "members": {
       "title": "メンバー管理",
+      "displayNameUnset": "（未設定）",
       "lead": "メンバー一覧の閲覧は全員可。ロール変更・削除は管理者のみ。",
       "columns": {
         "displayName": "表示名",
@@ -45,6 +46,27 @@
     "deleteSelectedProblem": "選択中の問題を削除",
     "confirm": {
       "deleteProblemAndChildren": "この Problem（配下の Issue と Task を含む）を削除しますか？"
+    },
+    "problemTemplate": {
+      "bug": {
+        "titlePlaceholder": "（例）申請フォーム送信完了メッセージが表示されない",
+        "phenomenonPlaceholder": "（例）申請フォームの送信ボタンを押しても完了メッセージが出ず、送信できたか分からない",
+        "goalPlaceholder": "（例）送信後3秒以内に「送信完了」が表示され、利用者が不安にならない状態にする"
+      },
+      "improve": {
+        "titlePlaceholder": "（例）週次レポート作業に時間がかかりすぎている",
+        "phenomenonPlaceholder": "（例）週次レポート作成に毎回2〜3時間かかり、本来の業務に手が回っていない",
+        "goalPlaceholder": "（例）レポート作成時間を30分以内に短縮し、担当者の残業を減らす"
+      },
+      "other": {
+        "titlePlaceholder": "（例）対応ルールが部署ごとにバラバラで統一されていない",
+        "phenomenonPlaceholder": "（例）担当者ごとに対応ルールが違い、お客様への説明内容がバラバラになっている",
+        "goalPlaceholder": "（例）共通ルールを文書化し、誰が対応しても同じ説明ができる状態にする"
+      },
+      "common": {
+        "causePlaceholder": "（任意）発生条件や原因の仮説など",
+        "solutionPlaceholder": "（任意）検討中の対策案があれば記載"
+      }
     }
   },
 
@@ -72,7 +94,8 @@
     "low": "低"
   },
   "error": {
-    "offlineActionBlocked": "オフラインのため、この操作は実行できません。接続を確認してください。"
+    "offlineActionBlocked": "オフラインのため、この操作は実行できません。接続を確認してください。",
+    "failed": "エラーが発生しました。もう一度お試しください。"
   },
   "toast": {
     "deleted": "「{{name}}」を削除しました",
@@ -103,7 +126,8 @@
     "viewerOnly": "現在のプロジェクトでは 閲覧のみ（Viewer） です。編集ボタンは非表示になります。",
     "offlineComments": "現在オフラインです。コメントの投稿・編集・削除はできません。",
     "noEditPermission": "編集権限がありません（Viewer）",
-    "offlineNoEdit": "オフラインのため編集できません"
+    "offlineNoEdit": "オフラインのため編集できません",
+    "lastAdminGuard": "最後の管理者は削除できません。別の管理者を追加してから実行してください。"
   },
   "nav": {
     "tree": "ツリー",
@@ -217,7 +241,8 @@
   },
   "template": {
     "bug": "バグ/不具合",
-    "improve": "改善/パフォーマンス"
+    "improve": "改善/パフォーマンス",
+    "other": "その他（運用・ルール・体制など）"
   },
   "field": {
     "titleRequired": "タイトル（必須）",
@@ -259,6 +284,7 @@
     "selectIssuePrompt": "-- 対象の課題を選択 --",
     "add": "リンク"
   },
+
   "task": {
     "placeholderNewTitle": "新しいタスクのタイトル",
     "add": "タスクを追加",
@@ -296,6 +322,7 @@
     "tagDisabled": "繰り返しテンプレートは将来のタスク作成時にコピーされます",
     "stopAndDeleteConfirm": "繰り返しを停止し、テンプレートを削除します。既存のタスクは残ります。",
     "endDate": "終了日",
+    "endAfterStart": "終了日は開始日（初回期日）以降を指定してください",
     "hintShort": "作成規則：毎日=当日0:05に当日分、毎週=前回期限の翌日に次回分、毎月(1〜6か月)=前回期限の翌日、毎月(7か月以上)=次回期限の6か月前に作成。終了日を過ぎる分は作成しません。"
   },
   "tag": {
@@ -305,7 +332,8 @@
     "byEmailTitle": "メールで招待",
     "createLink": "招待リンクを作成",
     "helpText": "生成されたURLをメールで送ってください。相手は開いてログイン→「参加する」でメンバーになります。",
-    "lead": "メールでチームメンバーを招待します。"
+    "lead": "メールでチームメンバーを招待します。",
+    "emailPlaceholder": "email@example.com"
   },
   "settings": {
     "titlePreview": "設定（準備のみ／表示）",
@@ -541,6 +569,12 @@
     "json": "JSON",
     "title": "データエキスポート"
   },
+  "member": {
+  "confirmDemoteSelf": "自分のロールを {{role}} に変更します。よろしいですか？",
+  "roleUpdated": "ロールを更新しました",
+  "confirmRemove": "「{{name}}」をメンバーから削除しますか？",
+  "removed": "メンバーを削除しました"
+},
   "join": {
     "title": "プロジェクトに参加",
     "loading": "招待を確認中...",
