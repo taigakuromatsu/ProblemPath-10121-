@@ -180,6 +180,12 @@
       "completedTasks7d": "Completed tasks (last 7 days)",
       "lateRateThisWeek": "Late rate (this week)",
       "avgLeadTime30d": "Average lead time (30 days)"
+    },
+    "tooltips": {
+      "avgLeadTime30d": "The average number of days from creation to completion of tasks completed within the last 30 days (status is done).",
+      "lateRateThisWeek": "The percentage of tasks with a due date this week (JST month-day) that have not been completed by the due date.",
+      "avgLeadTime30dPersonal": "The average number of days from creation to completion of tasks completed within the last 30 days (status is done) assigned to yourself.",
+      "lateRateThisWeekPersonal": "The percentage of tasks with a due date this week (JST month-day) assigned to yourself that have not been completed by the due date."
     }
   },
   "reports": {

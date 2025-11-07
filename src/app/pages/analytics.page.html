@@ -25,20 +25,32 @@
 
   <ng-container *ngIf="summary$ | async as summary">
     <div class="analytics-page__metrics">
+      <!-- 過去7日間 完了タスク数 -->
       <mat-card class="metric-card">
         <mat-card-header>
           <mat-icon mat-card-avatar color="primary">task_alt</mat-icon>
-          <mat-card-title>{{ 'analytics.cards.completedTasks7d' | translate }}</mat-card-title>
+          <mat-card-title>
+            {{ 'analytics.cards.completedTasks7d' | translate }}
+          </mat-card-title>
         </mat-card-header>
         <mat-card-content>
           <div class="metric-card__value">{{ summary.completedTasks7d }}</div>
         </mat-card-content>
       </mat-card>
 
+      <!-- 平均対応日数（30日平均） -->
       <mat-card class="metric-card">
         <mat-card-header>
           <mat-icon mat-card-avatar color="primary">schedule</mat-icon>
-          <mat-card-title>{{ 'analytics.cards.avgLeadTime30d' | translate }}</mat-card-title>
+          <mat-card-title>
+            {{ 'analytics.cards.avgLeadTime30d' | translate }}
+            <mat-icon
+              class="metric-card__info"
+              [matTooltip]="'analytics.tooltips.avgLeadTime30d' | translate"
+            >
+              info
+            </mat-icon>
+          </mat-card-title>
         </mat-card-header>
         <mat-card-content>
           <div class="metric-card__value">
@@ -48,13 +60,24 @@
         </mat-card-content>
       </mat-card>
 
+      <!-- 今週の遅延率 -->
       <mat-card class="metric-card">
         <mat-card-header>
           <mat-icon mat-card-avatar color="primary">trending_down</mat-icon>
-          <mat-card-title>{{ 'analytics.cards.lateRateThisWeek' | translate }}</mat-card-title>
+          <mat-card-title>
+            {{ 'analytics.cards.lateRateThisWeek' | translate }}
+            <mat-icon
+              class="metric-card__info"
+              [matTooltip]="'analytics.tooltips.lateRateThisWeek' | translate"
+            >
+              info
+            </mat-icon>
+          </mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <div class="metric-card__value">{{ summary.lateRateThisWeekPercent | number: '1.0-1' }}%</div>
+          <div class="metric-card__value">
+            {{ summary.lateRateThisWeekPercent | number: '1.0-1' }}%
+          </div>
         </mat-card-content>
       </mat-card>
     </div>
@@ -106,43 +129,67 @@
       </mat-card-content>
     </mat-card>
 
-    <!-- 個人タスクデータ -->
-    <mat-card class="analytics-page__personal-card">
-      <mat-card-header>
-        <mat-card-title>{{ 'analytics.personal.title' | translate }}</mat-card-title>
-      </mat-card-header>
-      <mat-card-content *ngIf="mySummary$ | async as me">
-        <div class="personal-card__metrics">
-          <div class="personal-metric">
-            <div class="personal-metric__label">{{ 'analytics.personal.completedTasks7d' | translate }}</div>
-            <div class="personal-metric__value">{{ me.completedTasks7d }}</div>
-          </div>
-          <div class="personal-metric">
-            <div class="personal-metric__label">{{ 'analytics.personal.lateRateThisWeek' | translate }}</div>
-            <div class="personal-metric__value">{{ me.lateRateThisWeekPercent | number: '1.0-1' }}%</div>
-          </div>
-          <div class="personal-metric">
-            <div class="personal-metric__label">{{ 'analytics.personal.avgLeadTime30d' | translate }}</div>
-            <div class="personal-metric__value">
-              {{ me.avgLeadTime30dDays | number: '1.0-1' }}
-              <span class="metric-card__unit">{{ 'analytics.cards.avgLeadTime30dUnit' | translate }}</span>
+        <!-- 個人タスクデータ -->
+        <mat-card class="analytics-page__personal-card">
+          <mat-card-header>
+            <mat-card-title>{{ 'analytics.personal.title' | translate }}</mat-card-title>
+          </mat-card-header>
+          <mat-card-content *ngIf="mySummary$ | async as me">
+            <div class="personal-card__metrics">
+              <div class="personal-metric">
+                <div class="personal-metric__label">
+                  {{ 'analytics.personal.completedTasks7d' | translate }}
+                </div>
+                <div class="personal-metric__value">{{ me.completedTasks7d }}</div>
+              </div>
+    
+              <div class="personal-metric">
+                <div class="personal-metric__label">
+                  {{ 'analytics.personal.lateRateThisWeek' | translate }}
+                  <mat-icon
+                    class="metric-card__info"
+                    [matTooltip]="'analytics.tooltips.lateRateThisWeekPersonal' | translate"
+                  >
+                    info
+                  </mat-icon>
+                </div>
+                <div class="personal-metric__value">
+                  {{ me.lateRateThisWeekPercent | number: '1.0-1' }}%
+                </div>
+              </div>
+    
+              <div class="personal-metric">
+                <div class="personal-metric__label">
+                  {{ 'analytics.personal.avgLeadTime30d' | translate }}
+                  <mat-icon
+                    class="metric-card__info"
+                    [matTooltip]="'analytics.tooltips.avgLeadTime30dPersonal' | translate"
+                  >
+                    info
+                  </mat-icon>
+                </div>
+                <div class="personal-metric__value">
+                  {{ me.avgLeadTime30dDays | number: '1.0-1' }}
+                  <span class="metric-card__unit">
+                    {{ 'analytics.cards.avgLeadTime30dUnit' | translate }}
+                  </span>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-
-        <mat-divider></mat-divider>
-
-        <div class="personal-status" *ngIf="myStatusEntries$ | async as myEntries">
-          <div class="status-row" *ngFor="let entry of myEntries">
-            <div class="status-row__meta">
-              <span class="status-row__label">{{ entry.label | translate }}</span>
-              <span class="status-row__value">{{ entry.count }}</span>
+    
+            <mat-divider></mat-divider>
+    
+            <div class="personal-status" *ngIf="myStatusEntries$ | async as myEntries">
+              <div class="status-row" *ngFor="let entry of myEntries">
+                <div class="status-row__meta">
+                  <span class="status-row__label">{{ entry.label | translate }}</span>
+                  <span class="status-row__value">{{ entry.count }}</span>
+                </div>
+                <mat-progress-bar mode="determinate" [value]="entry.percent"></mat-progress-bar>
+              </div>
             </div>
-            <mat-progress-bar mode="determinate" [value]="entry.percent"></mat-progress-bar>
-          </div>
-        </div>
-      </mat-card-content>
-    </mat-card>
-  </ng-container>
-</section>
+          </mat-card-content>
+        </mat-card>
+      </ng-container>
+    </section>
 

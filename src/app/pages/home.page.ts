@@ -599,14 +599,17 @@ endModel: Record<string, Date | null> = {};
     if (!this.selectedProblemId) return;
     if (!(await this.requireOnline())) return;
     if (!confirm(this.i18n.instant('home.confirm.deleteProblemAndChildren'))) return;
+  
     const problemId = this.selectedProblemId!;
-    // 問題のタイトルを取得して削除メッセージに使用
     const problemDoc = await firstValueFrom(this.selectedProblemDoc$);
     const problemTitle = problemDoc?.title || '(Problem)';
+  
+    // 先に UI 側をクリアしておく（MatSelect から消す）
+    this.selectedProblemId = null;
+    this.selectedProblem$.next(null);
+  
     this.withPid(async pid => {
       await this.softDeleteWithUndo('problem', { projectId: pid, problemId }, problemTitle);
-      this.selectedProblemId = null;
-      this.selectedProblem$.next(null);
     });
   }
 
@@ -816,32 +819,50 @@ endModel: Record<string, Date | null> = {};
 
   /** 共通：ソフトデリート → Undo 5秒（トースト文言i18n） */
   private async softDeleteWithUndo(
-    kind: 'problem'|'issue'|'task',
+    kind: 'problem' | 'issue' | 'task',
     path: { projectId: string; problemId?: string; issueId?: string; taskId?: string },
     title: string
-  ){
+  ) {
     const uid = await firstValueFrom(this.auth.uid$);
-    const patch = { softDeleted: true, deletedAt: serverTimestamp(), updatedBy: uid || '' } as any;
-
+    const patch = {
+      softDeleted: true,
+      deletedAt: serverTimestamp(),
+      updatedBy: uid || '',
+    } as any;
+  
+    // --- 本体 + 子タスクの softDelete ---
     if (kind === 'problem') {
+      // Problem 本体を softDelete
       await this.problems.update(path.projectId, path.problemId!, patch);
+      // 配下 Task も softDelete（Issue は既存一覧側で softDeleted を見る前提なら任意）
+      await this.tasks.markByProblemSoftDeleted(path.projectId, path.problemId!, true);
     } else if (kind === 'issue') {
       await this.issues.update(path.projectId, path.problemId!, path.issueId!, patch);
+      await this.tasks.markByIssueSoftDeleted(path.projectId, path.problemId!, path.issueId!, true);
     } else {
       await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, patch);
     }
-
+  
+    // --- Undo スナックバー ---
     const ref = this.snack.open(
       this.i18n.instant('toast.deleted', { name: title }),
       this.i18n.instant('common.undo'),
       { duration: 5000 }
     );
+  
     ref.onAction().subscribe(async () => {
-      const unpatch = { softDeleted: false, deletedAt: null, updatedBy: uid || '' } as any;
+      const unpatch = {
+        softDeleted: false,
+        deletedAt: null,
+        updatedBy: uid || '',
+      } as any;
+  
       if (kind === 'problem') {
         await this.problems.update(path.projectId, path.problemId!, unpatch);
+        await this.tasks.markByProblemSoftDeleted(path.projectId, path.problemId!, false);
       } else if (kind === 'issue') {
         await this.issues.update(path.projectId, path.problemId!, path.issueId!, unpatch);
+        await this.tasks.markByIssueSoftDeleted(path.projectId, path.problemId!, path.issueId!, false);
       } else {
         await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, unpatch);
       }

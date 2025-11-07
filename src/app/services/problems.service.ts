@@ -3,6 +3,8 @@ import { Firestore } from '@angular/fire/firestore';
 import { Observable, map, of, catchError } from 'rxjs';
 import { Problem } from '../models/types';
 import { ProblemDef } from '../models/types';
+import { TasksService } from '../services/tasks.service';
+
 
 
 const DEBUG_PROBLEMS = false; // ← 必要な時だけ true に
@@ -32,7 +34,7 @@ function isPermissionDenied(err: any): boolean {
 
 @Injectable({ providedIn: 'root' })
 export class ProblemsService {
-  constructor(private fs: Firestore) {}
+  constructor(private fs: Firestore, private tasks: TasksService) {}
 
   private colPath(projectId: string) {
     if (!projectId) throw new Error('[ProblemsService] projectId is required');
@@ -246,6 +248,38 @@ export class ProblemsService {
     patch['updatedAt'] = serverTimestamp();
 
     return nativeUpdateDoc(ref, patch) as any;
+  }
+
+  
+  async softDeleteWithChildren(projectId: string, problemId: string): Promise<void> {
+    const problemRef = nativeDoc(this.fs as any, `${this.colPath(projectId)}/${problemId}`);
+
+    // 1) Problem 本体を softDelete
+    await nativeUpdateDoc(problemRef, {
+      softDeleted: true,
+      visible: false,
+      deletedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    } as any);
+
+    // 2) 配下 Issue を softDelete
+    const issuesCol = nativeCollection(this.fs as any, `${this.colPath(projectId)}/${problemId}/issues`);
+    const issuesSnap = await nativeGetDocs(issuesCol);
+    if (!issuesSnap.empty) {
+      const batch = nativeWriteBatch(this.fs as any);
+      issuesSnap.docs.forEach(docSnap => {
+        batch.update(docSnap.ref, {
+          softDeleted: true,
+          visible: false,
+          deletedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        } as any);
+      });
+      await batch.commit();
+    }
+
+    // 3) 配下 Task を softDelete（スケジュール／マイページ／分析対策の本命）
+    await this.tasks.markByProblemSoftDeleted(projectId, problemId, true);
   }
 }
 

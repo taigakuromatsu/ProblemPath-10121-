@@ -3,6 +3,7 @@ import { Firestore } from '@angular/fire/firestore';
 import { Observable, map, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { Issue } from '../models/types';
+import { TasksService } from '../services/tasks.service';
 
 const DEBUG_ISSUES = false; // ← 必要な時だけ true に
 
@@ -27,7 +28,7 @@ import { collectionData as rxCollectionData } from 'rxfire/firestore';
 
 @Injectable({ providedIn: 'root' })
 export class IssuesService {
-  constructor(private fs: Firestore) {}
+  constructor(private fs: Firestore, private tasks: TasksService) {}
 
   private base(projectId: string) {
     if (!projectId) throw new Error('[IssuesService] projectId is required');
@@ -161,6 +162,25 @@ export class IssuesService {
       snap.docs.forEach((d) => batch.delete(d.ref));
       await batch.commit();
     }
+  }
+
+  async softDeleteWithTasks(
+    projectId: string,
+    problemId: string,
+    issueId: string,
+  ): Promise<void> {
+    const issueRef = nativeDoc(this.fs as any, this.issueDocPath(projectId, problemId, issueId));
+
+    // 1) Issue 自身を softDelete
+    await nativeUpdateDoc(issueRef, {
+      softDeleted: true,
+      visible: false,
+      deletedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    } as any);
+
+    // 2) 配下 Task を softDelete
+    await this.tasks.markByIssueSoftDeleted(projectId, problemId, issueId, true);
   }
 
 }

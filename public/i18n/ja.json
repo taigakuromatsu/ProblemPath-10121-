@@ -169,7 +169,13 @@
       "completedTasks7d": "完了タスク（過去7日・自分）",
       "lateRateThisWeek": "遅延率（今週・自分）",
       "avgLeadTime30d": "平均対応日数（30日・自分）"
-    }
+    },
+    "tooltips": {
+    "avgLeadTime30d": "直近30日以内に完了したタスク（ステータスが done）の「作成日から完了日までの日数」の平均値です。",
+    "lateRateThisWeek": "今週（JSTの月〜日）を期限日に持つタスクのうち、期限を過ぎても完了していないタスクの割合です。",
+    "avgLeadTime30dPersonal": "直近30日以内に完了した「自分にアサインされた」タスクの、作成日から完了日までの日数の平均値です。",
+    "lateRateThisWeekPersonal": "今週（JSTの月〜日）を期限日に持つ「自分にアサインされた」タスクのうち、期限を過ぎても完了していないタスクの割合です。"
+   }
   },
   "reports": {
     "title": "Reports / 進捗レポート",

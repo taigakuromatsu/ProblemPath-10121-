@@ -958,39 +958,56 @@ rememberPickedNames(ev: Event) {
     // 編集キャンセルでもドラフトは保持したいので newBody は残す／クリアしない
   }
 
-  /** 共通：ソフトデリート → Undo 5秒 */
-  private async softDeleteWithUndo(
-    kind: 'problem'|'issue'|'task',
-    path: { projectId: string; problemId?: string; issueId?: string; taskId?: string },
-    titleForToast: string
-  ){
-    const uid = await firstValueFrom(this.auth.uid$);
-    const patch = { softDeleted: true, deletedAt: serverTimestamp() as any, updatedBy: uid || '' } as any;
+/** 共通：ソフトデリート → Undo 5秒 */
+private async softDeleteWithUndo(
+  kind: 'problem'|'issue'|'task',
+  path: { projectId: string; problemId?: string; issueId?: string; taskId?: string },
+  titleForToast: string
+) {
+  const uid = await firstValueFrom(this.auth.uid$);
+  const patch = {
+    softDeleted: true,
+    deletedAt: serverTimestamp() as any,
+    updatedBy: uid || '',
+  } as any;
+
+  // --- 本体 + 子タスクの softDelete ---
+  if (kind === 'problem') {
+    await this.problems.update(path.projectId, path.problemId!, patch);
+    await this.tasks.markByProblemSoftDeleted(path.projectId, path.problemId!, true);
+  } else if (kind === 'issue') {
+    await this.issues.update(path.projectId, path.problemId!, path.issueId!, patch);
+    await this.tasks.markByIssueSoftDeleted(path.projectId, path.problemId!, path.issueId!, true);
+  } else {
+    await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, patch);
+  }
+
+  // --- Undo スナックバー ---
+  const ref = this.snack.open(
+    this.tr.instant('toast.deleted', { name: titleForToast }),
+    this.tr.instant('common.undo'),
+    { duration: 5000 }
+  );
+
+  ref.onAction().subscribe(async () => {
+    const unpatch = {
+      softDeleted: false,
+      deletedAt: null,
+      updatedBy: uid || '',
+    } as any;
 
     if (kind === 'problem') {
-      await this.problems.update(path.projectId, path.problemId!, patch);
+      await this.problems.update(path.projectId, path.problemId!, unpatch);
+      await this.tasks.markByProblemSoftDeleted(path.projectId, path.problemId!, false);
     } else if (kind === 'issue') {
-      await this.issues.update(path.projectId, path.problemId!, path.issueId!, patch);
+      await this.issues.update(path.projectId, path.problemId!, path.issueId!, unpatch);
+      await this.tasks.markByIssueSoftDeleted(path.projectId, path.problemId!, path.issueId!, false);
     } else {
-      await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, patch);
+      await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, unpatch);
     }
+  });
+}
 
-    const ref = this.snack.open(
-      this.tr.instant('toast.deleted', { name: titleForToast }),
-      this.tr.instant('common.undo'),
-      { duration: 5000 }
-    );
-    ref.onAction().subscribe(async () => {
-      const unpatch = { softDeleted: false, deletedAt: null, updatedBy: uid || '' } as any;
-      if (kind === 'problem') {
-        await this.problems.update(path.projectId, path.problemId!, unpatch);
-      } else if (kind === 'issue') {
-        await this.issues.update(path.projectId, path.problemId!, path.issueId!, unpatch);
-      } else {
-        await this.tasks.update(path.projectId, path.problemId!, path.issueId!, path.taskId!, unpatch);
-      }
-    });
-  }
 
   // ===== オンライン/権限ガード =====
   private async requireCanEdit(): Promise<boolean> {
