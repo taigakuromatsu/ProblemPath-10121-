@@ -82,6 +82,7 @@ export class BoardPage {
   isEditor$!: Observable<boolean>;
   isOnline$!: Observable<boolean>;
   canEdit$!: Observable<boolean>;
+  isAdmin$!: Observable<boolean>;
 
   // busy
   busyTaskIds = new Set<string>();
@@ -115,6 +116,7 @@ export class BoardPage {
   ) {
     this.isEditor$ = this.members.isEditor$;
     this.isOnline$ = this.network.isOnline$;
+    this.isAdmin$ = this.members.isAdmin$;
     this.canEdit$ = combineLatest([this.members.isEditor$, this.network.isOnline$]).pipe(
       map(([isEditor, online]) => !!isEditor && !!online)
     );
@@ -726,6 +728,61 @@ export class BoardPage {
     const map = dir ?? {};
     return xs.map(u => map[u] ?? u).join(', ');
   }
+
+  private async requireAdminAssign(): Promise<boolean> {
+    const [isAdmin, online] = await Promise.all([
+      firstValueFrom(this.members.isAdmin$),
+      firstValueFrom(this.isOnline$),
+    ]);
+    if (!isAdmin) {
+      this.snack.open(this.tr.instant('warn.noEditPermission'), this.tr.instant('common.ok'), { duration: 3000 });
+      return false;
+    }
+    if (!online) {
+      this.snack.open(this.tr.instant('warn.offlineNoEdit'), this.tr.instant('common.ok'), { duration: 3000 });
+      return false;
+    }
+    return true;
+  }
+
+  async toggleAdminAssignee(
+    problemId: string,
+    issueId: string,
+    t: Task,
+    targetUid: string
+  ) {
+    if (!t?.id || this.isBusy(t.id)) return;
+    if (!(await this.requireAdminAssign())) return;
+  
+    const already = (t.assignees || []).includes(targetUid);
+  
+    this.withPid(async pid => {
+      this.busyTaskIds.add(t.id!);
+      try {
+        if (already) {
+          // Admin が付けた/ロックした割り当てを解除
+          await this.tasks.forceUnassign(pid, problemId, issueId, t.id!, targetUid);
+        } else {
+          // Admin としてロック付きで割り当て
+          await this.tasks.forceAssign(pid, problemId, issueId, t.id!, targetUid);
+        }
+      } catch (e) {
+        console.error(e);
+        this.snack.open(this.tr.instant('board.err.assign'), this.tr.instant('common.ok'), { duration: 3000 });
+      } finally {
+        this.busyTaskIds.delete(t.id!);
+      }
+    });
+  }
+
+  isLockedAssignee(t: Task | null | undefined, uid: string | null | undefined): boolean {
+    if (!t || !uid) return false;
+    const locks = Array.isArray((t as any).assigneeLocks)
+      ? (t as any).assigneeLocks as string[]
+      : [];
+    return locks.includes(uid);
+  }
+
 }
 
 

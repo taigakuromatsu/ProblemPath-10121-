@@ -240,28 +240,38 @@
                               </ng-container>
                               <ng-template #noDue>{{ 'common.none' | translate }}</ng-template>
                             </mat-chip>
-
                           </mat-chip-set>
                         </div>
 
                         <div class="task-card__assign" *ngIf="auth.loggedIn$ | async">
-                          <button
-                            mat-stroked-button
-                            *ngIf="(members.isEditor$ | async) && !(t.assignees || []).includes((auth.uid$ | async) || '')"
-                            [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
-                            (click)="assignToMe(pid, issue.id!, t)"
-                          >
-                            {{ 'board.assignToMe' | translate }}
-                          </button>
-                          <button
-                            mat-stroked-button
-                            *ngIf="(members.isEditor$ | async) && (t.assignees || []).includes((auth.uid$ | async) || '')"
-                            [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
-                            (click)="unassignMe(pid, issue.id!, t)"
-                          >
-                            {{ 'board.unassign' | translate }}
-                          </button>
-                        </div>
+
+                          <!-- Admin専用: 任意メンバーを割り当て/解除するメニュー -->
+                          <ng-container *ngIf="(members.isAdmin$ | async) && (memberOptions$ | async) as allMembers">
+                            <button
+                              mat-icon-button
+                              type="button"
+                              class="assign-menu-trigger"
+                              [matMenuTriggerFor]="assigneesMenu"
+                              [disabled]="isBusy(t.id!) || !(canEdit$ | async)"
+                              matTooltip="{{ 'board.manageAssignees' | translate }}"
+                              matTooltipPosition="above"
+                            >
+                              <mat-icon>group_add</mat-icon>
+                            </button>
+                        
+                            <mat-menu #assigneesMenu="matMenu">
+                              <button
+                                mat-menu-item
+                                *ngFor="let m of allMembers"
+                                (click)="toggleAdminAssignee(pid, issue.id!, t, m.uid)"
+                              >
+                                <mat-icon *ngIf="(t.assignees || []).includes(m.uid)">check_box</mat-icon>
+                                <mat-icon *ngIf="!(t.assignees || []).includes(m.uid)">check_box_outline_blank</mat-icon>
+                                <span>{{ m.label }}</span>
+                              </button>
+                            </mat-menu>
+                          </ng-container>
+                        </div>                     
                       </mat-card>
 
                       <div class="issue-placeholder" *ngIf="ts.length === 0">

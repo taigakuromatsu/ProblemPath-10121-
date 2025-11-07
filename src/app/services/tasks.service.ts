@@ -861,6 +861,44 @@ async markByIssueSoftDeleted(
   await batch.commit();
 }
 
+// Admin 専用：メンバーをロック付きでアサイン
+async forceAssign(
+  projectId: string,
+  problemId: string,
+  issueId: string,
+  taskId: string,
+  uid: string
+): Promise<void> {
+  const ref = nativeDoc(
+    this.fs as any,
+    `${this.base(projectId)}/${problemId}/issues/${issueId}/tasks/${taskId}`
+  );
+  await nativeUpdateDoc(ref, {
+    assignees: nativeArrayUnion(uid),
+    assigneeLocks: nativeArrayUnion(uid),
+    updatedAt: serverTimestamp(),
+  } as any);
+}
+
+// Admin 専用：ロック付きアサイン解除
+async forceUnassign(
+  projectId: string,
+  problemId: string,
+  issueId: string,
+  taskId: string,
+  uid: string
+): Promise<void> {
+  const ref = nativeDoc(
+    this.fs as any,
+    `${this.base(projectId)}/${problemId}/issues/${issueId}/tasks/${taskId}`
+  );
+  await nativeUpdateDoc(ref, {
+    assignees: nativeArrayRemove(uid),
+    assigneeLocks: nativeArrayRemove(uid),
+    updatedAt: serverTimestamp(),
+  } as any);
+}
+
 }
 
 

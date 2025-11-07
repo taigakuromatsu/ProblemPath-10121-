@@ -430,6 +430,9 @@
     "dropHere": "Drop here",
     "assignToMe": "Assign to me",
     "unassign": "Unassign",
+    "assignedByAdmin": "Assigned by Admin",
+    "assignedByAdminHint": "This assignment is locked by an admin.",
+    "manageAssignees": "Manage assignees",
     "col": {
       "not_started": "Not started",
       "in_progress": "In progress",

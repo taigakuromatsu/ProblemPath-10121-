@@ -415,6 +415,9 @@
     "dropHere": "ここにドロップ",
     "assignToMe": "自分にアサイン",
     "unassign": "アサイン解除",
+    "assignedByAdmin": "管理者によりアサイン中",
+    "assignedByAdminHint": "この担当は管理者によってロックされています",
+    "manageAssignees": "担当者を管理",
     "col": {
       "not_started": "未着手",
       "in_progress": "対応中",
