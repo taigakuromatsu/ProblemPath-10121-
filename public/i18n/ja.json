@@ -178,7 +178,7 @@
     "projectContext": "現在のプロジェクト ID: {{id}}",
     "projectNameLine": "現在のプロジェクト名: {{name}}",
     "actions": {
-      "generateAi": "AI下書きを生成",
+      "generateAi": "下書き自動生成",
       "addManual": "手動レポートを追加",
       "ai": {
         "personalDaily": "個人タスクの日次レポート",

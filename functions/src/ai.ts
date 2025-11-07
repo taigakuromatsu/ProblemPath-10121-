@@ -386,10 +386,33 @@ function buildWeeklyTitle(scope: ReportScope, lang: ReportLang, rangeDisp: strin
     : `Project Weekly Summary ${rangeDisp}`;
 }
 
-// ---- ステータス内訳の表示整形 ----
+function translateStatusLabel(raw: string, lang: ReportLang): string {
+  // status.not_started / not_started / etc を正規化
+  const key = raw
+    .replace(/^status[.\-_]/, '') // status.not_started -> not_started
+    .toLowerCase();
+
+  if (lang === 'ja') {
+    switch (key) {
+      case 'not_started': return '未着手';
+      case 'in_progress': return '対応中';
+      case 'done':        return '完了';
+    }
+  } else {
+    switch (key) {
+      case 'not_started': return 'Not started';
+      case 'in_progress': return 'In progress';
+      case 'done':        return 'Done';
+    }
+  }
+  return raw; // 想定外はそのまま
+}
+
 function formatStatusLine(items: StatusItem[], lang: ReportLang): string {
   if (!Array.isArray(items) || !items.length) return lang === "ja" ? "（データなし）" : "(no data)";
-  const parts = items.map((i: StatusItem) => `${i.label}: ${toNumber(i.count)}`);
+  const parts = items.map((i: StatusItem) =>
+    `${translateStatusLabel(i.label, lang)}: ${toNumber(i.count)}`
+  );
   return parts.join(" / ");
 }
 
@@ -426,7 +449,7 @@ function buildWeeklyPersonalBody(p: WeeklyPersonalParams): string {
             `【今週の個人成果】${kpiLine}`,
             `【自分のステータス内訳】${statusLine}`,
             `【傾向・気づき】${head}${p.insight}`,
-            `【来週のフォーカス】（ここに具体的なタスク・OKRを記入）`,
+            `【来週のフォーカス】（ここに具体的なタスクを記入）`,
             `【期間注記】集計はJSTの週（Mon–Sun）基準です。`,
           ]
         : [
@@ -434,7 +457,7 @@ function buildWeeklyPersonalBody(p: WeeklyPersonalParams): string {
             `My Results: ${kpiLine}`,
             `My Status Breakdown: ${statusLine}`,
             `Insight: ${head}${p.insight}`,
-            `Next Week Focus: (Fill in concrete tasks/OKRs here)`,
+            `Next Week Focus: (Fill in concrete tasks here)`,
             `Note: Week is based on Mon–Sun in JST.`,
           ];
 
@@ -483,7 +506,7 @@ function buildWeeklyProjectBody(p: WeeklyProjectParams): string {
             `【Problem別平均進捗（上位3）】${top3}（平均: ${formatNumber(p.avgProgressPercent)}%）`,
             `【ステータス内訳】${statusLine}`,
             `【傾向・気づき】${head}${p.insight}`,
-            `【来週の重点】（ここにスプリント目標や重点イシューを記入）`,
+            `【来週の重点】（ここにスプリント目標や重点タスクを記入）`,
             `【期間注記】集計はJSTの週（Mon–Sun）基準です。`,
           ]
         : [
@@ -492,7 +515,7 @@ function buildWeeklyProjectBody(p: WeeklyProjectParams): string {
             `Top 3 Problems by Avg Progress: ${top3} (Avg: ${formatNumber(p.avgProgressPercent)}%)`,
             `Status Breakdown: ${statusLine}`,
             `Insight: ${head}${p.insight}`,
-            `Next Week Focus: (Fill in sprint goals and key issues here)`,
+            `Next Week Focus: (Fill in sprint goals and key tasks here)`,
             `Note: Week is based on Mon–Sun in JST.`,
           ];
 

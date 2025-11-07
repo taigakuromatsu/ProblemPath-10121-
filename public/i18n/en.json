@@ -189,7 +189,7 @@
     "projectContext": "Current project ID: {{id}}",
     "projectNameLine": "Current project name: {{name}}",
     "actions": {
-      "generateAi": "Generate AI draft",
+      "generateAi": "Generate draft automatically",
       "addManual": "Add manual report",
       "ai": {
         "personalDaily": "Personal — Daily report",
