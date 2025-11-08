@@ -44,6 +44,55 @@
         </div>
       </div>
 
+      <div class="notif-settings" *ngIf="notifyPrefs$ | async as np">
+        <div class="notif-settings-row">
+          <label>
+            <input
+              type="checkbox"
+              [checked]="np.instantComment !== false"
+              (change)="onToggleInstant('instantComment', $event.target.checked)"
+            />
+            {{ 'home.notifications.instantComment' | translate }}
+          </label>
+
+          <label>
+            <input
+              type="checkbox"
+              [checked]="np.instantFile !== false"
+              (change)="onToggleInstant('instantFile', $event.target.checked)"
+            />
+            {{ 'home.notifications.instantFile' | translate }}
+          </label>
+        </div>
+
+        <div class="notif-settings-row">
+          <label>
+            {{ 'home.notifications.dueMode' | translate }}
+            <select
+              [ngModel]="np.dueReminderMode || '1d7d'"
+              (ngModelChange)="onChangeDueMode($event)"
+            >
+              <option value="none">{{ 'home.notifications.due.none' | translate }}</option>
+              <option value="1d">{{ 'home.notifications.due.1d' | translate }}</option>
+              <option value="7d">{{ 'home.notifications.due.7d' | translate }}</option>
+              <option value="1d7d">{{ 'home.notifications.due.1d7d' | translate }}</option>
+            </select>
+          </label>
+
+          <label>
+            {{ 'home.notifications.dueHour' | translate }}
+            <select
+              [ngModel]="np.dueReminderHour ?? 9"
+              (ngModelChange)="onChangeDueHour($event)"
+            >
+              <option *ngFor="let h of [6,9,12,15,18,21]" [value]="h">
+                {{ h }}:00
+              </option>
+            </select>
+          </label>
+        </div>
+      </div>
+
       <mat-divider></mat-divider>
 
       <div class="section-body">
@@ -58,13 +107,13 @@
                 {{ m.body || '' }}
                 <!-- 将来 Functions 側から渡されるタイトル情報を表示（今なくても壊れない） -->
                 <ng-container *ngIf="m.data?.taskTitle">
-                  （{{ m.data.taskTitle }}）
+                  （{{ m.data?.taskTitle }}）
                 </ng-container>
                 <ng-container *ngIf="!m.data?.taskTitle && m.data?.issueTitle">
-                  （{{ m.data.issueTitle }}）
+                  （{{ m.data?.issueTitle }}）
                 </ng-container>
                 <ng-container *ngIf="!m.data?.taskTitle && !m.data?.issueTitle && m.data?.problemTitle">
-                  （{{ m.data.problemTitle }}）
+                  （{{ m.data?.problemTitle }}）
                 </ng-container>
               </span>
             </div>

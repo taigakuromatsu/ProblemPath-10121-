@@ -40,6 +40,7 @@ import { FcmTokensService } from '../services/fcm-tokens.service';
 import { safeFromProject$ } from '../utils/rx-safe';
 import { MatTableModule } from '@angular/material/table';
 import { Role, Member } from '../services/members.service';
+import { NotifyPrefsService, NotifyPrefs, DueReminderMode } from '../services/notify-prefs.service';
 
 // ---- このページ専用の拡張型 ----
 type ProblemWithDef = Problem & {
@@ -110,6 +111,7 @@ export class HomePage implements OnInit, OnDestroy {
 
   // --- FCM 状態（users/{uid}/fcmStatus/app） ---
   fcmStatus$!: Observable<{ enabled?: boolean; lastTokenSavedAt?: any; lastError?: string } | null>;
+  notifyPrefs$!: Observable<NotifyPrefs | null>;
 
   // ===== メンバー管理 =====
   membersList$!: Observable<Member[]>;
@@ -178,6 +180,7 @@ endModel: Record<string, Date | null> = {};
     private drafts: DraftsService,
     private network: NetworkService,
     private msg: MessagingService,
+    private notifyPrefsService: NotifyPrefsService,
     private fs: Firestore,
     private i18n: TranslateService,
     private ai: AiService,
@@ -190,6 +193,7 @@ endModel: Record<string, Date | null> = {};
     );
 
     this.myUid$ = this.auth.uid$;
+    this.notifyPrefs$ = this.notifyPrefsService.prefs$;
 
     // 追加: メンバー一覧とadmin数
     this.membersList$ = this.currentProject.projectId$.pipe(
@@ -480,6 +484,20 @@ endModel: Record<string, Date | null> = {};
   }
   onRecurEndPicked(issueId: string, date: Date | null) {
     this.taskRecurrenceEndDate[issueId] = date ? this.toYmd(date) : '';
+  }
+
+  onToggleInstant(key: 'instantComment' | 'instantFile', checked: boolean) {
+    this.notifyPrefsService.update({ [key]: checked });
+  }
+
+  onChangeDueMode(mode: DueReminderMode) {
+    this.notifyPrefsService.update({ dueReminderMode: mode });
+  }
+
+  onChangeDueHour(hour: number | string) {
+    const n = Number(hour);
+    if (!Number.isFinite(n) || n < 0 || n > 23) return;
+    this.notifyPrefsService.update({ dueReminderHour: n });
   }
 
   // 通知の権限リクエスト → トークン取得 → Firestore 保存

@@ -229,6 +229,27 @@
 /* 通知 */
 .notif-card { border-color: color-mix(in srgb, var(--accent-blue) 28%, #e6e8ef 72%); }
 .notif-card .chip { margin-right: 6px; }
+.notif-settings {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.notif-settings-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+}
+
+.notif-settings label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 .notification-list { display: flex; flex-direction: column; gap: var(--gap-2); }
 .notification-item {
   display: flex;
