@@ -166,11 +166,11 @@
           [memberDirectory]="directory || {}"
           [busy]="isBusy(task.id)"
           [actions]="{ complete: false, shift: true, setToday: true }"
+          [useLiveCountsIfMissing]="true"
           (complete)="markDone($event)"
           (shiftDays)="shiftTask($event)"
           (setToday)="setTaskToday($event)"
-        >
-        </pp-task-row>
+        ></pp-task-row>
       </div>
     </mat-card>
   </div>

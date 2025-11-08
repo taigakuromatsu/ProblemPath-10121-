@@ -165,6 +165,7 @@
           [memberDirectory]="directory || {}"
           [busy]="isBusy(task.id)"
           [actions]="{ complete: false, shift: true, setToday: true }"
+          [useLiveCountsIfMissing]="true"
           (shiftDays)="shiftTask($event.task, $event.days)"
           (setToday)="setTaskToday($event)"
         ></pp-task-row>

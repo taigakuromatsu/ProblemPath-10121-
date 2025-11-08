@@ -8,6 +8,9 @@ import { MatButtonModule } from '@angular/material/button';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { Subscription } from 'rxjs';
 import { Task } from '../../models/types';
+import { OnChanges, SimpleChanges } from '@angular/core';
+import { CommentsService, CommentTarget } from '../../services/comments.service';
+import { AttachmentsService, AttachmentTarget } from '../../services/attachments.service';
 
 export interface TaskRowActionConfig {
   showComplete?: boolean;
@@ -23,7 +26,7 @@ export interface TaskRowActionConfig {
   styleUrls: ['./task-row.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class TaskRowComponent implements OnDestroy {
+export class TaskRowComponent implements OnDestroy, OnChanges {
   @Input() task!: Task;
   @Input() memberDirectory: Record<string, string> | null = null;
   @Input() actionConfig: TaskRowActionConfig = { showComplete: true, showShiftTomorrow: true, showSetToday: true };
@@ -42,11 +45,23 @@ export class TaskRowComponent implements OnDestroy {
 
   @Input() busy = false;
 
+  @Input() useLiveCountsIfMissing = false;
+
+  private liveCommentCount: number | null = null;
+  private liveAttachmentCount: number | null = null;
+  private commentsSub?: Subscription;
+  private attachmentsSub?: Subscription;
+
   /** 現在のロケール（言語切替で更新） */
   private locale: string;
   private langSub: Subscription;
 
-  constructor(private tr: TranslateService, private cdr: ChangeDetectorRef) {
+  constructor(
+    private tr: TranslateService, 
+    private cdr: ChangeDetectorRef,
+    private comments: CommentsService,
+    private attachments: AttachmentsService,
+  ) {
     // 初期ロケール設定
     this.locale = this.resolveLocaleFromI18n(this.tr.currentLang);
     // 言語切替に追随してロケール変更 → OnPush再描画
@@ -56,9 +71,72 @@ export class TaskRowComponent implements OnDestroy {
     });
   }
 
+  ngOnChanges(changes: SimpleChanges): void {
+    if ('task' in changes || 'useLiveCountsIfMissing' in changes) {
+      this.setupLiveCountSubscriptions();
+    }
+  }
+  
   ngOnDestroy(): void {
     this.langSub?.unsubscribe();
+    this.commentsSub?.unsubscribe();
+    this.attachmentsSub?.unsubscribe();
   }
+
+  private setupLiveCountSubscriptions() {
+    // 一旦クリア
+    this.commentsSub?.unsubscribe();
+    this.attachmentsSub?.unsubscribe();
+    this.liveCommentCount = null;
+    this.liveAttachmentCount = null;
+
+    if (!this.useLiveCountsIfMissing || !this.task) return;
+
+    const anyTask = this.task as any;
+
+    // すでに集計フィールドがある場合はそれを優先し、追加クエリは投げない
+    const hasAggregated =
+      typeof anyTask?.commentCount === 'number' ||
+      typeof anyTask?.commentsCount === 'number' ||
+      typeof anyTask?.attachmentCount === 'number' ||
+      typeof anyTask?.attachmentsCount === 'number';
+
+    if (hasAggregated) return;
+
+    // タスクのパス情報が揃っていない場合はライブ集計不可
+    if (!this.task.projectId || !this.task.problemId || !this.task.issueId || !this.task.id) return;
+
+    const commentTarget: CommentTarget = {
+      kind: 'task',
+      projectId: this.task.projectId,
+      problemId: this.task.problemId,
+      issueId: this.task.issueId,
+      taskId: this.task.id,
+    };
+
+    this.commentsSub = this.comments
+      .listByTarget$(commentTarget, 1000)
+      .subscribe(list => {
+        this.liveCommentCount = list.length;
+        this.cdr.markForCheck();
+      });
+
+    const attachmentTarget: AttachmentTarget = {
+      kind: 'task',
+      projectId: this.task.projectId,
+      problemId: this.task.problemId,
+      issueId: this.task.issueId,
+      taskId: this.task.id,
+    };
+
+    this.attachmentsSub = this.attachments
+      .list(attachmentTarget)
+      .subscribe(list => {
+        this.liveAttachmentCount = list.length;
+        this.cdr.markForCheck();
+      });
+  }
+
 
   private resolveLocaleFromI18n(lang?: string): string {
     const l = (lang || '').toLowerCase();
@@ -99,13 +177,20 @@ export class TaskRowComponent implements OnDestroy {
 
   commentCount(task: Task): number {
     const anyTask = task as any;
-    return anyTask?.commentCount ?? anyTask?.commentsCount ?? 0;
+    if (typeof anyTask?.commentCount === 'number') return anyTask.commentCount;
+    if (typeof anyTask?.commentsCount === 'number') return anyTask.commentsCount;
+    if (typeof this.liveCommentCount === 'number') return this.liveCommentCount;
+    return 0;
   }
 
   attachmentCount(task: Task): number {
     const anyTask = task as any;
-    return anyTask?.attachmentCount ?? anyTask?.attachmentsCount ?? 0;
+    if (typeof anyTask?.attachmentCount === 'number') return anyTask.attachmentCount;
+    if (typeof anyTask?.attachmentsCount === 'number') return anyTask.attachmentsCount;
+    if (typeof this.liveAttachmentCount === 'number') return this.liveAttachmentCount;
+    return 0;
   }
+
 
   dueBadge(task: Task): 'overdue' | 'today' | 'soon' | 'later' | 'none' {
     if (!task.dueDate) return 'none';
