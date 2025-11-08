@@ -19,7 +19,7 @@ import { AuthService } from '../services/auth.service';
 import { MembersService } from '../services/members.service';
 import { InvitesService, InviteRole } from '../services/invites.service';
 import { Problem, Issue, Task } from '../models/types';
-import { Observable, BehaviorSubject, of, combineLatest, firstValueFrom, Subscription } from 'rxjs';
+import { Observable, BehaviorSubject, of, combineLatest, firstValueFrom } from 'rxjs';
 import { switchMap, take, map, startWith, catchError } from 'rxjs/operators';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { serverTimestamp } from 'firebase/firestore';
@@ -106,8 +106,7 @@ export class HomePage implements OnInit, OnDestroy {
 
   // --- FCM（フォアグラウンド表示用） ---
   fcmToken: string | null = null; // UIには出さないが、権限許可直後の確認用に保持のみ
-  fgMessages: FcmNotice[] = [];
-  private fgSub?: Subscription;
+  fgMessages$!: Observable<FcmNotice[]>;
 
   // --- FCM 状態（users/{uid}/fcmStatus/app） ---
   fcmStatus$!: Observable<{ enabled?: boolean; lastTokenSavedAt?: any; lastError?: string } | null>;
@@ -288,6 +287,7 @@ endModel: Record<string, Date | null> = {};
           this.selectedProblem$.next(null);
           this.tasksMap = {};
           this.uiRoleOverride = {}; // ログアウトで上書きもクリア
+          this.msg.clearAll();
         }
       });
 
@@ -363,17 +363,8 @@ endModel: Record<string, Date | null> = {};
       }
     } catch {}
 
-    // フォアグラウンド通知の購読（最新20件）
-    this.fgSub = this.msg.onMessage$.subscribe((n: FcmNotice) => {
-      if (!n) return;
-
-      const notice: FcmNotice = {
-        ...n,
-        receivedAt: n.receivedAt || Date.now(),
-      };
-
-      this.fgMessages = [notice, ...this.fgMessages].slice(0, 20);
-    });
+    // 通知センター一覧（MessagingService 側で集約された直近通知）
+    this.fgMessages$ = this.msg.notices$;
 
     // FCM 状態（users/{uid}/fcmStatus/app はプロジェクト非依存）
     this.fcmStatus$ = this.auth.uid$.pipe(
@@ -403,11 +394,11 @@ endModel: Record<string, Date | null> = {};
   }
 
   markAsRead(index: number) {
-    this.fgMessages = this.fgMessages.filter((_, i) => i !== index);
+    this.msg.markAsRead(index);
   }
 
   clearAllNotices() {
-    this.fgMessages = [];
+    this.msg.clearAll();
   }
 
   // ===== メンバー管理：UI一時上書き付きのロール変更 =====
@@ -1078,7 +1069,6 @@ endModel: Record<string, Date | null> = {};
       if (this.editProblemTimers[kk]) clearTimeout(this.editProblemTimers[kk]!);
     });
 
-    this.fgSub?.unsubscribe();
   }
 
 

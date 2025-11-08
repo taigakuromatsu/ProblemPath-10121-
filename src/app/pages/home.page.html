@@ -96,17 +96,17 @@
       <mat-divider></mat-divider>
 
       <div class="section-body">
-        <div class="notification-list" *ngIf="fgMessages.length > 0; else noMessages">
-          <div class="notification-item" *ngFor="let m of fgMessages; let i = index">
+        <div class="notification-list" *ngIf="(fgMessages$ | async) as list; else noMessages">
+          <div class="notification-item" *ngFor="let m of list; let i = index">
             <div class="notification-main">
               <strong class="no-truncate">
                 {{ m.title || ('home.notifications.itemTitle' | translate) }}
               </strong>
-
+      
               <span class="muted">
                 {{ m.body || '' }}
-              
-                <!-- body が無い古い/将来の通知だけタイトル情報で補完表示する -->
+      
+                <!-- body が無い場合はタイトル情報で補完表示する -->
                 <ng-container *ngIf="!m.body">
                   <ng-container *ngIf="m.data?.taskTitle">
                     （{{ m.data?.taskTitle }}）
@@ -120,7 +120,7 @@
                 </ng-container>
               </span>
             </div>
-
+      
             <div class="notification-meta">
               <span class="time" *ngIf="m.receivedAt">
                 {{ m.receivedAt | date:'MM/dd HH:mm' }}
@@ -130,17 +130,19 @@
               </button>
             </div>
           </div>
-
+      
           <div class="notification-actions">
             <button mat-stroked-button type="button" (click)="clearAllNotices()">
               {{ 'home.notifications.clearAll' | translate }}
             </button>
           </div>
         </div>
+      
         <ng-template #noMessages>
           <div class="empty-state">{{ 'home.notifications.noneYet' | translate }}</div>
         </ng-template>
       </div>
+      
     </mat-card>
   </header>
 
