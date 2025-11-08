@@ -40,6 +40,7 @@ import { FcmTokensService } from '../services/fcm-tokens.service';
 import { safeFromProject$ } from '../utils/rx-safe';
 import { MatTableModule } from '@angular/material/table';
 import { Role, Member } from '../services/members.service';
+import { NotifyPrefsService, NotifyPrefs, DueReminderMode } from '../services/notify-prefs.service';
 
 // ---- このページ専用の拡張型 ----
 type ProblemWithDef = Problem & {
@@ -111,6 +112,9 @@ export class HomePage implements OnInit, OnDestroy {
   // --- FCM 状態（users/{uid}/fcmStatus/app） ---
   fcmStatus$!: Observable<{ enabled?: boolean; lastTokenSavedAt?: any; lastError?: string } | null>;
 
+  // --- 通知設定 ---
+  notifyPrefs$ = this.notifyPrefsService.prefs$;
+
   // ===== メンバー管理 =====
   membersList$!: Observable<Member[]>;
   adminCount$!: Observable<number>;
@@ -162,6 +166,20 @@ endModel: Record<string, Date | null> = {};
     this.taskRecurrenceEndDate[issueId] = '';
   }
 
+  onToggleInstant(key: 'instantComment' | 'instantFile', checked: boolean) {
+    this.notifyPrefsService.update({ [key]: checked } as Partial<NotifyPrefs>);
+  }
+
+  onChangeDueMode(mode: DueReminderMode) {
+    this.notifyPrefsService.update({ dueReminderMode: mode });
+  }
+
+  onChangeDueHour(hour: number | string) {
+    const n = Number(hour);
+    if (!Number.isFinite(n) || n < 0 || n > 23) return;
+    this.notifyPrefsService.update({ dueReminderHour: n });
+  }
+
 
   constructor(
     public prefs: PrefsService,
@@ -182,7 +200,8 @@ endModel: Record<string, Date | null> = {};
     private i18n: TranslateService,
     private ai: AiService,
     private dateAdapter: DateAdapter<Date>,
-    private fcmTokens: FcmTokensService
+    private fcmTokens: FcmTokensService,
+    private notifyPrefsService: NotifyPrefsService
   ) {
     this.isOnline$ = this.network.isOnline$;
     this.canEdit$ = combineLatest([this.members.isEditor$, this.network.isOnline$]).pipe(
