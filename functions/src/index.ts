@@ -15,12 +15,15 @@ import {
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import {
   // listFcmTokensForUsers, // ← ②方式では未使用
+  DEFAULT_NOTIFY_PREFS,
+  getNotifyPrefsForUsers,
   listProjectMemberUids,
   markReminderSent,
   region,
   sendToTokens,
   wasReminderSent,
 } from "./notify";
+import type { DueReminderMode, NotifyPrefs, ReminderWindow } from "./notify";
 export { issueSuggestHttp } from "./issue-suggest";
 export { refreshAnalyticsSummaryV2 } from "./analytics";
 export { generateProgressReportDraft } from "./ai";
@@ -56,8 +59,46 @@ type AttachmentParams = {
 };
 
 const openTaskStatuses = ["not_started", "in_progress"] as const;
-type ReminderWindow = "1d" | "7d";
 type Lang = "ja" | "en";
+
+interface NotificationTitles {
+  problemTitle?: string;
+  issueTitle?: string;
+  taskTitle?: string;
+}
+
+function sanitizeTitle(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function fallbackTitle(
+  title: string | undefined,
+  lang: Lang,
+  fallbackJa: string,
+  fallbackEn: string
+): string {
+  if (title && title.trim()) return title.trim();
+  return lang === "ja" ? fallbackJa : fallbackEn;
+}
+
+function assignIfDefined(target: Record<string, string>, key: string, value?: string) {
+  if (value) {
+    target[key] = value;
+  }
+}
+
+function isReminderEnabled(mode: DueReminderMode, window: ReminderWindow): boolean {
+  if (mode === "none") return false;
+  if (mode === "1d7d") return true;
+  return mode === window;
+}
+
+function getCurrentJstHour(): number {
+  const now = new Date();
+  return (now.getUTCHours() + 9) % 24;
+}
 
 function determineScope(params: { issueId?: string; taskId?: string }): "problem" | "issue" | "task" {
   if (params.taskId) return "task";
@@ -109,6 +150,67 @@ function normalizeLang(input?: string): Lang | undefined {
   return undefined;
 }
 
+async function fetchNotificationTitles(params: {
+  projectId: string;
+  problemId?: string;
+  issueId?: string;
+  taskId?: string;
+}): Promise<NotificationTitles> {
+  const { projectId, problemId, issueId, taskId } = params;
+  const titles: NotificationTitles = {};
+  const promises: Promise<void>[] = [];
+
+  if (problemId) {
+    promises.push(
+      firestore
+        .doc(`projects/${projectId}/problems/${problemId}`)
+        .get()
+        .then((snap: FirebaseFirestore.DocumentSnapshot) => {
+          if (snap.exists) {
+            const data = snap.data() as any;
+            titles.problemTitle = sanitizeTitle(data?.title);
+          }
+        })
+        .catch(() => undefined)
+    );
+  }
+
+  if (problemId && issueId) {
+    promises.push(
+      firestore
+        .doc(`projects/${projectId}/problems/${problemId}/issues/${issueId}`)
+        .get()
+        .then((snap: FirebaseFirestore.DocumentSnapshot) => {
+          if (snap.exists) {
+            const data = snap.data() as any;
+            titles.issueTitle = sanitizeTitle(data?.title);
+          }
+        })
+        .catch(() => undefined)
+    );
+  }
+
+  if (problemId && issueId && taskId) {
+    promises.push(
+      firestore
+        .doc(
+          `projects/${projectId}/problems/${problemId}/issues/${issueId}/tasks/${taskId}`
+        )
+        .get()
+        .then((snap: FirebaseFirestore.DocumentSnapshot) => {
+          if (snap.exists) {
+            const data = snap.data() as any;
+            titles.taskTitle = sanitizeTitle(data?.title);
+          }
+        })
+        .catch(() => undefined)
+    );
+  }
+
+  await Promise.all(promises);
+  return titles;
+}
+
 /**
  * ②方式の要：ユーザー配下の fcmTokens サブコレクションから、
  * language が指定 lang のトークンだけを集める。
@@ -132,34 +234,87 @@ async function listTokensForUsersByLang(uids: string[], lang: Lang): Promise<str
 }
 
 /** 言語別メッセージ文面 */
-function commentNotificationByLang(lang: Lang, scope: "problem" | "issue" | "task") {
+function commentNotificationByLang(
+  lang: Lang,
+  scope: "problem" | "issue" | "task",
+  titles: NotificationTitles
+) {
   const title = lang === "ja" ? "新しいコメント" : "New comment";
-  const body =
-    scope === "task"
-      ? (lang === "ja" ? "タスクにコメントが追加されました" : "A comment was added to a task")
-      : scope === "issue"
-      ? (lang === "ja" ? "Issueにコメントが追加されました" : "A comment was added to an issue")
-      : (lang === "ja" ? "Problemにコメントが追加されました" : "A comment was added to a problem");
+  let body: string;
+
+  if (scope === "task") {
+    const taskLabel = fallbackTitle(titles.taskTitle, lang, "タスク", "task");
+    body =
+      lang === "ja"
+        ? `タスク「${taskLabel}」に新しいコメントが追加されました`
+        : `New comment on task "${taskLabel}"`;
+  } else if (scope === "issue") {
+    const issueLabel = fallbackTitle(titles.issueTitle, lang, "Issue", "issue");
+    body =
+      lang === "ja"
+        ? `「${issueLabel}」に新しいコメントが追加されました`
+        : `New comment on "${issueLabel}"`;
+  } else {
+    const problemLabel = fallbackTitle(titles.problemTitle, lang, "Problem", "problem");
+    body =
+      lang === "ja"
+        ? `「${problemLabel}」に新しいコメントが追加されました`
+        : `New comment on "${problemLabel}"`;
+  }
+
   return { title, body };
 }
 
-function attachmentNotificationByLang(lang: Lang, scope: "problem" | "issue" | "task") {
+function attachmentNotificationByLang(
+  lang: Lang,
+  scope: "problem" | "issue" | "task",
+  titles: NotificationTitles
+) {
   const title = lang === "ja" ? "ファイルが追加されました" : "File added";
-  const body =
-    scope === "task"
-      ? (lang === "ja" ? "タスクにファイルが追加されました" : "A file was added to a task")
-      : scope === "issue"
-      ? (lang === "ja" ? "Issueにファイルが追加されました" : "A file was added to an issue")
-      : (lang === "ja" ? "Problemにファイルが追加されました" : "A file was added to a problem");
+  let body: string;
+
+  if (scope === "task") {
+    const taskLabel = fallbackTitle(titles.taskTitle, lang, "タスク", "task");
+    body =
+      lang === "ja"
+        ? `タスク「${taskLabel}」にファイルが追加されました`
+        : `New file added to task "${taskLabel}"`;
+  } else if (scope === "issue") {
+    const issueLabel = fallbackTitle(titles.issueTitle, lang, "Issue", "issue");
+    body =
+      lang === "ja"
+        ? `「${issueLabel}」にファイルが追加されました`
+        : `New file added to "${issueLabel}"`;
+  } else {
+    const problemLabel = fallbackTitle(titles.problemTitle, lang, "Problem", "problem");
+    body =
+      lang === "ja"
+        ? `「${problemLabel}」にファイルが追加されました`
+        : `New file added to "${problemLabel}"`;
+  }
+
   return { title, body };
 }
 
-function reminderNotificationByLang(lang: Lang, window: ReminderWindow) {
-  const title = lang === "ja" ? "期限リマインド" : "Due reminder";
-  const body =
+function reminderNotificationByLang(
+  lang: Lang,
+  window: ReminderWindow,
+  titles: NotificationTitles,
+  dueDate: string
+) {
+  const title =
     window === "1d"
-      ? (lang === "ja" ? "タスク期限が明日に迫っています" : "Task is due tomorrow")
-      : (lang === "ja" ? "タスク期限まで1週間です" : "Task is due in one week");
+      ? lang === "ja"
+        ? "明日が期限です"
+        : "Due tomorrow"
+      : lang === "ja"
+      ? "1週間前のリマインド"
+      : "Due in one week";
+  const taskLabel = fallbackTitle(titles.taskTitle, lang, "タスク", "task");
+  const body =
+    lang === "ja"
+      ? `期限が近いタスク「${taskLabel}」があります（${dueDate} 締切）`
+      : `Task "${taskLabel}" is due soon (${dueDate})`;
   return { title, body };
 }
 
@@ -174,10 +329,20 @@ async function handleCommentCreated(
   const authorId: string | undefined = event.data?.data()?.authorId;
 
   const allMemberUids = await listProjectMemberUids(projectId);
-  const targetUids = authorId ? allMemberUids.filter(uid => uid !== authorId) : allMemberUids;
+  const uniqueMemberUids = Array.from(new Set(allMemberUids.filter((uid) => !!uid)));
+  const prefsMap = await getNotifyPrefsForUsers(uniqueMemberUids);
+  const targetUids = uniqueMemberUids.filter((uid) => {
+    if (!uid) return false;
+    if (authorId && uid === authorId) return false;
+    const prefs = prefsMap.get(uid) ?? DEFAULT_NOTIFY_PREFS;
+    return prefs.instantComment === true;
+  });
+
+  const titles = await fetchNotificationTitles({ projectId, problemId, issueId, taskId });
 
   const dataBase: Record<string, string> = {
     type: "comment_created",
+    kind: "comment",
     projectId,
     scope,
     problemId,
@@ -185,6 +350,9 @@ async function handleCommentCreated(
   };
   if (issueId) dataBase.issueId = issueId;
   if (taskId)  dataBase.taskId  = taskId;
+  assignIfDefined(dataBase, "problemTitle", titles.problemTitle);
+  assignIfDefined(dataBase, "issueTitle", titles.issueTitle);
+  assignIfDefined(dataBase, "taskTitle", titles.taskTitle);
 
   const link = buildDeepLink(projectId, problemId, issueId, taskId);
 
@@ -196,7 +364,7 @@ async function handleCommentCreated(
     const tokens = tokensRaw.filter(t => !sent.has(t));
     if (!tokens.length) continue;
 
-    const notification = commentNotificationByLang(lang, scope);
+    const notification = commentNotificationByLang(lang, scope, titles);
     const data = { ...dataBase, lang };
     const payload = withWebPushLink({ notification, data }, link);
     const result = await sendToTokens(tokens, payload);
@@ -249,10 +417,20 @@ async function handleAttachmentCreated(
   const createdBy: string | undefined = event.data?.data()?.createdBy;
 
   const allMemberUids = await listProjectMemberUids(projectId);
-  const targetUids = createdBy ? allMemberUids.filter(uid => uid !== createdBy) : allMemberUids;
+  const uniqueMemberUids = Array.from(new Set(allMemberUids.filter((uid) => !!uid)));
+  const prefsMap = await getNotifyPrefsForUsers(uniqueMemberUids);
+  const targetUids = uniqueMemberUids.filter((uid) => {
+    if (!uid) return false;
+    if (createdBy && uid === createdBy) return false;
+    const prefs = prefsMap.get(uid) ?? DEFAULT_NOTIFY_PREFS;
+    return prefs.instantFile === true;
+  });
+
+  const titles = await fetchNotificationTitles({ projectId, problemId, issueId, taskId });
 
   const dataBase: Record<string, string> = {
     type: "attachment_created",
+    kind: "file",
     projectId,
     scope,
     problemId,
@@ -260,6 +438,9 @@ async function handleAttachmentCreated(
   };
   if (issueId) dataBase.issueId = issueId;
   if (taskId)  dataBase.taskId  = taskId;
+  assignIfDefined(dataBase, "problemTitle", titles.problemTitle);
+  assignIfDefined(dataBase, "issueTitle", titles.issueTitle);
+  assignIfDefined(dataBase, "taskTitle", titles.taskTitle);
 
   const link = buildDeepLink(projectId, problemId, issueId, taskId);
 
@@ -271,7 +452,7 @@ async function handleAttachmentCreated(
     const tokens = tokensRaw.filter(t => !sent.has(t));
     if (!tokens.length) continue;
 
-    const notification = attachmentNotificationByLang(lang, scope);
+    const notification = attachmentNotificationByLang(lang, scope, titles);
     const data = { ...dataBase, lang };
     const payload = withWebPushLink({ notification, data }, link);
     const result = await sendToTokens(tokens, payload);
@@ -339,39 +520,32 @@ async function notifyTaskReminder(
   },
   dueDate: string,
   window: ReminderWindow,
-  cache: Map<string, Record<Lang, string[]>>
+  targetUids: string[],
+  titles: NotificationTitles
 ) {
   const { projectId, problemId, issueId, taskId } = params;
 
-  // プロジェクト単位で ja/en トークンをキャッシュ
-  let tokensByLang = cache.get(projectId);
-  if (!tokensByLang) {
-    const memberUids = await listProjectMemberUids(projectId);
-    const jaTokens = await listTokensForUsersByLang(memberUids, "ja");
-    const enTokens = await listTokensForUsersByLang(memberUids, "en");
-    tokensByLang = { ja: jaTokens, en: enTokens };
-    cache.set(projectId, tokensByLang);
-  }
-
-  const totalTokens = (tokensByLang.ja?.length ?? 0) + (tokensByLang.en?.length ?? 0);
-  if (!totalTokens) {
+  if (!targetUids.length) {
     console.log(
-      "[notify] No tokens for reminder (by token language)",
+      "[notify] No recipients for reminder",
       JSON.stringify({ projectId, taskId, window, dueDate })
     );
-    await markReminderSent(projectId, taskId, dueDate, window);
     return;
   }
 
   const dataBase: Record<string, string> = {
     type: "task_due_soon",
+    kind: "due",
     projectId,
     dueDate,
     window,
     taskId,
   };
   if (problemId) dataBase.problemId = problemId;
-  if (issueId)   dataBase.issueId   = issueId;
+  if (issueId) dataBase.issueId = issueId;
+  assignIfDefined(dataBase, "problemTitle", titles.problemTitle);
+  assignIfDefined(dataBase, "issueTitle", titles.issueTitle);
+  assignIfDefined(dataBase, "taskTitle", titles.taskTitle);
 
   const link = buildDeepLink(projectId, problemId, issueId, taskId);
 
@@ -379,11 +553,11 @@ async function notifyTaskReminder(
   const sent = new Set<string>();
 
   for (const lang of ["ja", "en"] as const) {
-    const raw = tokensByLang[lang] ?? [];
-    const tokens = raw.filter(t => !sent.has(t));
+    const tokensRaw = await listTokensForUsersByLang(targetUids, lang);
+    const tokens = tokensRaw.filter((t) => !sent.has(t));
     if (!tokens.length) continue;
 
-    const notification = reminderNotificationByLang(lang, window);
+    const notification = reminderNotificationByLang(lang, window, titles, dueDate);
     const data = { ...dataBase, lang };
     const payload = withWebPushLink({ notification, data }, link);
 
@@ -392,15 +566,17 @@ async function notifyTaskReminder(
     sums.failureCount += Number((result as any)?.failureCount ?? 0);
     sums.attemptedTokens += tokens.length;
 
-    tokens.forEach(t => sent.add(t));
+    tokens.forEach((t) => sent.add(t));
   }
 
   console.log(
-    "[notify] Reminder notification result (by token language)",
-    JSON.stringify({ projectId, taskId, window, dueDate, sent: sums })
+    "[notify] Reminder notification result",
+    JSON.stringify({ projectId, taskId, window, dueDate, recipients: targetUids.length, sent: sums })
   );
 
-  await markReminderSent(projectId, taskId, dueDate, window);
+  await Promise.all(
+    targetUids.map((uid) => markReminderSent(projectId, taskId, dueDate, window, uid))
+  );
 }
 
 // ======== Firestore triggers ========
@@ -490,8 +666,90 @@ export const taskDueReminder = onSchedule(
       { window: "1d", offset: 1 },
       { window: "7d", offset: 7 },
     ];
+    const currentHour = getCurrentJstHour();
 
-    const tokenCache = new Map<string, Record<Lang, string[]>>();
+    const memberCache = new Map<string, string[]>();
+    const prefsCache = new Map<string, Map<string, NotifyPrefs>>();
+    type ParentInfo = { title?: string } | null;
+    const problemCache = new Map<string, ParentInfo>();
+    const issueCache = new Map<string, ParentInfo>();
+
+    const getMemberUidsForProject = async (projectId: string): Promise<string[]> => {
+      if (!memberCache.has(projectId)) {
+        const uids = await listProjectMemberUids(projectId);
+        memberCache.set(
+          projectId,
+          Array.from(new Set(uids.filter((uid) => typeof uid === "string" && uid)))
+        );
+      }
+      return memberCache.get(projectId) ?? [];
+    };
+
+    const getPrefsForProject = async (
+      projectId: string,
+      uids: string[]
+    ): Promise<Map<string, NotifyPrefs>> => {
+      const cached = prefsCache.get(projectId);
+      if (cached && uids.every((uid) => cached.has(uid))) {
+        return cached;
+      }
+      const map = await getNotifyPrefsForUsers(uids);
+      prefsCache.set(projectId, map);
+      return map;
+    };
+
+    const loadProblemInfo = async (
+      projectId: string,
+      problemId: string
+    ): Promise<ParentInfo> => {
+      const key = `${projectId}:${problemId}`;
+      if (!problemCache.has(key)) {
+        try {
+          const snap = await firestore.doc(`projects/${projectId}/problems/${problemId}`).get();
+          if (!snap.exists) {
+            problemCache.set(key, null);
+          } else {
+            const data = snap.data() as any;
+            if (data?.softDeleted) {
+              problemCache.set(key, null);
+            } else {
+              problemCache.set(key, { title: sanitizeTitle(data?.title) });
+            }
+          }
+        } catch (e) {
+          problemCache.set(key, null);
+        }
+      }
+      return problemCache.get(key) ?? null;
+    };
+
+    const loadIssueInfo = async (
+      projectId: string,
+      problemId: string,
+      issueId: string
+    ): Promise<ParentInfo> => {
+      const key = `${projectId}:${problemId}:${issueId}`;
+      if (!issueCache.has(key)) {
+        try {
+          const snap = await firestore
+            .doc(`projects/${projectId}/problems/${problemId}/issues/${issueId}`)
+            .get();
+          if (!snap.exists) {
+            issueCache.set(key, null);
+          } else {
+            const data = snap.data() as any;
+            if (data?.softDeleted) {
+              issueCache.set(key, null);
+            } else {
+              issueCache.set(key, { title: sanitizeTitle(data?.title) });
+            }
+          }
+        } catch (e) {
+          issueCache.set(key, null);
+        }
+      }
+      return issueCache.get(key) ?? null;
+    };
 
     for (const { window, offset } of windows) {
       const targetDate = formatYmd(addDays(today, offset));
@@ -507,26 +765,71 @@ export const taskDueReminder = onSchedule(
       for (const doc of snapshot.docs) {
         const taskId = doc.id;
         const { projectId, problemId, issueId } = extractPathParams(doc.ref);
-        if (!projectId) {
+        if (!projectId || !problemId) {
           console.warn("[notify] Could not determine project for task", doc.ref.path);
           continue;
         }
 
         try {
-          const alreadySent = await wasReminderSent(projectId, taskId, targetDate, window);
-          if (alreadySent) {
-            console.log(
-              "[notify] Reminder already sent",
-              JSON.stringify({ projectId, taskId, window, targetDate })
-            );
+          const taskData = (doc.data() as any) ?? {};
+          if (taskData?.softDeleted) {
             continue;
           }
+
+          const problemInfo = await loadProblemInfo(projectId, problemId);
+          if (!problemInfo) {
+            continue;
+          }
+
+          let issueInfo: ParentInfo = null;
+          if (issueId) {
+            issueInfo = await loadIssueInfo(projectId, problemId, issueId);
+            if (!issueInfo) {
+              continue;
+            }
+          }
+
+          const memberUids = await getMemberUidsForProject(projectId);
+          if (!memberUids.length) {
+            continue;
+          }
+
+          const prefsMap = await getPrefsForProject(projectId, memberUids);
+          const candidateUids = memberUids.filter((uid) => {
+            if (!uid) return false;
+            const prefs = prefsMap.get(uid) ?? DEFAULT_NOTIFY_PREFS;
+            if (!isReminderEnabled(prefs.dueReminderMode, window)) return false;
+            return prefs.dueReminderHour === currentHour;
+          });
+
+          if (!candidateUids.length) {
+            continue;
+          }
+
+          const sendChecks = await Promise.all(
+            candidateUids.map(async (uid) => ({
+              uid,
+              alreadySent: await wasReminderSent(projectId, taskId, targetDate, window, uid),
+            }))
+          );
+
+          const targetUids = sendChecks.filter((entry) => !entry.alreadySent).map((entry) => entry.uid);
+          if (!targetUids.length) {
+            continue;
+          }
+
+          const titles: NotificationTitles = {
+            problemTitle: problemInfo?.title,
+            issueTitle: issueInfo?.title,
+            taskTitle: sanitizeTitle(taskData?.title),
+          };
 
           await notifyTaskReminder(
             { projectId, problemId, issueId, taskId },
             targetDate,
             window,
-            tokenCache
+            targetUids,
+            titles
           );
         } catch (e) {
           console.error("[notify] taskDueReminder item error", { projectId, taskId, window, targetDate }, e);
