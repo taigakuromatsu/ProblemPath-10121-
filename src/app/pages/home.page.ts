@@ -105,7 +105,7 @@ export class HomePage implements OnInit, OnDestroy {
 
   // --- FCM（フォアグラウンド表示用） ---
   fcmToken: string | null = null; // UIには出さないが、権限許可直後の確認用に保持のみ
-  fgMessages: Array<{ title?: string; body?: string }> = [];
+  fgMessages: FcmNotice[] = [];
   private fgSub?: Subscription;
 
   // --- FCM 状態（users/{uid}/fcmStatus/app） ---
@@ -344,7 +344,14 @@ endModel: Record<string, Date | null> = {};
 
     // フォアグラウンド通知の購読（最新20件）
     this.fgSub = this.msg.onMessage$.subscribe((n: FcmNotice) => {
-      this.fgMessages = [{ title: n?.title, body: n?.body }, ...this.fgMessages].slice(0, 20);
+      if (!n) return;
+
+      const notice: FcmNotice = {
+        ...n,
+        receivedAt: n.receivedAt || Date.now(),
+      };
+
+      this.fgMessages = [notice, ...this.fgMessages].slice(0, 20);
     });
 
     // FCM 状態（users/{uid}/fcmStatus/app はプロジェクト非依存）
@@ -372,6 +379,14 @@ endModel: Record<string, Date | null> = {};
         );
       })
     );
+  }
+
+  markAsRead(index: number) {
+    this.fgMessages = this.fgMessages.filter((_, i) => i !== index);
+  }
+
+  clearAllNotices() {
+    this.fgMessages = [];
   }
 
   // ===== メンバー管理：UI一時上書き付きのロール変更 =====

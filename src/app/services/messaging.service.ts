@@ -7,7 +7,24 @@ import { doc as fsDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { environment } from '../../environments/environment';
 import { Observable, Subject } from 'rxjs';
 
-export type FcmNotice = { title?: string; body?: string };
+export type FcmNotice = {
+  title?: string;
+  body?: string;
+  /** 受信時刻（epoch ms）。ない場合は表示側で非表示扱いにする想定 */
+  receivedAt?: number;
+  /** Functions / SW 側から渡される追加情報（将来用も含む） */
+  data?: {
+    projectId?: string;
+    problemId?: string;
+    issueId?: string;
+    taskId?: string;
+    problemTitle?: string;
+    issueTitle?: string;
+    taskTitle?: string;
+    type?: 'comment' | 'file' | 'due';
+    [key: string]: any;
+  };
+};
 
 @Injectable({ providedIn: 'root' })
 export class MessagingService {
@@ -193,9 +210,17 @@ export class MessagingService {
         onMessage(this.messaging!, (payload: any) => {
           const title = payload?.notification?.title ?? 'ProblemPath';
           const body = payload?.notification?.body ?? '';
-        
+          const data = payload?.data || undefined;
+
+          const notice: FcmNotice = {
+            title,
+            body,
+            receivedAt: Date.now(),
+            data,
+          };
+
           this.zone.run(() => {
-            this.fg$.next({ title, body }); // アプリ内（FG）通知
+            this.fg$.next(notice); // アプリ内（FG）通知
           });
         
           // OS通知（見落とし防止）
@@ -217,14 +242,21 @@ export class MessagingService {
   
     navigator.serviceWorker.addEventListener('message', (event: MessageEvent) => {
       if (event.data?.type === 'FCM_BG') {
-        const { title, body } = event.data;
-  
+        const { title, body, data } = event.data;
+
+        const notice: FcmNotice = {
+          title,
+          body,
+          receivedAt: Date.now(),
+          data: data || undefined,
+        };
+
         // ★ここ重要★:
         // BGでの OS 通知は Service Worker 側が showNotification 済みとみなす。
         // ここではアプリ内（FG）用ストリームに流すだけにして、
         // new Notification() は呼ばない → 二重三重表示を防ぐ。
         this.zone.run(() => {
-          this.fg$.next({ title, body });
+          this.fg$.next(notice);
         });
       }
     });
