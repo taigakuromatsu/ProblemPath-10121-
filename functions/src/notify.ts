@@ -10,6 +10,70 @@ export const region = "asia-northeast1";
 const firestore = () => getFirestore();
 const messaging = () => getMessaging();
 
+export type ReminderWindow = "1d" | "7d";
+
+export type DueReminderMode = "none" | "1d" | "7d" | "1d7d";
+
+export interface NotifyPrefs {
+  instantComment: boolean;
+  instantFile: boolean;
+  dueReminderMode: DueReminderMode;
+  dueReminderHour: number;
+}
+
+export const DEFAULT_NOTIFY_PREFS: NotifyPrefs = {
+  instantComment: true,
+  instantFile: true,
+  dueReminderMode: "1d7d",
+  dueReminderHour: 9,
+};
+
+export async function getNotifyPrefsForUsers(
+  uids: string[]
+): Promise<Map<string, NotifyPrefs>> {
+  const db = getFirestore();
+  const map = new Map<string, NotifyPrefs>();
+
+  const unique = Array.from(new Set(uids.filter(Boolean)));
+
+  await Promise.all(
+    unique.map(async (uid) => {
+      try {
+        const snap = await db.doc(`users/${uid}/notifyPrefs/app`).get();
+        const raw = snap.exists ? (snap.data() as Record<string, unknown>) : {};
+        const prefs: NotifyPrefs = { ...DEFAULT_NOTIFY_PREFS };
+
+        const instantComment = raw["instantComment"];
+        if (typeof instantComment === "boolean") {
+          prefs.instantComment = instantComment;
+        }
+
+        const instantFile = raw["instantFile"];
+        if (typeof instantFile === "boolean") {
+          prefs.instantFile = instantFile;
+        }
+
+        const mode = raw["dueReminderMode"];
+        if (typeof mode === "string" && ["none", "1d", "7d", "1d7d"].includes(mode)) {
+          prefs.dueReminderMode = mode as DueReminderMode;
+        }
+
+        const hourRaw = raw["dueReminderHour"];
+        const hour = typeof hourRaw === "number" ? hourRaw : Number(hourRaw);
+        if (Number.isInteger(hour) && hour >= 0 && hour <= 23) {
+          prefs.dueReminderHour = hour;
+        }
+
+        map.set(uid, prefs);
+      } catch (e) {
+        map.set(uid, { ...DEFAULT_NOTIFY_PREFS });
+      }
+    })
+  );
+
+  return map;
+}
+
 export interface SendSummary {
   successCount: number;
   failureCount: number;
@@ -101,7 +165,8 @@ export async function wasReminderSent(
   projectId: string,
   taskId: string,
   ymd: string,
-  window: "1d" | "7d"
+  window: ReminderWindow,
+  uid: string
 ): Promise<boolean> {
   const docRef = firestore().doc(`projects/${projectId}/auditLogs/reminders/${ymd}/tasks/${taskId}`);
   const doc = await docRef.get();
@@ -109,25 +174,30 @@ export async function wasReminderSent(
     return false;
   }
   const data = doc.data();
-  const windows = data?.windows;
-  return Boolean(windows && typeof windows === "object" && windows[window]);
+  const windows = (data?.windows ?? {}) as Record<string, unknown>;
+  const entry = windows?.[window];
+  if (!entry) return false;
+  if (entry === true) return true;
+  if (typeof entry === "object" && entry !== null) {
+    return Boolean((entry as Record<string, unknown>)[uid]);
+  }
+  return false;
 }
 
 export async function markReminderSent(
   projectId: string,
   taskId: string,
   ymd: string,
-  window: "1d" | "7d"
+  window: ReminderWindow,
+  uid: string
 ): Promise<void> {
   const docRef = firestore().doc(`projects/${projectId}/auditLogs/reminders/${ymd}/tasks/${taskId}`);
   await docRef.set(
     {
       taskId,
       projectId,
-      windows: {
-        [window]: true,
-      },
       updatedAt: FieldValue.serverTimestamp(),
+      [`windows.${window}.${uid}`]: true,
     },
     { merge: true }
   );
