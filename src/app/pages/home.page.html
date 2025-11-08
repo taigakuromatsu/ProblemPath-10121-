@@ -48,9 +48,41 @@
 
       <div class="section-body">
         <div class="notification-list" *ngIf="fgMessages.length > 0; else noMessages">
-          <div class="notification-item" *ngFor="let m of fgMessages">
-            <strong class="no-truncate">{{ m.title || ('home.notifications.itemTitle' | translate) }}</strong>
-            <span class="muted">{{ m.body || '' }}</span>
+          <div class="notification-item" *ngFor="let m of fgMessages; let i = index">
+            <div class="notification-main">
+              <strong class="no-truncate">
+                {{ m.title || ('home.notifications.itemTitle' | translate) }}
+              </strong>
+
+              <span class="muted">
+                {{ m.body || '' }}
+                <!-- 将来 Functions 側から渡されるタイトル情報を表示（今なくても壊れない） -->
+                <ng-container *ngIf="m.data?.taskTitle">
+                  （{{ m.data.taskTitle }}）
+                </ng-container>
+                <ng-container *ngIf="!m.data?.taskTitle && m.data?.issueTitle">
+                  （{{ m.data.issueTitle }}）
+                </ng-container>
+                <ng-container *ngIf="!m.data?.taskTitle && !m.data?.issueTitle && m.data?.problemTitle">
+                  （{{ m.data.problemTitle }}）
+                </ng-container>
+              </span>
+            </div>
+
+            <div class="notification-meta">
+              <span class="time" *ngIf="m.receivedAt">
+                {{ m.receivedAt | date:'MM/dd HH:mm' }}
+              </span>
+              <button mat-button type="button" class="mark-read" (click)="markAsRead(i)">
+                {{ 'home.notifications.read' | translate }}
+              </button>
+            </div>
+          </div>
+
+          <div class="notification-actions">
+            <button mat-stroked-button type="button" (click)="clearAllNotices()">
+              {{ 'home.notifications.clearAll' | translate }}
+            </button>
           </div>
         </div>
         <ng-template #noMessages>
