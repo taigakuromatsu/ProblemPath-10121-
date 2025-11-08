@@ -161,6 +161,19 @@ export async function sendToTokens(
   return { successCount, failureCount, attemptedTokens: uniqueTokens.length };
 }
 
+
+function getReminderDocRef(
+  projectId: string,
+  ymd: string,
+  taskId: string
+) {
+  // 有効なパス:
+  // projects/{projectId}/auditLogs/reminders_{ymd}/tasks/{taskId}
+  return firestore().doc(
+    `projects/${projectId}/auditLogs/reminders_${ymd}/tasks/${taskId}`
+  );
+}
+
 export async function wasReminderSent(
   projectId: string,
   taskId: string,
@@ -168,19 +181,22 @@ export async function wasReminderSent(
   window: ReminderWindow,
   uid: string
 ): Promise<boolean> {
-  const docRef = firestore().doc(`projects/${projectId}/auditLogs/reminders/${ymd}/tasks/${taskId}`);
+  const docRef = getReminderDocRef(projectId, ymd, taskId);
   const doc = await docRef.get();
-  if (!doc.exists) {
-    return false;
-  }
+
+  if (!doc.exists) return false;
+
   const data = doc.data();
   const windows = (data?.windows ?? {}) as Record<string, unknown>;
-  const entry = windows?.[window];
+  const entry = windows[window];
+
   if (!entry) return false;
   if (entry === true) return true;
+
   if (typeof entry === "object" && entry !== null) {
     return Boolean((entry as Record<string, unknown>)[uid]);
   }
+
   return false;
 }
 
@@ -191,11 +207,13 @@ export async function markReminderSent(
   window: ReminderWindow,
   uid: string
 ): Promise<void> {
-  const docRef = firestore().doc(`projects/${projectId}/auditLogs/reminders/${ymd}/tasks/${taskId}`);
+  const docRef = getReminderDocRef(projectId, ymd, taskId);
+
   await docRef.set(
     {
       taskId,
       projectId,
+      ymd,
       updatedAt: FieldValue.serverTimestamp(),
       [`windows.${window}.${uid}`]: true,
     },

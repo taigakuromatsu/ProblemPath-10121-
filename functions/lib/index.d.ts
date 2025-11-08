@@ -10,3 +10,4 @@ export declare const attachmentCreatedOnProblem: any;
 export declare const attachmentCreatedOnIssue: any;
 export declare const attachmentCreatedOnTask: any;
 export declare const taskDueReminder: unknown;
+export declare const taskDueReminderDebug: unknown;

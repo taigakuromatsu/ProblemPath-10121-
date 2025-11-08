@@ -1,4 +1,3 @@
-// functions/src/index.ts
 import { getApps, initializeApp } from "firebase-admin/app";
 import {
   FieldValue,
@@ -6,7 +5,7 @@ import {
   type DocumentReference,
 } from "firebase-admin/firestore";
 import type { MulticastMessage, MessagingOptions } from "firebase-admin/messaging";
-import { onRequest } from "firebase-functions/v2/https";
+import { onRequest, type Request, type Response } from "firebase-functions/v2/https";
 import { setGlobalOptions } from "firebase-functions/v2";
 import {
   onDocumentCreated,
@@ -14,7 +13,6 @@ import {
 } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import {
-  // listFcmTokensForUsers, // ← ②方式では未使用
   DEFAULT_NOTIFY_PREFS,
   getNotifyPrefsForUsers,
   listProjectMemberUids,
@@ -22,6 +20,7 @@ import {
   region,
   sendToTokens,
   wasReminderSent,
+  type SendSummary,
 } from "./notify";
 import type { DueReminderMode, NotifyPrefs, ReminderWindow } from "./notify";
 export { issueSuggestHttp } from "./issue-suggest";
@@ -233,7 +232,7 @@ async function listTokensForUsersByLang(uids: string[], lang: Lang): Promise<str
   return uniqueTokens(out);
 }
 
-/** 言語別メッセージ文面 */
+/** 言語別メッセージ文面（コメント） */
 function commentNotificationByLang(
   lang: Lang,
   scope: "problem" | "issue" | "task",
@@ -265,6 +264,7 @@ function commentNotificationByLang(
   return { title, body };
 }
 
+/** 言語別メッセージ文面（添付） */
 function attachmentNotificationByLang(
   lang: Lang,
   scope: "problem" | "issue" | "task",
@@ -296,6 +296,7 @@ function attachmentNotificationByLang(
   return { title, body };
 }
 
+/** 言語別メッセージ文面（期限リマインド） */
 function reminderNotificationByLang(
   lang: Lang,
   window: ReminderWindow,
@@ -304,12 +305,8 @@ function reminderNotificationByLang(
 ) {
   const title =
     window === "1d"
-      ? lang === "ja"
-        ? "明日が期限です"
-        : "Due tomorrow"
-      : lang === "ja"
-      ? "1週間前のリマインド"
-      : "Due in one week";
+      ? (lang === "ja" ? "明日が期限です" : "Due tomorrow")
+      : (lang === "ja" ? "1週間前のリマインド" : "Due in one week");
   const taskLabel = fallbackTitle(titles.taskTitle, lang, "タスク", "task");
   const body =
     lang === "ja"
@@ -325,7 +322,6 @@ async function handleCommentCreated(
   const { projectId, problemId, issueId, taskId, commentId } = event.params;
   const scope = determineScope(event.params);
 
-  // 自己通知抑止
   const authorId: string | undefined = event.data?.data()?.authorId;
 
   const allMemberUids = await listProjectMemberUids(projectId);
@@ -356,7 +352,7 @@ async function handleCommentCreated(
 
   const link = buildDeepLink(projectId, problemId, issueId, taskId);
 
-  const sums = { successCount: 0, failureCount: 0, attemptedTokens: 0 };
+  const sums: SendSummary = { successCount: 0, failureCount: 0, attemptedTokens: 0 };
   const sent = new Set<string>();
 
   for (const lang of ["ja", "en"] as const) {
@@ -369,9 +365,9 @@ async function handleCommentCreated(
     const payload = withWebPushLink({ notification, data }, link);
     const result = await sendToTokens(tokens, payload);
 
-    sums.successCount += Number((result as any)?.successCount ?? 0);
-    sums.failureCount += Number((result as any)?.failureCount ?? 0);
-    sums.attemptedTokens += tokens.length;
+    sums.successCount += result.successCount;
+    sums.failureCount += result.failureCount;
+    sums.attemptedTokens += result.attemptedTokens;
 
     tokens.forEach(t => sent.add(t));
   }
@@ -381,7 +377,7 @@ async function handleCommentCreated(
     JSON.stringify({
       projectId, problemId, issueId, taskId, commentId, authorId,
       targetUids: targetUids.length,
-      sent: sums
+      sent: sums,
     })
   );
 
@@ -444,7 +440,7 @@ async function handleAttachmentCreated(
 
   const link = buildDeepLink(projectId, problemId, issueId, taskId);
 
-  const sums = { successCount: 0, failureCount: 0, attemptedTokens: 0 };
+  const sums: SendSummary = { successCount: 0, failureCount: 0, attemptedTokens: 0 };
   const sent = new Set<string>();
 
   for (const lang of ["ja", "en"] as const) {
@@ -457,9 +453,9 @@ async function handleAttachmentCreated(
     const payload = withWebPushLink({ notification, data }, link);
     const result = await sendToTokens(tokens, payload);
 
-    sums.successCount += Number((result as any)?.successCount ?? 0);
-    sums.failureCount += Number((result as any)?.failureCount ?? 0);
-    sums.attemptedTokens += tokens.length;
+    sums.successCount += result.successCount;
+    sums.failureCount += result.failureCount;
+    sums.attemptedTokens += result.attemptedTokens;
 
     tokens.forEach(t => sent.add(t));
   }
@@ -469,7 +465,7 @@ async function handleAttachmentCreated(
     JSON.stringify({
       projectId, problemId, issueId, taskId, attachmentId, createdBy,
       targetUids: targetUids.length,
-      sent: sums
+      sent: sums,
     })
   );
 
@@ -510,7 +506,7 @@ function extractPathParams(ref: DocumentReference) {
   return { projectId, problemId, issueId, taskId };
 }
 
-/** 期限リマインド（言語別トークン送信 + プロジェクト内キャッシュ） */
+/** 期限リマインド（送信サマリ返却版） */
 async function notifyTaskReminder(
   params: {
     projectId: string;
@@ -522,7 +518,7 @@ async function notifyTaskReminder(
   window: ReminderWindow,
   targetUids: string[],
   titles: NotificationTitles
-) {
+): Promise<SendSummary> {
   const { projectId, problemId, issueId, taskId } = params;
 
   if (!targetUids.length) {
@@ -530,7 +526,7 @@ async function notifyTaskReminder(
       "[notify] No recipients for reminder",
       JSON.stringify({ projectId, taskId, window, dueDate })
     );
-    return;
+    return { successCount: 0, failureCount: 0, attemptedTokens: 0 };
   }
 
   const dataBase: Record<string, string> = {
@@ -549,7 +545,11 @@ async function notifyTaskReminder(
 
   const link = buildDeepLink(projectId, problemId, issueId, taskId);
 
-  const sums = { successCount: 0, failureCount: 0, attemptedTokens: 0 };
+  const sums: SendSummary = {
+    successCount: 0,
+    failureCount: 0,
+    attemptedTokens: 0,
+  };
   const sent = new Set<string>();
 
   for (const lang of ["ja", "en"] as const) {
@@ -562,21 +562,31 @@ async function notifyTaskReminder(
     const payload = withWebPushLink({ notification, data }, link);
 
     const result = await sendToTokens(tokens, payload);
-    sums.successCount += Number((result as any)?.successCount ?? 0);
-    sums.failureCount += Number((result as any)?.failureCount ?? 0);
-    sums.attemptedTokens += tokens.length;
+
+    sums.successCount += result.successCount;
+    sums.failureCount += result.failureCount;
+    sums.attemptedTokens += result.attemptedTokens;
 
     tokens.forEach((t) => sent.add(t));
   }
 
   console.log(
     "[notify] Reminder notification result",
-    JSON.stringify({ projectId, taskId, window, dueDate, recipients: targetUids.length, sent: sums })
+    JSON.stringify({
+      projectId,
+      taskId,
+      window,
+      dueDate,
+      recipients: targetUids.length,
+      sent: sums,
+    })
   );
 
   await Promise.all(
     targetUids.map((uid) => markReminderSent(projectId, taskId, dueDate, window, uid))
   );
+
+  return sums;
 }
 
 // ======== Firestore triggers ========
@@ -653,190 +663,283 @@ export const attachmentCreatedOnTask = onDocumentCreated(
   }
 );
 
-// ======== Scheduler ========
+// ======== Scheduler 共通ロジック ========
 
+async function runTaskDueReminderJob(
+  baseYmd?: string,
+  hourOverride?: number
+): Promise<{
+  baseYmd: string;
+  hour: number;
+  checks: {
+    window: ReminderWindow;
+    targetDate: string;
+    foundTasks: number;
+    candidateUsers: number;
+    targetUsers: number;
+    notifiedTasks: number;
+  }[];
+}> {
+  // baseYmd があればそれを JST の「今日」として解釈
+  const baseDate =
+    baseYmd && /^\d{4}-\d{2}-\d{2}$/.test(baseYmd)
+      ? new Date(
+          Date.UTC(
+            Number(baseYmd.slice(0, 4)),
+            Number(baseYmd.slice(5, 7)) - 1,
+            Number(baseYmd.slice(8, 10))
+          )
+        )
+      : getJstToday();
+
+  const baseYmdStr = formatYmd(baseDate);
+
+  const hour =
+    typeof hourOverride === "number" &&
+    Number.isInteger(hourOverride) &&
+    hourOverride >= 0 &&
+    hourOverride <= 23
+      ? hourOverride
+      : getCurrentJstHour();
+
+  const windows: { window: ReminderWindow; offset: number }[] = [
+    { window: "1d", offset: 1 },
+    { window: "7d", offset: 7 },
+  ];
+
+  const memberCache = new Map<string, string[]>();
+  const prefsCache = new Map<string, Map<string, NotifyPrefs>>();
+  type ParentInfo = { title?: string } | null;
+  const problemCache = new Map<string, ParentInfo>();
+  const issueCache = new Map<string, ParentInfo>();
+
+  const getMemberUidsForProject = async (projectId: string): Promise<string[]> => {
+    if (!memberCache.has(projectId)) {
+      const uids = await listProjectMemberUids(projectId);
+      memberCache.set(
+        projectId,
+        Array.from(new Set(uids.filter((uid) => typeof uid === "string" && uid)))
+      );
+    }
+    return memberCache.get(projectId) ?? [];
+  };
+
+  const getPrefsForProject = async (
+    projectId: string,
+    uids: string[]
+  ): Promise<Map<string, NotifyPrefs>> => {
+    const cached = prefsCache.get(projectId);
+    if (cached && uids.every((uid) => cached.has(uid))) {
+      return cached;
+    }
+    const map = await getNotifyPrefsForUsers(uids);
+    prefsCache.set(projectId, map);
+    return map;
+  };
+
+  const loadProblemInfo = async (
+    projectId: string,
+    problemId: string
+  ): Promise<ParentInfo> => {
+    const key = `${projectId}:${problemId}`;
+    if (!problemCache.has(key)) {
+      try {
+        const snap = await firestore.doc(`projects/${projectId}/problems/${problemId}`).get();
+        if (!snap.exists) {
+          problemCache.set(key, null);
+        } else {
+          const data = snap.data() as any;
+          if (data?.softDeleted) {
+            problemCache.set(key, null);
+          } else {
+            problemCache.set(key, { title: sanitizeTitle(data?.title) });
+          }
+        }
+      } catch {
+        problemCache.set(key, null);
+      }
+    }
+    return problemCache.get(key) ?? null;
+  };
+
+  const loadIssueInfo = async (
+    projectId: string,
+    problemId: string,
+    issueId: string
+  ): Promise<ParentInfo> => {
+    const key = `${projectId}:${problemId}:${issueId}`;
+    if (!issueCache.has(key)) {
+      try {
+        const snap = await firestore
+          .doc(`projects/${projectId}/problems/${problemId}/issues/${issueId}`)
+          .get();
+        if (!snap.exists) {
+          issueCache.set(key, null);
+        } else {
+          const data = snap.data() as any;
+          if (data?.softDeleted) {
+            issueCache.set(key, null);
+          } else {
+            issueCache.set(key, { title: sanitizeTitle(data?.title) });
+          }
+        }
+      } catch {
+        issueCache.set(key, null);
+      }
+    }
+    return issueCache.get(key) ?? null;
+  };
+
+  const checks: {
+    window: ReminderWindow;
+    targetDate: string;
+    foundTasks: number;
+    candidateUsers: number;
+    targetUsers: number;
+    notifiedTasks: number;
+  }[] = [];
+
+  for (const { window, offset } of windows) {
+    // 「今日(baseYmdStr)」からオフセットした期限日
+    const targetDate = formatYmd(addDays(baseDate, offset));
+    const check = {
+      window,
+      targetDate,
+      foundTasks: 0,
+      candidateUsers: 0,
+      targetUsers: 0,
+      notifiedTasks: 0,
+    };
+
+    console.log("[notify] Checking reminders", JSON.stringify({ window, targetDate }));
+
+    const snapshot = await firestore
+      .collectionGroup("tasks")
+      .where("softDeleted", "==", false)
+      .where("status", "in", Array.from(openTaskStatuses))
+      .where("dueDate", "==", targetDate)
+      .get();
+
+    check.foundTasks = snapshot.docs.length;
+
+    for (const doc of snapshot.docs) {
+      const taskId = doc.id;
+      const { projectId, problemId, issueId } = extractPathParams(doc.ref);
+      if (!projectId || !problemId) {
+        console.warn("[notify] Could not determine project for task", doc.ref.path);
+        continue;
+      }
+
+      try {
+        const taskData = (doc.data() as any) ?? {};
+        if (taskData?.softDeleted) continue;
+
+        const problemInfo = await loadProblemInfo(projectId, problemId);
+        if (!problemInfo) continue;
+
+        let issueInfo: ParentInfo = null;
+        if (issueId) {
+          issueInfo = await loadIssueInfo(projectId, problemId, issueId);
+          if (!issueInfo) continue;
+        }
+
+        const memberUids = await getMemberUidsForProject(projectId);
+        if (!memberUids.length) continue;
+
+        const prefsMap = await getPrefsForProject(projectId, memberUids);
+        const candidateUids = memberUids.filter((uid) => {
+          if (!uid) return false;
+          const prefs = prefsMap.get(uid) ?? DEFAULT_NOTIFY_PREFS;
+          if (!isReminderEnabled(prefs.dueReminderMode, window)) return false;
+          return prefs.dueReminderHour === hour;
+        });
+
+        check.candidateUsers += candidateUids.length;
+        if (!candidateUids.length) continue;
+
+        const sendChecks = await Promise.all(
+          candidateUids.map(async (uid) => ({
+            uid,
+            alreadySent: await wasReminderSent(projectId, taskId, targetDate, window, uid),
+          }))
+        );
+
+        const targetUids = sendChecks
+          .filter((entry) => !entry.alreadySent)
+          .map((entry) => entry.uid);
+
+        check.targetUsers += targetUids.length;
+        if (!targetUids.length) continue;
+
+        const titles: NotificationTitles = {
+          problemTitle: problemInfo?.title,
+          issueTitle: issueInfo?.title,
+          taskTitle: sanitizeTitle(taskData?.title),
+        };
+
+        const summary = await notifyTaskReminder(
+          { projectId, problemId, issueId, taskId },
+          targetDate,
+          window,
+          targetUids,
+          titles
+        );
+
+        if (summary.attemptedTokens > 0) {
+          check.notifiedTasks += 1;
+        }
+      } catch (e) {
+        console.error(
+          "[notify] taskDueReminder item error",
+          { projectId, taskId, window, targetDate },
+          e
+        );
+      }
+    }
+
+    checks.push(check);
+  }
+
+  const summary = { baseYmd: baseYmdStr, hour, checks };
+  console.log("[notify] taskDueReminder summary", JSON.stringify(summary));
+  return summary;
+}
+
+// 本番用スケジューラ
 export const taskDueReminder = onSchedule(
   {
     schedule: "every 1 hours",
     timeZone: "Asia/Tokyo",
   },
   async () => {
-    const today = getJstToday();
-    const windows: { window: ReminderWindow; offset: number }[] = [
-      { window: "1d", offset: 1 },
-      { window: "7d", offset: 7 },
-    ];
-    const currentHour = getCurrentJstHour();
-
-    const memberCache = new Map<string, string[]>();
-    const prefsCache = new Map<string, Map<string, NotifyPrefs>>();
-    type ParentInfo = { title?: string } | null;
-    const problemCache = new Map<string, ParentInfo>();
-    const issueCache = new Map<string, ParentInfo>();
-
-    const getMemberUidsForProject = async (projectId: string): Promise<string[]> => {
-      if (!memberCache.has(projectId)) {
-        const uids = await listProjectMemberUids(projectId);
-        memberCache.set(
-          projectId,
-          Array.from(new Set(uids.filter((uid) => typeof uid === "string" && uid)))
-        );
-      }
-      return memberCache.get(projectId) ?? [];
-    };
-
-    const getPrefsForProject = async (
-      projectId: string,
-      uids: string[]
-    ): Promise<Map<string, NotifyPrefs>> => {
-      const cached = prefsCache.get(projectId);
-      if (cached && uids.every((uid) => cached.has(uid))) {
-        return cached;
-      }
-      const map = await getNotifyPrefsForUsers(uids);
-      prefsCache.set(projectId, map);
-      return map;
-    };
-
-    const loadProblemInfo = async (
-      projectId: string,
-      problemId: string
-    ): Promise<ParentInfo> => {
-      const key = `${projectId}:${problemId}`;
-      if (!problemCache.has(key)) {
-        try {
-          const snap = await firestore.doc(`projects/${projectId}/problems/${problemId}`).get();
-          if (!snap.exists) {
-            problemCache.set(key, null);
-          } else {
-            const data = snap.data() as any;
-            if (data?.softDeleted) {
-              problemCache.set(key, null);
-            } else {
-              problemCache.set(key, { title: sanitizeTitle(data?.title) });
-            }
-          }
-        } catch (e) {
-          problemCache.set(key, null);
-        }
-      }
-      return problemCache.get(key) ?? null;
-    };
-
-    const loadIssueInfo = async (
-      projectId: string,
-      problemId: string,
-      issueId: string
-    ): Promise<ParentInfo> => {
-      const key = `${projectId}:${problemId}:${issueId}`;
-      if (!issueCache.has(key)) {
-        try {
-          const snap = await firestore
-            .doc(`projects/${projectId}/problems/${problemId}/issues/${issueId}`)
-            .get();
-          if (!snap.exists) {
-            issueCache.set(key, null);
-          } else {
-            const data = snap.data() as any;
-            if (data?.softDeleted) {
-              issueCache.set(key, null);
-            } else {
-              issueCache.set(key, { title: sanitizeTitle(data?.title) });
-            }
-          }
-        } catch (e) {
-          issueCache.set(key, null);
-        }
-      }
-      return issueCache.get(key) ?? null;
-    };
-
-    for (const { window, offset } of windows) {
-      const targetDate = formatYmd(addDays(today, offset));
-      console.log("[notify] Checking reminders", JSON.stringify({ window, targetDate }));
-
-      const snapshot = await firestore
-        .collectionGroup("tasks")
-        .where("softDeleted", "==", false)
-        .where("status", "in", Array.from(openTaskStatuses))
-        .where("dueDate", "==", targetDate)
-        .get();
-
-      for (const doc of snapshot.docs) {
-        const taskId = doc.id;
-        const { projectId, problemId, issueId } = extractPathParams(doc.ref);
-        if (!projectId || !problemId) {
-          console.warn("[notify] Could not determine project for task", doc.ref.path);
-          continue;
-        }
-
-        try {
-          const taskData = (doc.data() as any) ?? {};
-          if (taskData?.softDeleted) {
-            continue;
-          }
-
-          const problemInfo = await loadProblemInfo(projectId, problemId);
-          if (!problemInfo) {
-            continue;
-          }
-
-          let issueInfo: ParentInfo = null;
-          if (issueId) {
-            issueInfo = await loadIssueInfo(projectId, problemId, issueId);
-            if (!issueInfo) {
-              continue;
-            }
-          }
-
-          const memberUids = await getMemberUidsForProject(projectId);
-          if (!memberUids.length) {
-            continue;
-          }
-
-          const prefsMap = await getPrefsForProject(projectId, memberUids);
-          const candidateUids = memberUids.filter((uid) => {
-            if (!uid) return false;
-            const prefs = prefsMap.get(uid) ?? DEFAULT_NOTIFY_PREFS;
-            if (!isReminderEnabled(prefs.dueReminderMode, window)) return false;
-            return prefs.dueReminderHour === currentHour;
-          });
-
-          if (!candidateUids.length) {
-            continue;
-          }
-
-          const sendChecks = await Promise.all(
-            candidateUids.map(async (uid) => ({
-              uid,
-              alreadySent: await wasReminderSent(projectId, taskId, targetDate, window, uid),
-            }))
-          );
-
-          const targetUids = sendChecks.filter((entry) => !entry.alreadySent).map((entry) => entry.uid);
-          if (!targetUids.length) {
-            continue;
-          }
-
-          const titles: NotificationTitles = {
-            problemTitle: problemInfo?.title,
-            issueTitle: issueInfo?.title,
-            taskTitle: sanitizeTitle(taskData?.title),
-          };
-
-          await notifyTaskReminder(
-            { projectId, problemId, issueId, taskId },
-            targetDate,
-            window,
-            targetUids,
-            titles
-          );
-        } catch (e) {
-          console.error("[notify] taskDueReminder item error", { projectId, taskId, window, targetDate }, e);
-        }
-      }
-    }
+    await runTaskDueReminderJob();
   }
 );
 
+// デバッグ用 HTTP エンドポイント（挙動確認用）
+// デバッグ用 HTTP エンドポイント（そのまま本番に置いておいてOK）
+export const taskDueReminderDebug = onRequest(async (req, res) => {
+  try {
+    // v2 の型まわりで req が unknown 扱いされる問題を避けるため any キャストに寄せる
+    const q = (req as any).query || {};
+
+    const ymdParam =
+      typeof q.ymd === "string" && /^\d{4}-\d{2}-\d{2}$/.test(q.ymd)
+        ? q.ymd
+        : undefined;
+
+    const hourParam =
+      typeof q.hour === "string" && q.hour !== ""
+        ? Number(q.hour)
+        : undefined;
+
+    const result = await runTaskDueReminderJob(ymdParam, hourParam);
+
+    // Response 型に .json が無いと言われる環境向けに send + JSON.stringify で返す
+    res.status(200).send(JSON.stringify(result, null, 2));
+  } catch (e: any) {
+    console.error("[notify] taskDueReminderDebug error", e);
+    res.status(500).send(`error: ${e?.message ?? String(e)}`);
+  }
+});
 

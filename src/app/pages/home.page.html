@@ -105,15 +105,18 @@
 
               <span class="muted">
                 {{ m.body || '' }}
-                <!-- 将来 Functions 側から渡されるタイトル情報を表示（今なくても壊れない） -->
-                <ng-container *ngIf="m.data?.taskTitle">
-                  （{{ m.data?.taskTitle }}）
-                </ng-container>
-                <ng-container *ngIf="!m.data?.taskTitle && m.data?.issueTitle">
-                  （{{ m.data?.issueTitle }}）
-                </ng-container>
-                <ng-container *ngIf="!m.data?.taskTitle && !m.data?.issueTitle && m.data?.problemTitle">
-                  （{{ m.data?.problemTitle }}）
+              
+                <!-- body が無い古い/将来の通知だけタイトル情報で補完表示する -->
+                <ng-container *ngIf="!m.body">
+                  <ng-container *ngIf="m.data?.taskTitle">
+                    （{{ m.data?.taskTitle }}）
+                  </ng-container>
+                  <ng-container *ngIf="!m.data?.taskTitle && m.data?.issueTitle">
+                    （{{ m.data?.issueTitle }}）
+                  </ng-container>
+                  <ng-container *ngIf="!m.data?.taskTitle && !m.data?.issueTitle && m.data?.problemTitle">
+                    （{{ m.data?.problemTitle }}）
+                  </ng-container>
                 </ng-container>
               </span>
             </div>

@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 // Firebase v10+ 用の Messaging Service Worker
-// ※ アプリ本体とは別スコープ（/firebase-cloud-messaging-push-scope）で登録される想定
+// ※ scope: /firebase-cloud-messaging-push-scope 想定
 
 importScripts('https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.4/firebase-messaging-compat.js');
@@ -19,36 +19,57 @@ const messaging = firebase.messaging();
 
 /**
  * バックグラウンドメッセージ受信時:
- * - OS通知を1回だけ表示
- * - 開いているタブがあれば内容を postMessage でブリッジ（アプリ内表示用）
+ * - 「data-onlyメッセージ」の場合だけ OS 通知をここで表示
+ * - FCM が自動表示する notification メッセージの場合は showNotification しない
+ * - どの場合も開いているタブには postMessage で橋渡し
  */
 messaging.onBackgroundMessage((payload) => {
-  const notification = payload.notification || {};
-  const title = notification.title || 'ProblemPath';
-  const body = notification.body || '';
-  const icon = notification.icon || '/assets/icon-192.png';
+  const notif = payload.notification || {};
+  const data = payload.data || {};
 
-  // functions 側で設定した webpush.fcmOptions.link が payload から見える場合に拾う
+  // notification ペイロードがあれば「FCM側ですでに OS 通知を出す前提」とみなす
+  const hasNotificationPayload =
+    (typeof notif.title === 'string' && notif.title.length > 0) ||
+    (typeof notif.body === 'string' && notif.body.length > 0);
+
+  const title =
+    notif.title ||
+    data.title ||
+    'ProblemPath';
+
+  const body =
+    notif.body ||
+    data.body ||
+    '';
+
+  const icon =
+    notif.icon ||
+    '/assets/icon-192.png';
+
+  // functions 側の webpush.fcmOptions.link や data.link 相当を拾う（互換的に）
   const fcmLink =
-    (payload && payload.fcmOptions && payload.fcmOptions.link) ||
-    (payload && payload.data && payload.data.link) ||
+    (payload.fcmOptions && payload.fcmOptions.link) ||
+    data.fcmLink ||
+    data.link ||
     null;
 
   const options = {
     body,
     icon,
     data: {
-      // クリック時に使うために保持
       fcmLink,
-      // その他 data もあれば引き継いでおく
-      ...(payload && payload.data ? payload.data : {}),
+      ...data,
     },
   };
 
-  // ★ OS通知はここで1回だけ
-  self.registration.showNotification(title, options);
+  // ★ここが重複対策の肝★
+  // notification 付きメッセージの場合は FCM が OS 通知を出すので、
+  // ここでは showNotification しない。
+  if (!hasNotificationPayload) {
+    self.registration.showNotification(title, options);
+  }
 
-  // ★ アクティブなクライアント（タブ）があれば、中身をブリッジ（アプリ内通知用）
+  // アクティブなクライアント（タブ）があれば、内容をブリッジ（アプリ内表示用）
   self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
     if (!clients || clients.length === 0) return;
     clients.forEach((client) => {
@@ -66,7 +87,6 @@ messaging.onBackgroundMessage((payload) => {
  * 通知クリック時:
  * - 既存タブがあればフォーカス
  * - なければリンクを開く
- * - link は functions 側の webpush.fcmOptions.link / data.link / デフォルトURLの順で決定
  */
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
@@ -84,8 +104,8 @@ self.addEventListener('notificationclick', (event) => {
         includeUncontrolled: true,
       });
 
-      // 既に対象URL(または同一オリジン)のタブがあればそれをフォーカス
       const urlObj = new URL(targetUrl, self.location.origin);
+
       for (const client of allClients) {
         try {
           const clientUrl = new URL(client.url);
@@ -93,14 +113,16 @@ self.addEventListener('notificationclick', (event) => {
             await client.focus();
             return;
           }
-        } catch (_) {}
+        } catch (_) {
+          // ignore parse error
+        }
       }
 
-      // なければ新規タブで開く
       if (self.clients.openWindow) {
         await self.clients.openWindow(targetUrl);
       }
     })()
   );
 });
+
 
