@@ -37,7 +37,9 @@
       "itemTitle": "Notification",
       "noneYet": "(No notifications yet)",
       "enabledSnack": "Notifications enabled",
-      "failedSnack": "Failed to enable notifications"
+      "failedSnack": "Failed to enable notifications",
+      "read": "Mark as read",
+      "clearAll": "Clear all"
     },
       "problemSelectTitle": "Select a Problem",
       "problemSelectLead": "Manage Issues/Tasks under the selected Problem.",

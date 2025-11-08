@@ -37,7 +37,9 @@
       "itemTitle": "通知",
       "noneYet": "（まだありません）",
       "enabledSnack": "通知を有効化しました",
-      "failedSnack": "通知の有効化に失敗しました"
+      "failedSnack": "通知の有効化に失敗しました",
+      "read": "既読にする",
+      "clearAll": "全て既読にする"
     },
     "problemSelectTitle": "問題（Problem）を選択",
     "problemSelectLead": "ここで選んだ Problem の配下を管理します。",
