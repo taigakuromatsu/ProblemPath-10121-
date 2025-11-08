@@ -39,7 +39,17 @@
       "enabledSnack": "通知を有効化しました",
       "failedSnack": "通知の有効化に失敗しました",
       "read": "既読にする",
-      "clearAll": "全て既読にする"
+      "clearAll": "全て既読にする",
+      "instantComment": "コメント即時通知",
+      "instantFile": "ファイル即時通知",
+      "dueMode": "タスク期限リマインダー",
+      "due": {
+        "none": "なし",
+        "1d": "1日前のみ",
+        "7d": "7日前のみ",
+        "1d7d": "1日＆7日前"
+      },
+      "dueHour": "通知時刻"
     },
     "problemSelectTitle": "問題（Problem）を選択",
     "problemSelectLead": "ここで選んだ Problem の配下を管理します。",

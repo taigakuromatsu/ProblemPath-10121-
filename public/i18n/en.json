@@ -39,7 +39,17 @@
       "enabledSnack": "Notifications enabled",
       "failedSnack": "Failed to enable notifications",
       "read": "Mark as read",
-      "clearAll": "Clear all"
+      "clearAll": "Clear all",
+      "instantComment": "Instant comment notifications",
+      "instantFile": "Instant file notifications",
+      "dueMode": "Task due reminders",
+      "due": {
+        "none": "None",
+        "1d": "1 day before",
+        "7d": "7 days before",
+        "1d7d": "1 & 7 days before"
+      },
+      "dueHour": "Reminder time"
     },
       "problemSelectTitle": "Select a Problem",
       "problemSelectLead": "Manage Issues/Tasks under the selected Problem.",
