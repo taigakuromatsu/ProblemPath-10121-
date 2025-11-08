@@ -333,6 +333,35 @@ service cloud.firestore {
     match /users/{uid} {
       allow read, write: if false;
 
+        // 通知設定: users/{uid}/notifyPrefs/app
+        function isValidNotifyPrefs(d) {
+          return d.keys().hasOnly([
+            'instantComment',
+            'instantFile',
+            'dueReminderMode',
+            'dueReminderHour',
+          ])
+          && (!('instantComment' in d) || (d.instantComment is bool))
+          && (!('instantFile' in d)   || (d.instantFile is bool))
+          && (!('dueReminderMode' in d)
+              || (d.dueReminderMode in ['none', '1d', '7d', '1d7d']))
+          && (!('dueReminderHour' in d)
+              || (d.dueReminderHour is int
+                  && d.dueReminderHour >= 0
+                  && d.dueReminderHour <= 23));
+        }
+
+        match /notifyPrefs/{docId} {
+          // 自分の分だけ読み書きOK
+          allow read: if isSignedIn() && request.auth.uid == uid;
+          allow create, update: if
+            isSignedIn()
+            && request.auth.uid == uid
+            && isValidNotifyPrefs(request.resource.data);
+          // 消す必要は特にない想定なので禁止（必要なら isSignedIn() && request.auth.uid == uid でOK）
+          allow delete: if false;
+        }
+
       match /memberships/{projectId} {
         allow read: if isSignedIn() && request.auth.uid == uid;
         allow create: if isSignedIn() && request.auth.uid == uid;

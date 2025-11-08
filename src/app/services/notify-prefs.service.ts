@@ -1,8 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, doc, docData, setDoc } from '@angular/fire/firestore';
-import { BehaviorSubject, Observable, of } from 'rxjs';
-import { switchMap, map, catchError, take } from 'rxjs/operators';
-import { firstValueFrom } from 'rxjs';
+import { BehaviorSubject, Observable, of, firstValueFrom } from 'rxjs';
+import { switchMap, map, catchError } from 'rxjs/operators';
 import { AuthService } from './auth.service';
 
 export type DueReminderMode = 'none' | '1d' | '7d' | '1d7d';
@@ -21,6 +20,9 @@ const DEFAULT_NOTIFY_PREFS: NotifyPrefs = {
   dueReminderHour: 9,
 };
 
+// 1ユーザー1ドキュメントで管理（users/{uid}/notifyPrefs/app）
+const PREF_DOC_ID = 'app';
+
 @Injectable({ providedIn: 'root' })
 export class NotifyPrefsService {
   private readonly firestore = inject(Firestore);
@@ -37,7 +39,9 @@ export class NotifyPrefsService {
             return of(null);
           }
 
-          const ref = doc(this.firestore as any, `users/${uid}/notifyPrefs`);
+          // ✅ 偶数セグメントに修正
+          const ref = doc(this.firestore as any, `users/${uid}/notifyPrefs/${PREF_DOC_ID}`);
+
           return docData(ref).pipe(
             map((raw: any) => ({
               ...DEFAULT_NOTIFY_PREFS,
@@ -53,14 +57,17 @@ export class NotifyPrefsService {
   }
 
   async update(patch: Partial<NotifyPrefs>): Promise<void> {
-    const uid = await firstValueFrom(this.auth.uid$.pipe(take(1)));
+    const uid = await firstValueFrom(this.auth.uid$);
     if (!uid) return;
 
     const current = this.state.value ?? DEFAULT_NOTIFY_PREFS;
     const next: NotifyPrefs = { ...current, ...patch };
 
-    const ref = doc(this.firestore as any, `users/${uid}/notifyPrefs`);
+    // ✅ 書き込み側も同じパスに統一
+    const ref = doc(this.firestore as any, `users/${uid}/notifyPrefs/${PREF_DOC_ID}`);
     await setDoc(ref, next, { merge: true });
+
     this.state.next(next);
   }
 }
+

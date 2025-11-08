@@ -113,7 +113,7 @@ export class HomePage implements OnInit, OnDestroy {
   fcmStatus$!: Observable<{ enabled?: boolean; lastTokenSavedAt?: any; lastError?: string } | null>;
 
   // --- 通知設定 ---
-  notifyPrefs$ = this.notifyPrefsService.prefs$;
+  notifyPrefs$!: Observable<NotifyPrefs | null>;
 
   // ===== メンバー管理 =====
   membersList$!: Observable<Member[]>;
@@ -243,6 +243,8 @@ endModel: Record<string, Date | null> = {};
         return admins.length === 1 ? admins[0].uid : null;
       })
     );
+
+    this.notifyPrefs$ = this.notifyPrefsService.prefs$;
   }
 
   lastAdminUid$!: Observable<string | null>;
