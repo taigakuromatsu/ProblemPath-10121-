@@ -234,13 +234,14 @@ mat-card header h2 { margin: 0; font-size: var(--fs-t); line-height: 1.3; font-w
   width: calc(40px * var(--m));
   height: calc(40px * var(--m));
   border-radius: var(--radius);
-  display: flex; align-items: center; justify-content: center;
-  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
   font-size: var(--fs-t);
   line-height: 1;
-  color: var(--accent-blue);
 }
+
 .icon.danger {
   background: color-mix(in srgb, var(--accent-red) 18%, transparent);
   color: var(--accent-red);
@@ -350,4 +351,107 @@ mat-card header h2 { margin: 0; font-size: var(--fs-t); line-height: 1.3; font-w
   .list-grid{
     grid-template-columns:1fr;
   }
+}
+
+/* 期限ステータス共通カラー */
+.schedule-page,
+.my-page {
+  /* 期限切れ（赤） */
+  --due-overdue-fg: var(--accent-red);
+  --due-overdue-bg: color-mix(in srgb, var(--accent-red) 14%, var(--surface));
+
+  /* 当日（オレンジ） */
+  --due-today-fg: #e65100;
+  --due-today-bg: color-mix(in srgb, #ff9800 14%, var(--surface));
+
+  /* 期限近い（明日＋今週残り：黄） */
+  --due-near-fg: #ff8f00;
+  --due-near-bg: color-mix(in srgb, #ffc107 16%, var(--surface));
+
+  /* 来週以降（青） */
+  --due-later-fg: var(--accent-blue);
+  --due-later-bg: color-mix(in srgb, var(--accent-blue) 12%, var(--surface));
+
+  /* 期限なし（控えめグレー） */
+  --due-nodue-fg: var(--muted);
+  --due-nodue-bg: color-mix(in srgb, var(--muted) 8%, var(--surface));
+}
+
+/* 期限切れ：赤＋強め */
+.section--overdue .icon {
+  background: var(--due-overdue-bg);
+  color: var(--due-overdue-fg);
+}
+.section--overdue h2,
+.section--overdue .count-badge {
+  color: var(--due-overdue-fg);
+}
+
+/* 当日：オレンジ */
+.section--today .icon {
+  background: var(--due-today-bg);
+  color: var(--due-today-fg);
+}
+.section--today h2,
+.section--today .count-badge {
+  color: var(--due-today-fg);
+}
+
+/* 期限近い（明日＋今週残り）：黄 */
+.section--tomorrow .icon,
+.section--thisWeekRest .icon {
+  background: var(--due-near-bg);
+  color: var(--due-near-fg);
+}
+.section--tomorrow h2,
+.section--thisWeekRest h2,
+.section--tomorrow .count-badge,
+.section--thisWeekRest .count-badge {
+  color: var(--due-near-fg);
+}
+
+/* 来週以降：青 */
+.section--nextWeek .icon,
+.section--later .icon {
+  background: var(--due-later-bg);
+  color: var(--due-later-fg);
+}
+.section--nextWeek h2,
+.section--later h2,
+.section--nextWeek .count-badge,
+.section--later .count-badge {
+  color: var(--due-later-fg);
+}
+
+/* 期限なし：控えめ */
+.section--nodue .icon {
+  background: var(--due-nodue-bg);
+  color: var(--due-nodue-fg);
+}
+.section--nodue h2,
+.section--nodue .count-badge {
+  color: var(--due-nodue-fg);
+}
+
+.list-grid {
+  position: relative;
+}
+
+/* 期限切れにタスクがあるときだけ sticky 強調 */
+mat-card.section--overdue:not(.empty) {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--due-overdue-bg);
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.18),
+    0 0 0 1px color-mix(in srgb, var(--accent-red) 28%, transparent);
+  border-radius: var(--radius);
+}
+
+/* 空なら通常表示（カード一覧が暴れないように） */
+mat-card.section--overdue.empty {
+  position: static;
+  box-shadow: var(--shadow, 0 2px 8px rgba(0,0,0,0.03));
+  background: var(--surface);
 }

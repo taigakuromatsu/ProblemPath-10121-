@@ -140,19 +140,17 @@
 
 <ng-template #listView let-vm="vm" let-directory="directory">
   <div class="list-grid">
-    <mat-card *ngFor="let section of sections" [class.empty]="!(vm[section.key]?.length)">
+    <mat-card
+      *ngFor="let section of sections"
+      [class.empty]="!(vm[section.key]?.length)"
+      [ngClass]="'section--' + section.key"
+    >
       <header>
-        <div class="icon" [class.danger]="section.accent === 'danger'" [class.info]="section.accent === 'info'">
+        <div class="icon">
           <mat-icon fontSet="material-icons-outlined">{{ section.icon }}</mat-icon>
         </div>
         <div>
-          <h2
-            class="section-title no-truncate"
-            [ngClass]="{
-              'section-title--danger': section.accent === 'danger',
-              'section-title--success': section.accent === 'muted'
-            }"
-          >
+          <h2 class="section-title no-truncate">
             {{ section.label | translate }}
           </h2>
           <span class="count-badge">{{ vm[section.key]?.length || 0 }}</span>
