@@ -6,6 +6,7 @@ import {
   deleteDoc as nativeDeleteDoc,
   doc as nativeDoc,
   setDoc as nativeSetDoc,
+  getDocs as nativeGetDocs,
 } from 'firebase/firestore';
 import { collectionData as rxCollectionData } from 'rxfire/firestore';
 import { Observable, of } from 'rxjs';
@@ -66,6 +67,10 @@ export class BoardColumnsService {
       throw new Error('[BoardColumnsService] columnId is required');
     }
 
+    // 初回カスタマイズや過去の部分的な状態を安全に補正
+    await this.ensureSeedDefaultColumns(projectId);
+
+
     const ref = nativeDoc(this.fs as any, `${this.colPath(projectId)}/${columnId}`);
 
     // Firestoreに保存するデータ
@@ -89,6 +94,10 @@ export class BoardColumnsService {
     if (!column?.columnId) {
       throw new Error('[BoardColumnsService] columnId is required');
     }
+
+    // 新規列追加前に、デフォルト列がFirestore上に揃っている状態を保証
+    await this.ensureSeedDefaultColumns(projectId);
+
 
     const ref = nativeDoc(this.fs as any, `${this.colPath(projectId)}/${column.columnId}`);
     await nativeSetDoc(
@@ -133,4 +142,73 @@ export class BoardColumnsService {
     });
     await Promise.all(writes);
   }
+
+    /**
+   * boardColumns コレクションを「少なくとも DEFAULT_BOARD_COLUMNS は揃っている」
+   * 状態に補正する。
+   *
+   * - ドキュメント0件: DEFAULT を全件投入
+   * - ドキュメント1件のみ: バグ起因の可能性が高いので DEFAULT を補完
+   * - 既存IDがデフォルト列IDのみで一部欠けている: 欠けている分だけ補完
+   * - カスタム列IDを含む(複数件)場合: ユーザー定義とみなして触らない
+   */
+    private async ensureSeedDefaultColumns(projectId: string): Promise<void> {
+      const colRef = nativeCollection(this.fs as any, this.colPath(projectId));
+      const snap = await nativeGetDocs(colRef);
+  
+      // 何もなければ丸ごとデフォルト投入
+      if (snap.empty) {
+        await this.seedDefaultColumns(projectId);
+        return;
+      }
+  
+      const existingIds = new Set(
+        snap.docs.map(doc => {
+          const data: any = doc.data() || {};
+          return data.columnId || doc.id;
+        })
+      );
+  
+      // 1件だけ存在 → 正常な構成とは考えにくいので DEFAULT を補完
+      if (snap.size === 1) {
+        await this.seedMissingDefaults(projectId, existingIds);
+        return;
+      }
+  
+      // 既存IDがデフォルト列IDのサブセットなら、欠けている分だけ補完
+      const onlyDefaultIds = Array.from(existingIds).every(id =>
+        DEFAULT_BOARD_COLUMNS.some(c => c.columnId === id)
+      );
+  
+      if (onlyDefaultIds) {
+        await this.seedMissingDefaults(projectId, existingIds);
+      }
+      // カスタム列を含む複数件構成はユーザーの意図とみなし、ここでは触らない
+    }
+  
+    /** DEFAULT_BOARD_COLUMNS から、existingIds に無い列だけをシードする */
+    private async seedMissingDefaults(projectId: string, existingIds: Set<string>): Promise<void> {
+      const writes = DEFAULT_BOARD_COLUMNS
+        .filter(col => !existingIds.has(col.columnId))
+        .map((col, idx) => {
+          const ref = nativeDoc(this.fs as any, `${this.colPath(projectId)}/${col.columnId}`);
+          return nativeSetDoc(
+            ref as any,
+            {
+              columnId: col.columnId,
+              title: col.title,
+              // 既に order を持っている列もあるので DEFAULT の値をそのまま使う
+              order: col.order ?? (idx + 1) * 10,
+              categoryHint: col.categoryHint,
+              progressHint: col.progressHint,
+            },
+            { merge: true }
+          );
+        });
+  
+      if (writes.length) {
+        await Promise.all(writes);
+      }
+    }
+  
 }

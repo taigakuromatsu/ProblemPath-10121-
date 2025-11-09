@@ -632,7 +632,7 @@
     "alert": {
       "created": "Project created",
       "deleteOnlyAdmin": "Only admins can delete the project",
-      "deleted": "Project deleted",
+      "deleted": "Project deleted. Please select another project from the list or create a new one.",
       "adminCannotLeave": "Admins cannot leave from the project. Please change to Member role first.",
       "left": "Left the project",
       "renameOnlyAdmin": "Only admins can rename the project. ",
