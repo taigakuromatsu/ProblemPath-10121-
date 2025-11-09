@@ -651,7 +651,7 @@
     "count": "Comments: {{c}} / Files: {{f}}"
   },
   "ai": {
-    "suggestIssuesBtn": "Suggest with AI",
+    "suggestIssuesBtn": "Suggest with AI (AI's answer is not necessarily correct. Please use it as a reference.)",
     "pickOne": "Pick a suggestion:",
     "loading": "Generating suggestions…",
     "error": "AI error",
