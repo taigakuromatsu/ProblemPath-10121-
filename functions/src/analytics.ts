@@ -114,6 +114,85 @@ export const computeAndWriteAnalytics = async (projectId: string) => {
     .where("projectId", "==", projectId)
     .get();
 
+  // 親の状態をキャッシュして無駄な読み取りを減らす
+  const problemActiveCache = new Map<string, boolean>();
+  const issueActiveCache = new Map<string, boolean>();
+
+  const isProblemActive = async (problemId: string): Promise<boolean> => {
+    const key = `${projectId}:${problemId}`;
+    if (problemActiveCache.has(key)) return !!problemActiveCache.get(key);
+
+    try {
+      const snap = await firestore
+        .doc(`projects/${projectId}/problems/${problemId}`)
+        .get();
+
+      if (!snap.exists) {
+        problemActiveCache.set(key, false);
+      } else {
+        const d = snap.data() ?? {};
+        // ツリーと同じ条件: softDeleted/visible=false は除外
+        problemActiveCache.set(key, !d.softDeleted && d.visible !== false);
+      }
+    } catch {
+      problemActiveCache.set(key, false);
+    }
+    return !!problemActiveCache.get(key);
+  };
+
+  const isIssueActive = async (problemId: string, issueId: string): Promise<boolean> => {
+    const key = `${projectId}:${problemId}:${issueId}`;
+    if (issueActiveCache.has(key)) return !!issueActiveCache.get(key);
+
+    try {
+      const snap = await firestore
+        .doc(`projects/${projectId}/problems/${problemId}/issues/${issueId}`)
+        .get();
+
+      if (!snap.exists) {
+        issueActiveCache.set(key, false);
+      } else {
+        const d = snap.data() ?? {};
+        issueActiveCache.set(key, !d.softDeleted && d.visible !== false);
+      }
+    } catch {
+      issueActiveCache.set(key, false);
+    }
+    return !!issueActiveCache.get(key);
+  };
+
+  const shouldCountTask = async (doc: QueryDocumentSnapshotLike, data: any): Promise<boolean> => {
+    // タスク自身の条件
+    if (data.softDeleted) return false;
+    if (data.visible === false) return false;
+    if (data.recurrenceTemplate) return false; // 繰り返しテンプレートは数えない
+
+    // problemId / issueId はフィールドにあれば優先、なければパスから拾う
+    let problemId = typeof data.problemId === "string" ? data.problemId : undefined;
+    let issueId   = typeof data.issueId === "string" ? data.issueId : undefined;
+
+    const path = (doc as any)?.ref?.path as string | undefined;
+    if (path) {
+      const segs = path.split("/");
+      const pIndex = segs.indexOf("problems");
+      const iIndex = segs.indexOf("issues");
+      if (!problemId && pIndex >= 0 && segs[pIndex + 1]) {
+        problemId = segs[pIndex + 1];
+      }
+      if (!issueId && iIndex >= 0 && segs[iIndex + 1]) {
+        issueId = segs[iIndex + 1];
+      }
+    }
+
+    // Problem 階層にぶら下がっていない（構造不正 or 古いゴミ）は除外
+    if (!problemId) return false;
+
+    if (!(await isProblemActive(problemId))) return false;
+    if (issueId && !(await isIssueActive(problemId, issueId))) return false;
+
+    return true;
+  };
+
   // プロジェクト全体用
   const statusCounts: Record<string, number> = {};
   let completedTasksCount = 0;
@@ -142,9 +221,12 @@ export const computeAndWriteAnalytics = async (projectId: string) => {
   const windowStartYmd = formatYmdUtc(windowStartUtc);
   const windowEndYmd = formatYmdUtc(windowEndUtc);
 
-  tasksSnapshot.forEach((doc: QueryDocumentSnapshotLike) => {
+  for (const doc of tasksSnapshot.docs as QueryDocumentSnapshotLike[]) {
     const data = doc.data() ?? {};
-    if (data.softDeleted) return;
+
+    // 集計対象になるタスクかどうか判定
+    const ok = await shouldCountTask(doc, data);
+    if (!ok) continue;
 
     const status = (data.status as string) ?? "not_started";
     statusCounts[status] = (statusCounts[status] ?? 0) + 1;
@@ -249,7 +331,7 @@ export const computeAndWriteAnalytics = async (projectId: string) => {
         }
       }
     }
-  });
+  }
 
   // ステータス内訳（全体）：翻訳キーを保存
   const statusBreakdownMap = new Map<string, { label: string; count: number }>();
