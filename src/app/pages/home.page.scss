@@ -302,6 +302,81 @@
   min-width: 140px;
 }
 
+/* ===== Task date input: match height with text input ===== */
+
+/* Angular Material(MDC) の内側まで届かせる */
+:host ::ng-deep .task-form .date-field .mat-mdc-text-field-wrapper {
+  height: 36px !important;      /* タスクタイトル入力と同じくらいに */
+  padding: 0 8px !important;
+  box-sizing: border-box;
+}
+
+:host ::ng-deep .task-form .date-field .mat-mdc-form-field-flex {
+  height: 100%;
+  align-items: center;
+}
+
+:host ::ng-deep .task-form .date-field .mat-mdc-form-field-infix {
+  padding: 0 !important;
+  min-height: 0 !important;
+}
+
+/* エラー・ヒント行を消して余白ゼロに */
+:host ::ng-deep .task-form .date-field .mat-mdc-form-field-subscript-wrapper {
+  display: none;
+}
+
+/* 入力テキストを中央寄せ＆余白調整 */
+:host ::ng-deep .task-form .date-field .mat-mdc-input-element {
+  padding: 0;
+  margin: 0;
+  line-height: 1.2;
+}
+
+
+/* ===== Task date input: compact to match text inputs ===== */
+
+/* タスク行のテキスト/セレクトに合わせる基準高さ */
+.task-form__row input,
+.task-form__row select {
+  height: 36px;
+  padding: 6px 10px;
+  box-sizing: border-box;
+}
+
+/* datepicker 用の mat-form-field を同じ高さに揃える */
+.task-form .date-field,
+.task-form .date-field--sm {
+  min-width: 140px;
+}
+
+/* アウトライン枠の中身を薄く・低くする */
+.task-form .date-field .mat-mdc-text-field-wrapper,
+.task-form .date-field--sm .mat-mdc-text-field-wrapper {
+  height: 36px;          /* ここをテキストと同じに */
+  padding: 0 8px;        /* 上下の余白を詰める */
+}
+
+/* 中身を縦センタリング＆余白削減 */
+.task-form .date-field .mat-mdc-form-field-flex,
+.task-form .date-field--sm .mat-mdc-form-field-flex {
+  align-items: center;
+  height: 100%;
+}
+
+.task-form .date-field .mat-mdc-form-field-infix,
+.task-form .date-field--sm .mat-mdc-form-field-infix {
+  padding: 0;
+  min-height: 0;
+}
+
+/* サブスクリプト行（エラー/ヒント）が無ければ高さをゼロに */
+.task-form .date-field .mat-mdc-form-field-subscript-wrapper,
+.task-form .date-field--sm .mat-mdc-form-field-subscript-wrapper {
+  display: none;
+}
+
+
 /* ===== Notification ===== */
 .notif-card {
   border-color: color-mix(in srgb, var(--accent-blue) 28%, #e6e8ef 72%);
@@ -669,3 +744,13 @@
   }
 }
 
+/* 「タスクタイトル」↔「日付」↔「タスクを追加」 の間に余白をつける */
+.task-form__row {
+  gap: 12px; /* ここで3要素の横方向の間隔を統一して確保 */
+}
+
+/* 「ごと」↔「終了日」 の間に少しだけ余白を追加 */
+.task-form__recurrence-fields
+  .task-form__recurrence-field:nth-child(2) {
+  margin-right: 8px; /* 2番目ブロック（ごと）の右側だけ広げる */
+  }
