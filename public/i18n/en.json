@@ -283,7 +283,7 @@
     "goal": "Goal"
   },
   "problem": {
-    "create": "Create Problem",
+    "create": "Create Problem (writing more details here increases the accuracy of AI issue suggestions)",
     "phenomenonRequired": "Phenomenon (required)",
     "causeOptional": "Cause (optional)",
     "solutionOptional": "Solution (optional)",
@@ -460,7 +460,7 @@
       "columnDelete": "Failed to delete column."
     },
     "addColumn": "Add column",
-    "autoProgressHint": "If no specific setting is given, the status and progress of the task will be automatically determined according to the settings of the column where the task card is placed (status / progress rate).",
+    "autoProgressHint": "You can set \"Status / Progress\" for each column, and when you move a task card to a column, the status and progress of the task will be automatically switched according to the settings.",
     "aria": {
       "reorderColumn": "Reorder column",
       "editColumn": "Edit column",

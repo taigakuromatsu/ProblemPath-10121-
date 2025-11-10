@@ -338,15 +338,21 @@ export const issueSuggest = onCall<
 
   const projectId = (raw.projectId || "").trim();
 
-  const fallbackTitle = (raw.title || "").trim();
-  const fallbackPhenomenon = (raw.description || "").trim() || undefined;
-
+  function norm(v: unknown): string | undefined {
+    if (typeof v !== "string") return undefined;
+    const s = v.trim();
+    return s || undefined;
+  }
+  
+  const fallbackTitle = norm(raw.title);
+  const fallbackPhenomenon = norm(raw.description);
+  
   const prob = {
-    title: (raw.problem?.title || "").trim() || fallbackTitle,
-    phenomenon: raw.problem?.phenomenon ?? fallbackPhenomenon,
-    cause: raw.problem?.cause ?? undefined,
-    solution: raw.problem?.solution ?? undefined,
-    goal: raw.problem?.goal ?? undefined,
+    title: norm(raw.problem?.title) || fallbackTitle,
+    phenomenon: norm(raw.problem?.phenomenon) ?? fallbackPhenomenon,
+    cause: norm(raw.problem?.cause),
+    solution: norm(raw.problem?.solution),
+    goal: norm(raw.problem?.goal),
   };
 
   if (!prob.title && !prob.phenomenon && !prob.goal) {

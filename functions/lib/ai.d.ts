@@ -28,5 +28,5 @@ export declare class AiClient {
     }): Promise<string>;
     private fallbackInsight;
 }
-export declare const generateProgressReportDraft: any;
 export declare const issueSuggest: any;
+export declare const generateProgressReportDraft: any;

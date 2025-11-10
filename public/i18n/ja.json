@@ -272,7 +272,7 @@
     "goal": "目標"
   },
   "problem": {
-    "create": "問題を作成",
+    "create": "問題を作成（詳細に記載することでAIの課題提案の精度が上がります）",
     "phenomenonRequired": "現象（必須）",
     "causeOptional": "原因（任意）",
     "solutionOptional": "解決策（任意）",
@@ -422,7 +422,7 @@
   },
   "board": {
     "offlineNotice": "現在オフラインです。カードの移動・更新・担当者変更はできません。",
-    "selectProblemHint": "Problemを選ぶとカンバンを表示します。",
+    "selectProblemHint": "問題を選ぶとカンバンを表示します。",
     "items": "件",
     "dropHere": "ここにドロップ",
     "assignToMe": "自分にアサイン",
@@ -445,7 +445,7 @@
       "columnDelete": "列の削除に失敗しました"
     },
     "addColumn": "列を追加",
-    "autoProgressHint": "特に指定がない場合、タスクカードを置いた列の設定（ステータス / 進捗率）に従って、そのタスクの状態と進捗が自動的に決まります。",
+    "autoProgressHint": "列ごとに「ステータス / 進捗率」を設定でき、タスクカードを列に移動すると、その設定に従ってタスクの状態と進捗が自動的に切り替わります。",
     "aria": {
       "reorderColumn": "列を並べ替え",
       "editColumn": "列を編集",
