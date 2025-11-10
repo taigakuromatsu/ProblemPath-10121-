@@ -29,3 +29,4 @@ export declare class AiClient {
     private fallbackInsight;
 }
 export declare const generateProgressReportDraft: any;
+export declare const issueSuggest: any;

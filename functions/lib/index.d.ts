@@ -1,6 +1,5 @@
-export { issueSuggestHttp } from "./issue-suggest";
 export { refreshAnalyticsSummaryV2 } from "./analytics";
-export { generateProgressReportDraft } from "./ai";
+export { generateProgressReportDraft, issueSuggest } from "./ai";
 export { generateRecurringTasks } from "./recurrence";
 export declare const ping: unknown;
 export declare const commentCreatedOnProblem: any;

@@ -2,7 +2,7 @@
 import { Injectable } from '@angular/core';
 import { getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 export type AiIssueSuggestRequest = {
   title?: string;
@@ -23,18 +23,10 @@ export type AiIssueSuggestRequest = {
   };
 };
 
-// Gen1側レスポンスの型
-type IssueSuggestHttpResponse = {
-  suggestions: Array<{ text: string }>;
-};
-
 @Injectable({ providedIn: 'root' })
 export class AiService {
   private auth = getAuth(getApp());
-  private functionsUrl =
-    'https://asia-northeast1-kensyu10121.cloudfunctions.net/issueSuggestHttp';
-
-  constructor(private http: HttpClient) {}
+  private functions = getFunctions(getApp(), 'asia-northeast1');
 
   async suggestIssues(req: AiIssueSuggestRequest): Promise<string[]> {
     if (!this.auth.currentUser) throw new Error('Unauthorized');
@@ -70,8 +62,6 @@ export class AiService {
     const payload = {
       lang: req.lang ?? 'ja',
       projectId: req.projectId ?? '',
-      title,
-      description,
       problem: {
         title,
         phenomenon: phenomenon ?? '',
@@ -79,30 +69,34 @@ export class AiService {
         solution:   solution ?? '',
         goal:       goal ?? '',
       },
+      title,
+      description,
     };
 
-    // Firebase ID token を Authorization に付与
-    const token = await this.auth.currentUser?.getIdToken();
-    if (!token) throw new Error('Unauthorized: No token available');
+    const fn = httpsCallable<typeof payload, { suggestions: string[] }>(
+      this.functions,
+      'issueSuggest'
+    );
 
-    const headers = new HttpHeaders({
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    });
+    const res = await fn(payload);
 
-    // Gen1のHTTP関数を叩く
-    const res = await this.http
-      .post<IssueSuggestHttpResponse>(this.functionsUrl, payload, { headers })
-      .toPromise();
+    const data: any = (res as any)?.data ?? res;
 
-    if (!res || !Array.isArray(res.suggestions)) {
-      return [];
-    }
+    const arr: any[] = Array.isArray(data?.suggestions)
+      ? data.suggestions
+      : [];
 
-    // [{text:"..."}] → ["..."]
-    return res.suggestions
-      .map(item => (item && item.text) ? item.text.trim() : '')
-      .filter(s => !!s);
+    const texts = arr
+      .map((item) =>
+        typeof item === 'string'
+          ? item.trim()
+          : item && typeof item.text === 'string'
+          ? item.text.trim()
+          : ''
+      )
+      .filter((s: string) => !!s);
+
+    return texts;
   }
 }
 
