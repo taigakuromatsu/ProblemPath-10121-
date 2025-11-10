@@ -63,6 +63,30 @@ function cleanLines(s: string): string[] {
     .map((x) => x.replace(/^[-*●・\d\.\)\]]+\s*/, "").trim())
     .filter(Boolean);
 }
+
+function postProcessSuggestions(raw: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  for (const line of raw) {
+    let s = (line || "").trim();
+    if (!s) continue;
+
+    s = s.replace(/^[-*●・\d]+\s*[.)】］）]?\s*/u, "").trim();
+    if (!s) continue;
+
+    const key = s.toLowerCase();
+    if (seen.has(key)) continue;
+
+    if (s.length < 8 || s.length > 36) continue;
+
+    seen.add(key);
+    out.push(s);
+    if (out.length >= 7) break;
+  }
+
+  return out;
+}
 function oneLine(s: string): string {
   return cleanLines(s).join(" ").replace(/\s+/g, " ").trim();
 }
@@ -147,43 +171,50 @@ export class AiClient {
         contents: [{ role: "user", parts: [{ text: prompt }] }] as any,
       });
 
-      const parts = (resp as any)?.response?.candidates?.[0]?.content?.parts ?? [];
-      const text = parts.map((p: any) => (p?.text ?? "").trim()).filter(Boolean).join("\n");
+      const parts =
+        (resp as any)?.response?.candidates?.[0]?.content?.parts ?? [];
+      const joinedText = parts
+        .map((p: any) => (p?.text ?? "").trim())
+        .filter(Boolean)
+        .join("\n");
 
-      // JSON不達時の強化: parts が複数なら候補化
-      if (Array.isArray(parts) && parts.length > 1) {
-        const fromParts = parts
-          .map((p: any) => (p?.text ?? "").trim())
-          .filter(Boolean);
-        if (fromParts.length >= 3) {
-          return { suggestions: fromParts.slice(0, 7) };
-        }
-      }
+      if (joinedText) {
+        try {
+          const parsed = JSON.parse(joinedText);
+          const arr = Array.isArray((parsed as any)?.suggestions)
+            ? ((parsed as any).suggestions as unknown[])
+            : [];
 
-      // 1) JSON 優先
-      try {
-        const parsed = JSON.parse(text);
-        if (Array.isArray((parsed as any)?.suggestions)) {
-          const arr = (parsed as any).suggestions as unknown[];
-          const normalized = arr
+          const normalizedFromJson = arr
             .map((x) => {
               if (typeof x === "string") return x.trim();
-              if (x && typeof x === "object" && typeof (x as any).text === "string") {
+              if (x && typeof (x as any).text === "string") {
                 return String((x as any).text).trim();
               }
               return "";
             })
             .filter(Boolean);
-          if (normalized.length) {
-            return { suggestions: normalized.slice(0, 7) };
+
+          const processed = postProcessSuggestions(normalizedFromJson);
+          if (processed.length) {
+            return { suggestions: processed };
           }
+        } catch {
+          // JSON でなければ fallback へ
         }
-      } catch {
-        /* JSON でなければ行分割へ */
       }
 
-      const suggestions = cleanLines(text).slice(0, 7);
-      return { suggestions };
+      let candidates: string[] = [];
+      if (Array.isArray(parts) && parts.length > 0) {
+        candidates = cleanLines(
+          parts.map((p: any) => (p?.text ?? "").trim()).join("\n")
+        );
+      } else {
+        candidates = cleanLines(joinedText);
+      }
+
+      const processed = postProcessSuggestions(candidates);
+      return { suggestions: processed };
     } catch (e: any) {
       console.error("[VertexAI] suggestIssues failed", {
         message: e?.message,
@@ -271,7 +302,80 @@ export class AiClient {
   }
 }
 
+type IssueSuggestCallableRequest = {
+  lang?: "ja" | "en";
+  projectId?: string;
+  problem?: {
+    title?: string;
+    phenomenon?: string;
+    cause?: string | null;
+    solution?: string | null;
+    goal?: string;
+  };
+  title?: string;
+  description?: string;
+};
+
+type IssueSuggestCallableResponse = {
+  suggestions: string[];
+};
+
 const ai = new AiClient();
+
+export const issueSuggest = onCall<
+  IssueSuggestCallableRequest,
+  IssueSuggestCallableResponse
+>({ region: "asia-northeast1" }, async (
+  request: CallableRequest<IssueSuggestCallableRequest>
+) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError("unauthenticated", "Authentication required");
+  }
+
+  const raw = request.data || {};
+
+  const lang: "ja" | "en" = raw.lang === "en" ? "en" : "ja";
+
+  const projectId = (raw.projectId || "").trim();
+
+  const fallbackTitle = (raw.title || "").trim();
+  const fallbackPhenomenon = (raw.description || "").trim() || undefined;
+
+  const prob = {
+    title: (raw.problem?.title || "").trim() || fallbackTitle,
+    phenomenon: raw.problem?.phenomenon ?? fallbackPhenomenon,
+    cause: raw.problem?.cause ?? undefined,
+    solution: raw.problem?.solution ?? undefined,
+    goal: raw.problem?.goal ?? undefined,
+  };
+
+  if (!prob.title && !prob.phenomenon && !prob.goal) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Problem definition is empty. Provide at least title or phenomenon/goal."
+    );
+  }
+
+  const input: IssueSuggestInput = {
+    lang,
+    projectId: projectId || "unknown",
+    problem: {
+      title: prob.title || "(untitled problem)",
+      phenomenon: prob.phenomenon,
+      cause: prob.cause,
+      solution: prob.solution,
+      goal: prob.goal,
+    },
+  };
+
+  try {
+    const out = await ai.suggestIssues(input);
+    return { suggestions: out.suggestions || [] };
+  } catch (e: any) {
+    console.error("[issueSuggest] error", e);
+    throw new HttpsError("internal", "Failed to generate suggestions");
+  }
+});
 
 // ====== Prompt builders ======
 function buildPrompt(input: IssueSuggestInput): string {
@@ -295,6 +399,9 @@ function buildPrompt(input: IssueSuggestInput): string {
       `- 具体的で一読可`,
       `- 番号・Markdown禁止`,
       `- 重複回避`,
+      `- 問題文や原因の言い換えではなく、具体的なアクションのみを書く`,
+      `- 「〜の確認」「〜の修正」「〜の自動化」「〜ルールの定義」など実行可能な粒度にする`,
+      `- 「品質向上に努める」等の抽象的な表現は禁止`,
       `- 5〜7行`,
     ].join("\n");
   }
@@ -308,6 +415,9 @@ function buildPrompt(input: IssueSuggestInput): string {
     `- Specific & scannable`,
     `- No numbering, no markdown`,
     `- Avoid duplicates`,
+    `- Only actionable tasks, not explanations or restating the problem`,
+    `- Use concrete verbs like "Fix", "Verify", "Automate", "Define"`,
+    `- Avoid vague phrases like "Improve overall quality"`,
     `- Provide 5 to 7 lines`,
   ].join("\n");
 }
