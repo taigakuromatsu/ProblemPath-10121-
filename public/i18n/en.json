@@ -327,16 +327,22 @@
   "recurrence": {
     "title": "Recurrence Task Function",
     "freqLabel": "Frequency",
+    "start": "Start date",
+    "end": "End date",
+    "repeat": "Repeat",
+    "everyDays": "Every {{n}} days",
+    "everyWeeks": "Every {{n}} weeks",
+    "everyMonths": "Every {{n}} months",
     "freq": {
       "daily": "Daily",
       "weekly": "Weekly",
       "monthly": "Monthly",
-      "start": "Start",
-      "end": "End",
+      "start": "Start date",
+      "end": "End date",
       "repeat": "Repeat",
-      "everyDays": "Every {{n}} day(s)",
-      "everyWeeks": "Every {{n}} week(s)",
-      "everyMonths": "Every {{n}} month(s)"
+      "everyDays": "Every {{n}} days",
+      "everyWeeks": "Every {{n}} weeks",
+      "everyMonths": "Every {{n}} months"
     },
     "interval": "Interval",
     "intervalSuffix": "apart",
