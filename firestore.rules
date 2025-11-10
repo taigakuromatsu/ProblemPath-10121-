@@ -53,15 +53,14 @@ service cloud.firestore {
       }
 
       match /invites/{inviteId} {
-          allow read: if
+        allow read: if
           // 1. プロジェクト管理者
           isAdmin(projectId)
           // 2. ログイン済み & メール一致（従来ロジック）
           || (isSignedIn()
               && request.auth.token.email != null
               && resource.data.email == request.auth.token.email)
-          // 3. まだ使用されていない招待は、トークン(=docId)を知っている人なら誰でも閲覧可
-          //    （token は十分長いランダム値なので事実上秘匿情報扱い）
+          // 3. 未使用招待はトークンを知っていれば閲覧可
           || (!('acceptedBy' in resource.data));
 
         allow create: if isAdmin(projectId)
@@ -116,15 +115,25 @@ service cloud.firestore {
       match /members/{uid} {
         allow read: if isMember(projectId);
 
-        // 本人が displayName / email を更新
+        // 本人が displayName / email / updatedAt を更新
+        // ★ updatedAt を許可するように修正
         allow update: if isSignedIn()
           && request.auth.uid == uid
-          && request.resource.data.diff(resource.data).changedKeys().hasOnly(['displayName','email'])
-          && (request.resource.data.displayName is string)
-          && request.resource.data.displayName.size() > 0
-          && request.resource.data.displayName.size() <= 120
-          && request.auth.token.email != null
-          && request.resource.data.email == request.auth.token.email;
+          && request.resource.data.diff(resource.data).changedKeys()
+               .hasOnly(['displayName','email','updatedAt'])
+          && (!('displayName' in request.resource.data)
+              || (
+                   (request.resource.data.displayName is string)
+                   && request.resource.data.displayName.size() > 0
+                   && request.resource.data.displayName.size() <= 120
+                 ))
+          && (!('email' in request.resource.data)
+              || (
+                   request.auth.token.email != null
+                   && request.resource.data.email == request.auth.token.email
+                 ))
+          && (!('updatedAt' in request.resource.data)
+              || (request.resource.data.updatedAt is timestamp));
 
         // admin 作成（自己作成 or admin招待）
         allow create: if isSignedIn()
@@ -331,36 +340,35 @@ service cloud.firestore {
 
     // ---- users コレクション（本人専用のサブコレクション制御）----
     match /users/{uid} {
+      // 直下ドキュメントは使用しない
       allow read, write: if false;
 
-        // 通知設定: users/{uid}/notifyPrefs/app
-        function isValidNotifyPrefs(d) {
-          return d.keys().hasOnly([
-            'instantComment',
-            'instantFile',
-            'dueReminderMode',
-            'dueReminderHour',
-          ])
-          && (!('instantComment' in d) || (d.instantComment is bool))
-          && (!('instantFile' in d)   || (d.instantFile is bool))
-          && (!('dueReminderMode' in d)
-              || (d.dueReminderMode in ['none', '1d', '7d', '1d7d']))
-          && (!('dueReminderHour' in d)
-              || (d.dueReminderHour is int
-                  && d.dueReminderHour >= 0
-                  && d.dueReminderHour <= 23));
-        }
+      // 通知設定: users/{uid}/notifyPrefs/app
+      function isValidNotifyPrefs(d) {
+        return d.keys().hasOnly([
+          'instantComment',
+          'instantFile',
+          'dueReminderMode',
+          'dueReminderHour',
+        ])
+        && (!('instantComment' in d) || (d.instantComment is bool))
+        && (!('instantFile' in d)   || (d.instantFile is bool))
+        && (!('dueReminderMode' in d)
+            || (d.dueReminderMode in ['none', '1d', '7d', '1d7d']))
+        && (!('dueReminderHour' in d)
+            || (d.dueReminderHour is int
+                && d.dueReminderHour >= 0
+                && d.dueReminderHour <= 23));
+      }
 
-        match /notifyPrefs/{docId} {
-          // 自分の分だけ読み書きOK
-          allow read: if isSignedIn() && request.auth.uid == uid;
-          allow create, update: if
-            isSignedIn()
-            && request.auth.uid == uid
-            && isValidNotifyPrefs(request.resource.data);
-          // 消す必要は特にない想定なので禁止（必要なら isSignedIn() && request.auth.uid == uid でOK）
-          allow delete: if false;
-        }
+      match /notifyPrefs/{docId} {
+        allow read: if isSignedIn() && request.auth.uid == uid;
+        allow create, update: if
+          isSignedIn()
+          && request.auth.uid == uid
+          && isValidNotifyPrefs(request.resource.data);
+        allow delete: if false;
+      }
 
       match /memberships/{projectId} {
         allow read: if isSignedIn() && request.auth.uid == uid;
@@ -398,7 +406,6 @@ service cloud.firestore {
     }
   }
 }
-
 
 
 

@@ -180,3 +180,63 @@
   opacity: 1;
 }
 
+/* ===== モバイル対応（max-width: 768px） ===== */
+@media (max-width: 768px) {
+  .analytics-page {
+    padding: clamp(12px, 4vw, 20px);
+    gap: clamp(16px, 4vw, 24px);
+  }
+
+  .page__header {
+    gap: clamp(8px, 2vw, 12px);
+  }
+
+  .page__title-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: clamp(8px, 2vw, 12px);
+  }
+
+  .analytics-page__refresh-button {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .analytics-page__metrics {
+    grid-template-columns: 1fr;
+    gap: clamp(12px, 3vw, 16px);
+  }
+
+  .personal-card__metrics {
+    grid-template-columns: 1fr;
+    gap: clamp(10px, 2.5vw, 14px);
+  }
+
+  .metric-card__value {
+    font-size: clamp(1.5rem, 6vw, 2rem);
+  }
+
+  .personal-metric__value {
+    font-size: clamp(1.3rem, 5vw, 1.6rem);
+  }
+
+  .status-row {
+    gap: clamp(6px, 1.5vw, 8px);
+    padding: clamp(6px, 1.5vw, 8px) 0;
+  }
+
+  .problem-progress {
+    gap: clamp(10px, 2.5vw, 12px);
+  }
+
+  .problem-progress__header {
+    gap: clamp(4px, 1vw, 6px);
+  }
+
+  .problem-progress__meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: clamp(4px, 1vw, 6px);
+  }
+}
+

@@ -74,6 +74,28 @@ import { arrayRemove } from 'firebase/firestore';
     .switcher__actions button { justify-content: flex-start; gap: var(--gap-1); border-radius: 999px; color: rgba(255, 255, 255, 0.92); border-color: rgba(255, 255, 255, 0.2) !important; }
     .switcher__actions button:hover { border-color: color-mix(in srgb, var(--accent-blue) 48%, rgba(255, 255, 255, 0.2)); }
     .switcher__actions .mat-mdc-button { font-size: calc(12px * var(--m)); height: calc(28px * var(--m)); min-height: calc(28px * var(--m)); }
+
+    /* モバイル対応 */
+    @media (max-width: 768px) {
+      .switcher__wrapper {
+        height: 100%;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .switcher__item {
+        min-height: 44px; /* タップしやすいサイズ */
+        padding: clamp(8px, 2vw, 12px) clamp(10px, 2.5vw, 14px);
+      }
+
+      .switcher__name {
+        font-size: clamp(13px, 3.5vw, 15px);
+      }
+
+      .switcher__role {
+        font-size: clamp(11px, 3vw, 13px);
+      }
+    }
   `],
   template: `
     <div class="switcher">

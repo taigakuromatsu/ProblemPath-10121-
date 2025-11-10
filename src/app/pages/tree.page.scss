@@ -886,6 +886,152 @@
   }
 }
 
+/* ===== モバイル対応（max-width: 768px） ===== */
+@media (max-width: 768px) {
+  .tree-page {
+    padding: clamp(12px, 4vw, 20px);
+    gap: clamp(16px, 4vw, 24px);
+  }
+
+  .kpi-grid {
+    grid-template-columns: 1fr;
+    gap: clamp(12px, 3vw, 20px);
+  }
+
+  .kpi-card {
+    padding: clamp(14px, 3vw, 18px);
+    min-height: auto;
+  }
+
+  .tree-layout {
+    flex-direction: column;
+    gap: clamp(12px, 3vw, 20px);
+  }
+
+  .tree-panel {
+    flex: 1 1 auto;
+    min-width: 100%;
+    width: 100%;
+  }
+
+  .detail-panel {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .node-card {
+    padding: clamp(12px, 3vw, 18px);
+  }
+
+  .node-card--issue {
+    margin-inline-start: clamp(12px, 3vw, 20px);
+  }
+
+  .node-card--task {
+    margin-inline-start: clamp(20px, 4vw, 32px);
+  }
+
+  .node-row {
+    flex-wrap: wrap;
+    gap: clamp(6px, 1.5vw, 10px);
+  }
+
+  .node-main {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  .node-meta {
+    min-width: auto;
+    max-width: 100%;
+    text-align: left;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+
+  .node-chips {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .node-row--task {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(8px, 1.5vw, 12px);
+  }
+
+  .node-row--task .node-main {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .node-row--task .node-meta {
+    grid-column: auto;
+    grid-row: auto;
+    width: 100%;
+  }
+
+  .node-row--task .node-chips {
+    grid-column: auto;
+    grid-row: auto;
+    width: 100%;
+  }
+
+  .detail-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: clamp(8px, 1.5vw, 12px);
+  }
+
+  .detail-tabs {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .detail-tab {
+    flex: 1 1 auto;
+  }
+
+  .comment-editor textarea {
+    width: 100%;
+    min-height: clamp(100px, 25vw, 140px);
+  }
+
+  .editor-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .attachment-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .attachment-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .upload-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filepick {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .filepick__btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 @media (max-width: 1023px) {
   .tree-page {
     --detail-width: 100%;

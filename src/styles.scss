@@ -358,6 +358,17 @@ html, body {
     width: 100vw !important;
     max-width: 100vw !important;
   }
+
+  .sidenav__wrapper {
+    height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: clamp(8px, 2vw, 12px);
+  }
+
+  .content-area {
+    padding: clamp(8px, 2vw, 12px);
+  }
 }
 
 /* コンテンツ内のすべての要素がはみ出さないように */

@@ -754,3 +754,129 @@
   .task-form__recurrence-field:nth-child(2) {
   margin-right: 8px; /* 2番目ブロック（ごと）の右側だけ広げる */
   }
+
+/* ===== モバイル対応（max-width: 768px） ===== */
+@media (max-width: 768px) {
+  .home-page {
+    padding: clamp(12px, 4vw, 20px);
+    gap: clamp(16px, 4vw, 24px);
+  }
+
+  .page-header {
+    grid-template-columns: 1fr;
+    gap: clamp(12px, 3vw, 20px);
+  }
+
+  .utility-grid {
+    grid-template-columns: 1fr;
+    gap: clamp(12px, 3vw, 20px);
+  }
+
+  .utility-grid .members-card {
+    min-width: auto;
+  }
+
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: clamp(8px, 1.5vw, 12px);
+  }
+
+  .section-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .inline-form {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .inline-form input,
+  .inline-form select,
+  .inline-form button {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .invite-form {
+    width: 100%;
+  }
+
+  .invite-result {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .invite-result input {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .members-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .members-table {
+    min-width: 600px;
+  }
+
+  .task-form__row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .task-form__row input,
+  .task-form__row select,
+  .task-form__row button {
+    width: 100%;
+  }
+
+  .task-form__row .date-field {
+    width: 100%;
+    min-width: auto;
+  }
+
+  .task-form__recurrence-fields {
+    flex-direction: column;
+    padding-left: 0;
+  }
+
+  .task-form__recurrence-field {
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .task-form__recurrence-hint {
+    min-width: auto;
+    max-width: 100%;
+    margin-left: 0;
+  }
+
+  .issue-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .task-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .dialog {
+    width: min(95vw, 600px);
+    padding: clamp(16px, 4vw, 20px);
+  }
+
+  .dialog-body {
+    max-height: calc(90vh - 120px);
+  }
+
+  .notif-settings-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+}

@@ -23,7 +23,7 @@
       "none": "No members yet"
     },
     "lead": "Select a Problem and edit its child Issues / Tasks.",
-    "needSignIn": "Sign-in is required to edit. Use the “Sign in” button above.",
+    "needSignIn": "Sign-in is required. Please use the “Sign in” button above.",
     "viewOnlyHint": "You can view via Tree / Board / Schedule.",
     "projectLost": "The selected project has been deleted or your access has been lost. Please select another project from the list or create a new one.",
     "viewerHint": "You are currently a Viewer in this project. Edit buttons are hidden.",

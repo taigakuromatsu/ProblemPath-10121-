@@ -353,6 +353,87 @@ mat-card header h2 { margin: 0; font-size: var(--fs-t); line-height: 1.3; font-w
   }
 }
 
+/* ===== モバイル対応（max-width: 768px） ===== */
+@media (max-width: 768px) {
+  .my-page {
+    padding: clamp(12px, 4vw, 20px);
+    gap: clamp(16px, 4vw, 24px);
+  }
+
+  .headline {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: clamp(12px, 3vw, 16px);
+  }
+
+  .view-toggle {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .view-toggle mat-button-toggle {
+    flex: 1 1 auto;
+  }
+
+  .header-grid {
+    grid-template-columns: 1fr;
+    gap: clamp(12px, 3vw, 16px);
+  }
+
+  .export-card,
+  .center-controls,
+  .right-filters {
+    width: 100%;
+    max-width: 100%;
+    min-width: auto;
+  }
+
+  .export-card .group-actions {
+    flex-direction: column;
+  }
+
+  .export-card .group-actions button {
+    width: 100%;
+  }
+
+  .center-controls .mat-button-toggle-group {
+    width: 100%;
+  }
+
+  .right-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-group.range .range-fields {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-group.range .date-field {
+    width: 100%;
+  }
+
+  .summary-grid {
+    grid-template-columns: 1fr;
+    gap: clamp(12px, 3vw, 16px);
+  }
+
+  .list-grid {
+    grid-template-columns: 1fr;
+    gap: clamp(16px, 4vw, 24px);
+  }
+
+  mat-card {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .section-body {
+    gap: clamp(10px, 2vw, 14px);
+  }
+}
+
 /* 期限ステータス共通カラー */
 .schedule-page,
 .my-page {
