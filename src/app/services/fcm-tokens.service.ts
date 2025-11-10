@@ -1,12 +1,19 @@
 // src/app/services/fcm-tokens.service.ts
 import { Injectable, inject } from '@angular/core';
 import { Firestore } from '@angular/fire/firestore';
-import { collection, doc, getDocs, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  serverTimestamp,
+} from 'firebase/firestore';
 import { getMessaging, getToken, isSupported } from 'firebase/messaging';
 import { TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from './auth.service';
-import { environment } from '../../environments/environment'; // ★ 正規import
+import { environment } from '../../environments/environment';
 
 function normLang(raw?: string): 'ja' | 'en' {
   const v = (raw || 'ja').toLowerCase();
@@ -14,6 +21,7 @@ function normLang(raw?: string): 'ja' | 'en' {
   if (v.startsWith('ja')) return 'ja';
   return 'ja';
 }
+
 function tokenDocId(token: string): string {
   return 'f-' + token.replace(/[^a-zA-Z0-9_-]/g, '');
 }
@@ -31,7 +39,7 @@ export class FcmTokensService {
 
   /**
    * 通知ON時：トークン取得→ users/{uid}/fcmTokens/{doc} に言語付きで upsert
-   *  - SW が登録済みなら serviceWorkerRegistration を渡す（より安定）
+   *  - MessagingService と同じ FCM SW ( /firebase-cloud-messaging-push-scope ) を使う
    */
   async ensureRegistered(): Promise<string | null> {
     try {
@@ -42,18 +50,24 @@ export class FcmTokensService {
 
       // VAPID
       const vapidKey =
+        (environment as any)?.messaging?.vapidKey ??
         (environment as any)?.firebase?.vapidKey ??
         (environment as any)?.vapidKey ??
         undefined;
       if (vapidKey) (opts as any).vapidKey = vapidKey;
 
-      // 可能ならSW登録を渡す（ローカルで未登録ならスキップ）
+      // ★ MessagingService と同じ SW registration を優先的に利用
       try {
-        const swReg = await (navigator as any)?.serviceWorker?.ready;
+        const swReg = await this.getFcmSwRegistration();
         if (swReg) (opts as any).serviceWorkerRegistration = swReg;
-      } catch { /* ignore */ }
+      } catch {
+        // 取れなくても致命的ではないので握りつぶす
+      }
 
-      const token = await getToken(messaging, Object.keys(opts).length ? opts : undefined);
+      const token = await getToken(
+        messaging,
+        Object.keys(opts).length ? opts : undefined,
+      );
       if (!token) return null;
 
       const uid = await firstValueFrom(this.auth.uid$);
@@ -66,13 +80,13 @@ export class FcmTokensService {
         ref,
         {
           token,
-          language: this.currentLang(), // ★ ②方式の肝
+          language: this.currentLang(),
           platform: (navigator as any).platform || 'web',
           userAgent: navigator.userAgent,
-          createdAt: serverTimestamp(),   // 初回は作成扱い、mergeなので上書きでもOK
-          lastSeenAt: serverTimestamp(), // 見かけたタイミングを更新
+          createdAt: serverTimestamp(),
+          lastSeenAt: serverTimestamp(),
         },
-        { merge: true }
+        { merge: true },
       );
 
       return token;
@@ -93,13 +107,27 @@ export class FcmTokensService {
     if (snap.empty) return;
 
     await Promise.all(
-      snap.docs.map(d =>
+      snap.docs.map((d) =>
         updateDoc(d.ref, {
           language: lang,
           lastSeenAt: serverTimestamp(),
-        })
-      )
+        }),
+      ),
     );
   }
+
+  /** MessagingService と共通化: FCM 用 SW registration を取得 */
+  private async getFcmSwRegistration(): Promise<ServiceWorkerRegistration | null> {
+    if (typeof navigator === 'undefined' || !navigator.serviceWorker) {
+      return null;
+    }
+
+    // main.ts で登録している scope と一致させる
+    const reg = await navigator.serviceWorker.getRegistration(
+      '/firebase-cloud-messaging-push-scope',
+    );
+    return reg || null;
+  }
 }
+
 

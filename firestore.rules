@@ -188,18 +188,31 @@ service cloud.firestore {
         allow delete: if isEditor(projectId);
       }
 
-      // ===== Problems / Issues / Tasks =====
+            // ===== Problems / Issues / Tasks =====
       match /problems/{problemId} {
         allow read: if isMember(projectId);
 
-        function validProblemDef(def) {
+        function validProblemDef(def, oldDef) {
           return def.keys().hasOnly(['phenomenon','cause','solution','goal','updatedAt','updatedBy'])
-            && (def.phenomenon is string) && (def.goal is string)
+            && (def.phenomenon is string)
             && def.phenomenon.matches('^[\\s\\S]{1,1000}$')
+            && (def.goal is string)
             && def.goal.matches('^[\\s\\S]{1,500}$')
             && (!('cause' in def) || (def.cause is string && def.cause.matches('^[\\s\\S]{0,1000}$')))
             && (!('solution' in def) || (def.solution is string && def.solution.matches('^[\\s\\S]{0,1000}$')))
-            && (!('updatedBy' in def) || def.updatedBy == request.auth.uid);
+            // updatedBy の扱い:
+            // - 作成時: 自分の uid であれば OK
+            // - 更新時: 変更されていなければ OK
+            //           変更するなら自分の uid であること
+            && (
+              !('updatedBy' in def)
+              || def.updatedBy == request.auth.uid
+              || (
+                   oldDef != null
+                   && 'updatedBy' in oldDef
+                   && def.updatedBy == oldDef.updatedBy
+                 )
+            );
         }
 
         function validAttachmentData(d) {
@@ -213,8 +226,13 @@ service cloud.firestore {
         }
 
         allow create, update: if isEditor(projectId)
-          && (!('problemDef' in request.resource.data)
-              || validProblemDef(request.resource.data.problemDef));
+          && (
+            !('problemDef' in request.resource.data)
+            || validProblemDef(
+                 request.resource.data.problemDef,
+                 ('problemDef' in resource.data) ? resource.data.problemDef : null
+               )
+          );
 
         allow delete: if isEditor(projectId);
 
@@ -279,19 +297,35 @@ service cloud.firestore {
             );
           }
 
-          // ===== Tasks（担当者は管理者のみ操作可）=====
-          match /tasks/{taskId} {
+                    match /tasks/{taskId} {
             allow read: if isMember(projectId);
 
+            // 非Admin Editor が新規作成する場合:
+            // assignees / assigneeLocks を送らない or 空ならOK
+            function canEditorCreateWithoutAssignments(d) {
+              return (
+                !('assignees' in d)
+                || (
+                  (d.assignees is list && d.assignees.size() == 0)
+                  || (d.assignees is map && d.assignees.keys().size() == 0)
+                )
+              ) && (
+                !('assigneeLocks' in d)
+                || (
+                  (d.assigneeLocks is list && d.assigneeLocks.size() == 0)
+                  || (d.assigneeLocks is map && d.assigneeLocks.keys().size() == 0)
+                )
+              );
+            }
+
             // 作成:
-            // Admin: assignees / assigneeLocks 含めて自由
-            // 非Admin Editor: assignees / assigneeLocks を含めない場合のみ
+            // Admin: assignees / assigneeLocks 自由
+            // 非Admin Editor: assignees / assigneeLocks を実質設定不可（空のみ）
             allow create: if
               isAdmin(projectId)
               || (
                 isEditor(projectId)
-                && !('assignees' in request.resource.data)
-                && !('assigneeLocks' in request.resource.data)
+                && canEditorCreateWithoutAssignments(request.resource.data)
               );
 
             // 更新:
@@ -307,7 +341,7 @@ service cloud.firestore {
                     .hasAny(['assignees', 'assigneeLocks'])
               );
 
-            // 削除: Editor 以上（従来どおり）
+            // 削除: Editor 以上
             allow delete: if isEditor(projectId);
 
             match /attachments/{attId} {
@@ -334,6 +368,7 @@ service cloud.firestore {
               );
             }
           }
+
         }
       }
     } // end /projects/{projectId}

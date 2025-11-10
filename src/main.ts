@@ -6,11 +6,13 @@ import { provideAnimations } from '@angular/platform-browser/animations';
 
 import { provideFirebaseApp, initializeApp, getApp } from '@angular/fire/app';
 import { provideFirestore, getFirestore } from '@angular/fire/firestore';
-import { provideAuth, getAuth } from '@angular/fire/auth';           // ← DI は AngularFire 経由でOK
+import { provideAuth, getAuth } from '@angular/fire/auth';
 import { provideStorage, getStorage } from '@angular/fire/storage';
-import { provideServiceWorker } from '@angular/service-worker';
+import { provideMessaging, getMessaging } from '@angular/fire/messaging';
+import { provideFunctions, getFunctions } from '@angular/fire/functions';
+
+import { provideServiceWorker, SwUpdate } from '@angular/service-worker';
 import { APP_INITIALIZER } from '@angular/core';
-import { SwUpdate } from '@angular/service-worker';
 
 import {
   provideAppCheck,
@@ -20,7 +22,6 @@ import {
 } from '@angular/fire/app-check';
 
 import {
-  // ★ Auth の“本体”初期化は firebase/auth から直接 import する
   initializeAuth,
   indexedDBLocalPersistence,
   browserLocalPersistence,
@@ -30,17 +31,21 @@ import {
 import { environment } from './environments/environment';
 
 // === ローカル用 App Check デバッグトークン ===
-const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+const isLocal =
+  location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 if (isLocal) {
-  (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = 'BB6EB0CC-9784-4B6B-B11C-82FED1FDCDA8';
+  (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN =
+    'BB6EB0CC-9784-4B6B-B11C-82FED1FDCDA8';
 }
 
 // === FCM SW（ngsw と別スコープ） ===
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker
-    .register('/firebase-messaging-sw.js', { scope: '/firebase-cloud-messaging-push-scope' })
-    .then(reg => console.log('[FCM SW] registered:', reg.scope))
-    .catch(err => console.error('[FCM SW] register error', err));
+    .register('/firebase-messaging-sw.js', {
+      scope: '/firebase-cloud-messaging-push-scope',
+    })
+    .then((reg) => console.log('[FCM SW] registered:', reg.scope))
+    .catch((err) => console.error('[FCM SW] register error', err));
 }
 
 bootstrapApplication(App, {
@@ -48,8 +53,12 @@ bootstrapApplication(App, {
   providers: [
     ...(appConfig.providers ?? []),
 
-    provideServiceWorker('ngsw-worker.js', { enabled: environment.production }),
+    // Angular Service Worker（PWA用）
+    provideServiceWorker('ngsw-worker.js', {
+      enabled: environment.production,
+    }),
 
+    // バージョンアップ検知
     {
       provide: APP_INITIALIZER,
       multi: true,
@@ -57,42 +66,61 @@ bootstrapApplication(App, {
       useFactory: (sw: SwUpdate) => () => {
         if (!sw.isEnabled) return;
         sw.versionUpdates.subscribe(() => {
-          if (confirm('新しいバージョンがあります。ページを更新しますか？')) location.reload();
+          if (
+            confirm(
+              '新しいバージョンがあります。ページを更新しますか？',
+            )
+          ) {
+            location.reload();
+          }
         });
       },
     },
 
+    // ===== Firebase App 本体 =====
     provideFirebaseApp(() => initializeApp(environment.firebase)),
 
-    // App Check（siteKey があれば）
+    // ===== App Check（siteKey があれば）=====
     ...(() => {
-      const siteKey = (environment as any).appCheck?.siteKey as string | undefined;
-      if (!siteKey) { console.warn('[AppCheck] siteKey 未設定。スキップ'); return []; }
+      const siteKey = (environment as any).appCheck?.siteKey as
+        | string
+        | undefined;
+      if (!siteKey) {
+        console.warn('[AppCheck] siteKey 未設定。スキップ');
+        return [];
+      }
       return [
         provideAppCheck(() => {
           const appCheck = initializeAppCheck(getApp(), {
             provider: new ReCaptchaEnterpriseProvider(siteKey),
             isTokenAutoRefreshEnabled: true,
           });
+          // 起動時に一度トークン取っておく（失敗しても無視）
           getAppCheckToken(appCheck, true).catch(() => {});
           return appCheck;
         }),
       ];
     })(),
 
+    // ===== Firebase 各サービス（全部このAppにぶら下げる）=====
+    provideMessaging(() => getMessaging()), // ← MessagingService がこれを inject
+    provideFunctions(() => getFunctions(getApp(), 'asia-northeast1')),
     provideFirestore(() => getFirestore(getApp())),
     provideStorage(() => getStorage(getApp())),
 
-    // ★★★ 重要：Auth を initializeAuth で明示初期化し、resolver を渡す ★★★
+    // Auth（既存ロジックそのまま）
     provideAuth(() => {
       const app = getApp();
       try {
         return initializeAuth(app, {
-          persistence: [indexedDBLocalPersistence, browserLocalPersistence],
-          popupRedirectResolver: browserPopupRedirectResolver, // ← これが無いと auth/argument-error
+          persistence: [
+            indexedDBLocalPersistence,
+            browserLocalPersistence,
+          ],
+          popupRedirectResolver: browserPopupRedirectResolver,
         });
       } catch {
-        // 既に初期化済みなら既存を返す
+        // すでに初期化済みならそれを使う
         return getAuth(app);
       }
     }),
@@ -101,14 +129,22 @@ bootstrapApplication(App, {
   ],
 }).catch(console.error);
 
-// DevTools からトークン確認用
+// DevTools 用ヘルパー
 import { getAuth as _getAuth } from '@angular/fire/auth';
 (globalThis as any).ppGetToken = async () => {
   const auth = _getAuth();
-  const u = auth.currentUser || await new Promise<any>(r => {
-    const off = auth.onAuthStateChanged(x => { off(); r(x); });
-  });
-  if (!u) { console.warn('No currentUser'); return null; }
+  const u =
+    auth.currentUser ||
+    (await new Promise<any>((r) => {
+      const off = auth.onAuthStateChanged((x) => {
+        off();
+        r(x);
+      });
+    }));
+  if (!u) {
+    console.warn('No currentUser');
+    return null;
+  }
   const t = await u.getIdToken(true);
   console.log('ID_TOKEN=', t);
   return t;

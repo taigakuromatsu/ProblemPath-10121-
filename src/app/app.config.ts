@@ -13,10 +13,6 @@ import { provideHttpClient, withFetch, HttpClient } from '@angular/common/http';
 import { TranslateModule, TranslateLoader } from '@ngx-translate/core';
 import { I18nService } from './i18n/i18n.service';
 
-import { provideStorage, getStorage } from '@angular/fire/storage';
-import { provideMessaging, getMessaging } from '@angular/fire/messaging';
-import { provideFunctions, getFunctions } from '@angular/fire/functions';
-
 // ---- loader ----
 class SimpleHttpTranslateLoader implements TranslateLoader {
   constructor(private http: HttpClient) {}
@@ -39,11 +35,6 @@ export const appConfig: ApplicationConfig = {
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes),
     provideHttpClient(withFetch()),
-
-    // ★ これらは「そのまま」並べる（importProvidersFromに入れない）
-    provideStorage(() => getStorage()),
-    provideMessaging(() => getMessaging()),
-    provideFunctions(() => getFunctions(undefined, 'asia-northeast1')),
 
     // ★ importProvidersFrom には NgModule だけを渡す
     importProvidersFrom(

@@ -26,7 +26,7 @@
     "needSignIn": "Sign-in is required. Please use the “Sign in” button above.",
     "viewOnlyHint": "You can view via Tree / Board / Schedule.",
     "projectLost": "The selected project has been deleted or your access has been lost. Please select another project from the list or create a new one.",
-    "viewerHint": "You are currently a Viewer in this project. Edit buttons are hidden.",
+    "viewerHint": "You are currently a Viewer in this project. Edit buttons are hidden or disabled.",
     "notifications": {
       "title": "Latest notifications",
       "lead": "Check the history of foreground notifications.",
@@ -140,7 +140,7 @@
   },
   "warn": {
     "offlineEditBlocked": "You are offline. Create/Update/Delete are disabled (inputs will be saved as drafts).",
-    "viewerOnly": "You are a Viewer in this project. Edit buttons are hidden.",
+    "viewerOnly": "You are a Viewer in this project. Edit buttons are hidden or disabled.",
     "offlineComments": "You are offline. You cannot post, edit, or delete comments.",
     "noEditPermission": "You don't have edit permission (Viewer).",
     "offlineNoEdit": "You are offline and cannot edit.",

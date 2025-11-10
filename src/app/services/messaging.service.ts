@@ -243,10 +243,16 @@ export class MessagingService {
     this.listenerStarted = true;
 
     try {
-      if (!this.messaging) return;
+      if (!this.messaging) {
+        console.warn('[FCM] Messaging injection not available.');
+        return;
+      }
 
       const isSupportedResult = await runInInjectionContext(this.injector, () => isSupported());
-      if (!isSupportedResult) return;
+      if (!isSupportedResult) {
+        console.warn('[FCM] Messaging is not supported in this environment.');
+        return;
+      }
 
       runInInjectionContext(this.injector, () => {
         onMessage(this.messaging!, (payload: any) => {
