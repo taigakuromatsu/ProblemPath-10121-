@@ -92,14 +92,22 @@
   justify-content: space-between;
   align-items: baseline;
   margin-bottom: 4px;
+  gap: 8px;
+  min-width: 0; /* ← 中身に折り返しを許可 */
 }
 
 .problem-progress__title {
   font-weight: 500;
   color: var(--fg);
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: normal;       /* 折り返し許可 */
+  word-break: break-word;    /* 日本語も英語もOK */
+  overflow-wrap: anywhere;   /* スペース無し英語も強制改行 */
 }
 
 .problem-progress__value {
+  flex: 0 0 auto;            /* パーセントは右端に固定＆潰さない */
   font-variant-numeric: tabular-nums;
   color: var(--fg);
 }

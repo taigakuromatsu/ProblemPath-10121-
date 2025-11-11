@@ -426,4 +426,25 @@ textarea {
   gap: .35rem;
 }
 
+/* 問題選択セレクトのパネル内のテキストを折り返す */
+.problem-select-panel {
+  /* 各 option 全体を複数行OKにする */
+  .mat-mdc-option {
+    height: auto;               /* デフォの固定高さ解除 */
+    align-items: flex-start;    /* 複数行時は上揃え */
+    white-space: normal;        /* 念のため */
+    line-height: 1.3;
+  }
+
+  /* 実際の文言が入る span を上書き */
+  .mat-mdc-option .mat-mdc-option-text,
+  .mat-mdc-option .mdc-list-item__primary-text {
+    display: block;
+    white-space: normal !important;  /* ← これで nowrap を必ず殺す */
+    word-break: break-word;
+    overflow-wrap: anywhere;         /* スペース無し英語/aaaa... も折る */
+  }
+}
+
+
 

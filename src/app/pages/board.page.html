@@ -10,10 +10,13 @@
         <mat-form-field appearance="outline" floatLabel="always">
           <mat-label>{{ 'label.problem' | translate }}</mat-label>
           <mat-select
+            class="problem-select__control"
+            [panelClass]="'problem-select-panel'"
             [(ngModel)]="selectedProblemId"
             (ngModelChange)="onSelectProblem($event)"
             [disabled]="(problems$ | async)?.length === 0"
           >
+
             <mat-option [value]="null">{{ 'common.selectPrompt' | translate }}</mat-option>
             <mat-option *ngFor="let p of (problems$ | async)" [value]="p.id">{{ p.title }}</mat-option>
           </mat-select>

@@ -66,8 +66,14 @@
 }
 
 .problem-select {
-  min-width: clamp(13.75rem, 24vw, 18rem);
+  /* もとの約1.5倍くらいの幅 */
+  min-width: clamp(20rem, 36vw, 27rem);
 }
+
+.problem-select .mat-mdc-form-field {
+  width: 100%;  /* コンテナ幅いっぱいに広げる */
+}
+
 
 .header-right {
   display: flex;
@@ -699,3 +705,61 @@
     font-size: 0.66rem;
   }
 }
+
+.column-title,
+.issue-title {
+  white-space: normal;          /* 行内固定を解除 */
+  overflow-wrap: anywhere;      /* 空白が無くても折り返し可（推奨） */
+  word-break: break-word;       /* 古いブラウザ向けフォールバック */
+}
+
+.problem-select {
+  min-width: clamp(13.75rem, 24vw, 18rem);
+  max-width: 360px; /* お好みで。なくてもOKだが横に伸びすぎ防止に推奨 */
+}
+
+/* ▼ 選択中ラベル（フォーム内）の折り返し設定 */
+:host ::ng-deep .problem-select__control .mat-mdc-select-trigger {
+  align-items: flex-start; /* 複数行になっても上揃え */
+}
+
+:host ::ng-deep .problem-select__control .mat-mdc-select-value {
+  display: block; /* 幅いっぱい使う */
+  min-width: 0;
+}
+
+:host ::ng-deep .problem-select__control .mat-mdc-select-value-text {
+  display: block;
+  white-space: normal !important;   /* Material の nowrap を上書き */
+  word-break: break-word;           /* 英語長語も途中で折る */
+  overflow-wrap: anywhere;          /* スペース無し連続文字も折る */
+  text-overflow: clip;              /* 省略せず表示 */
+  line-height: 1.3;
+}
+
+/* ▼ プルダウンパネル内の候補ラベル */
+:host ::ng-deep .problem-select-panel .mat-mdc-option .mdc-list-item__primary-text {
+  white-space: normal !important;   /* デフォルト nowrap を確実に潰す */
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+
+:host ::ng-deep .problem-select__control .mat-mdc-select-trigger {
+  align-items: flex-start;
+}
+
+:host ::ng-deep .problem-select__control .mat-mdc-select-value {
+  display: block;
+  min-width: 0;
+}
+
+:host ::ng-deep .problem-select__control .mat-mdc-select-value-text {
+  display: block;
+  white-space: normal !important;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  line-height: 1.3;
+}
+

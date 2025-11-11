@@ -52,7 +52,7 @@
 
 .task-title {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   gap: 8px;
   font-weight: 600;
   line-height: 1.4;
@@ -61,9 +61,14 @@
 
 .title-text {
   min-width: 0;
+  white-space: normal;          /* 折り返し許可 */
+  word-break: break-word;       /* 日本語・英語どちらもOK */
+  overflow-wrap: anywhere;      /* 空白なし英語も切れる */
+  display: -webkit-box;         /* 2行まで表示して省略 */
+  -webkit-box-orient: vertical;
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .priority {
