@@ -263,9 +263,9 @@
     "other": "その他（運用・ルール・体制など）"
   },
   "field": {
-    "titleRequired": "タイトル（必須）",
+    "titleRequired": "タイトル（必須・200文字以内）",
     "template": "テンプレート",
-    "titleReadonly": "タイトル（参照）",
+    "titleReadonly": "タイトル（参照・200文字以内）",
     "phenomenon": "現象",
     "cause": "原因",
     "solution": "解決策",
@@ -273,10 +273,10 @@
   },
   "problem": {
     "create": "問題を作成（詳細に記載することでAIの課題提案の精度が上がります）",
-    "phenomenonRequired": "現象（必須）",
-    "causeOptional": "原因（任意）",
-    "solutionOptional": "解決策（任意）",
-    "goalRequired": "目標（必須）"
+    "phenomenonRequired": "現象（必須・500文字以内）",
+    "causeOptional": "原因（任意・500文字以内）",
+    "solutionOptional": "解決策（任意・500文字以内）",
+    "goalRequired": "目標（必須・300文字以内）"
   },
   "problemDef": {
     "edit": "問題定義を編集",
@@ -289,7 +289,7 @@
   },
   "issue": {
     "listTitle": "課題",
-    "placeholderNewTitle": "新しい課題のタイトル",
+    "placeholderNewTitle": "課題（100文字以内）",
     "add": "課題を追加",
     "noneYet": "（課題はまだありません）",
     "loading": "課題を読み込み中…",
@@ -304,7 +304,7 @@
   },
 
   "task": {
-    "placeholderNewTitle": "新しいタスクのタイトル",
+    "placeholderNewTitle": "タスク（80文字以内）",
     "add": "タスクを追加",
     "dueShort": "（期日: {{ date }}）",
     "editDue": "期日変更",

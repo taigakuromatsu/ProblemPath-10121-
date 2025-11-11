@@ -274,9 +274,9 @@
     "other": "Other (operation, rules, system, etc.)"
   },
   "field": {
-    "titleRequired": "Title (required)",
+    "titleRequired": "Title (required, within 200 characters)",
     "template": "Template",
-    "titleReadonly": "Title (read-only)",
+    "titleReadonly": "Title (read-only, within 200 characters)",
     "phenomenon": "Phenomenon",
     "cause": "Cause",
     "solution": "Solution",
@@ -284,10 +284,10 @@
   },
   "problem": {
     "create": "Create Problem (writing more details here increases the accuracy of AI issue suggestions)",
-    "phenomenonRequired": "Phenomenon (required)",
-    "causeOptional": "Cause (optional)",
-    "solutionOptional": "Solution (optional)",
-    "goalRequired": "Goal (required)"
+    "phenomenonRequired": "Phenomenon (required, within 500 characters)",
+    "causeOptional": "Cause (optional, within 500 characters)",
+    "solutionOptional": "Solution (optional, within 500 characters)",
+    "goalRequired": "Goal (required, within 300 characters)"
   },
   "problemDef": {
     "edit": "Edit Problem Definition",
@@ -300,7 +300,7 @@
   },
   "issue": {
     "listTitle": "Issues",
-    "placeholderNewTitle": "New issue title",
+    "placeholderNewTitle": "Issue (within 100 characters)",
     "add": "Add Issue",
     "noneYet": "(No issues yet)",
     "loading": "Loading issues...",
@@ -314,7 +314,7 @@
     "add": "Link"
   },
   "task": {
-    "placeholderNewTitle": "New task title",
+    "placeholderNewTitle": "Task (within 80 characters)",
     "add": "Add Task",
     "dueShort": "(due date: {{ date }})",
     "editDue": "Due change",

@@ -618,10 +618,18 @@ endModel: Record<string, Date | null> = {};
   async renameSelected() {
     if (!this.selectedProblemId) return;
     if (!(await this.requireOnline())) return;
-    const t = prompt(this.i18n.instant('tree.prompt.renameProblem'));
-    if (!t?.trim()) return;
-    this.withPid(pid => this.problems.update(pid, this.selectedProblemId!, { title: t.trim() }));
+    const input = prompt(this.i18n.instant('tree.prompt.renameProblem'));
+    if (!input?.trim()) return;
+  
+    const t = input.trim();
+    if (t.length > 200) {
+      alert(this.t('validation.max.problemTitle', '問題タイトルは200文字以内で入力してください'));
+      return;
+    }
+  
+    this.withPid(pid => this.problems.update(pid, this.selectedProblemId!, { title: t }));
   }
+
   async removeSelected() {
     if (!this.selectedProblemId) return;
     if (!(await this.requireOnline())) return;
@@ -645,18 +653,35 @@ endModel: Record<string, Date | null> = {};
     if (!(await this.requireOnline())) return;
     const t = this.issueTitle.trim();
     if (!t) return;
+  
+    if (t.length > 100) {
+      alert(this.t('validation.max.issueTitle', '課題タイトルは100文字以内で入力してください'));
+      return;
+    }
+  
     this.withPid(pid => this.issues.create(pid, problemId, { title: t }).then(() => {
       this.issueTitle = '';
       const key = this.draftKeyIssueTitle(this.selectedProblemId);
       if (key) this.drafts.clear(key);
     }));
   }
+  
+
   async renameIssue(problemId: string, i: Issue) {
     if (!(await this.requireOnline())) return;
-    const t = prompt(this.i18n.instant('tree.prompt.renameIssue'), i.title);
-    if (!t?.trim()) return;
-    this.withPid(pid => this.issues.update(pid, problemId, i.id!, { title: t.trim() }));
+    const input = prompt(this.i18n.instant('tree.prompt.renameIssue'), i.title);
+    if (!input?.trim()) return;
+  
+    const t = input.trim();
+    if (t.length > 100) {
+      alert(this.t('validation.max.issueTitle', '課題タイトルは100文字以内で入力してください'));
+      return;
+    }
+  
+    this.withPid(pid => this.issues.update(pid, problemId, i.id!, { title: t }));
   }
+  
+
   async removeIssue(problemId: string, i: Issue) {
     if (!(await this.requireOnline())) return;
     if (!confirm(this.i18n.instant('tree.confirm.deleteIssue', { name: i.title }))) return;
@@ -684,6 +709,11 @@ endModel: Record<string, Date | null> = {};
     if (!(await this.requireOnline())) return;
     const t = (this.taskTitle[issueId] ?? '').trim();
     if (!t) return;
+  
+    if (t.length > 80) {
+      alert(this.t('validation.max.taskTitle', 'タスクタイトルは80文字以内で入力してください'));
+      return;
+    }
     const dueRaw = (this.taskDueDate[issueId] ?? '').trim();
     if (dueRaw && !/^\d{4}-\d{2}-\d{2}$/.test(dueRaw)) {
       alert(this.t('recurrence.invalidDate', '日付は YYYY-MM-DD 形式で入力してください'));
@@ -746,9 +776,15 @@ endModel: Record<string, Date | null> = {};
 
   async renameTask(problemId: string, issueId: string, task: Task) {
     if (!(await this.requireOnline())) return;
-    const t = prompt(this.i18n.instant('tree.prompt.renameTask'), task.title);
-    if (!t?.trim()) return;
-    this.withPid(pid => this.tasks.update(pid, problemId, issueId, task.id!, { title: t.trim() }));
+    const input = prompt(this.i18n.instant('tree.prompt.renameTask'), task.title);
+    if (!input?.trim()) return;
+  
+    const t = input.trim();
+    if (t.length > 80) {
+      alert(this.t('validation.max.taskTitle', 'タスクタイトルは80文字以内で入力してください'));
+      return;
+    }
+    this.withPid(pid => this.tasks.update(pid, problemId, issueId, task.id!, { title: t }));
   }
 
   async removeTask(problemId: string, issueId: string, t: Task) {
@@ -790,9 +826,23 @@ endModel: Record<string, Date | null> = {};
     const current = (t.tags ?? []).join(', ');
     const input = prompt(this.i18n.instant('task.promptTags'), current ?? '');
     if (input == null) return;
-    const tags = input.split(/[, \s]+/).map(s => s.replace(/^#/, '').trim()).filter(Boolean);
+  
+    const tags = input
+      .split(/[, \s]+/)
+      .map(s => s.replace(/^#/, '').trim())
+      .filter(Boolean);
+  
+    // ★ タグ名 1〜15文字制限
+    for (const tag of tags) {
+      if (tag.length > 15) {
+        alert(this.t('validation.max.tag', 'タグは1つ15文字以内で入力してください'));
+        return;
+      }
+    }
+  
     this.withPid(pid => this.tasks.update(pid, problemId, issueId, t.id!, { tags }));
   }
+  
 
   // 繰り返し停止（テンプレ削除）
   async stopRecurrence(problemId: string, issueId: string, task: Task) {
@@ -952,11 +1002,12 @@ endModel: Record<string, Date | null> = {};
     if (!p.phenomenon.trim()) errs.push(this.i18n.instant('validation.phenomenonRequired'));
     if (!p.goal.trim()) errs.push(this.i18n.instant('validation.goalRequired'));
     const over = (s: string, n: number) => s && s.length > n;
-    if (over(p.title, 200)) errs.push(this.i18n.instant('validation.max.title', { n: 200 }));
-    if (over(p.phenomenon, 1000)) errs.push(this.i18n.instant('validation.max.phenomenon', { n: 1000 }));
-    if (over(p.cause, 1000)) errs.push(this.i18n.instant('validation.max.cause', { n: 1000 }));
-    if (over(p.solution, 1000)) errs.push(this.i18n.instant('validation.max.solution', { n: 1000 }));
-    if (over(p.goal, 500)) errs.push(this.i18n.instant('validation.max.goal', { n: 500 }));
+    if (over(p.title, 200)) errs.push(this.t('validation.max.problemTitle', '問題タイトルは200文字以内で入力してください'));
+    if (over(p.phenomenon, 500)) errs.push(this.t('validation.max.phenomenon', '現象は500文字以内で入力してください'));
+    if (over(p.cause, 500)) errs.push(this.t('validation.max.cause', '原因は500文字以内で入力してください'));
+    if (over(p.solution, 500)) errs.push(this.t('validation.max.solution', '解決策は500文字以内で入力してください'));
+    if (over(p.goal, 300)) errs.push(this.t('validation.max.goal', '目標は300文字以内で入力してください'));
+  
     if (errs.length) { alert(errs.join('\n')); return; }
 
     const pid = this.currentProject.getSync();
@@ -1034,10 +1085,11 @@ endModel: Record<string, Date | null> = {};
     if (!d.phenomenon.trim()) errs.push(this.i18n.instant('validation.phenomenonRequired'));
     if (!d.goal.trim()) errs.push(this.i18n.instant('validation.goalRequired'));
     const over = (s: string, n: number) => s && s.length > n;
-    if (over(d.phenomenon, 1000)) errs.push(this.i18n.instant('validation.max.phenomenon', { n: 1000 }));
-    if (over(d.cause, 1000)) errs.push(this.i18n.instant('validation.max.cause', { n: 1000 }));
-    if (over(d.solution, 1000)) errs.push(this.i18n.instant('validation.max.solution', { n: 1000 }));
-    if (over(d.goal, 500)) errs.push(this.i18n.instant('validation.max.goal', { n: 500 }));
+    if (over(d.phenomenon, 500)) errs.push(this.t('validation.max.phenomenon', '現象は500文字以内で入力してください'));
+    if (over(d.cause, 500)) errs.push(this.t('validation.max.cause', '原因は500文字以内で入力してください'));
+    if (over(d.solution, 500)) errs.push(this.t('validation.max.solution', '解決策は500文字以内で入力してください'));
+    if (over(d.goal, 300)) errs.push(this.t('validation.max.goal', '目標は300文字以内で入力してください'));
+  
     if (errs.length) { alert(errs.join('\n')); return; }
 
     const uid = await firstValueFrom(this.auth.uid$);
