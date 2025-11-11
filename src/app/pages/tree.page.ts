@@ -64,6 +64,14 @@ function dlog(...args: any[]) {
 })
 export class TreePage {
 
+    // ==== 入力長制限（Home と共通ポリシー）====
+    private readonly MAX_TITLE_PROBLEM = 200;
+    private readonly MAX_TITLE_ISSUE = 100;
+    private readonly MAX_TITLE_TASK = 80;
+    private readonly MAX_COMMENT_BODY = 1000;
+
+    readonly maxCommentBody = this.MAX_COMMENT_BODY;
+
   columns: BoardColumn[] = DEFAULT_BOARD_COLUMNS;
 
 
@@ -265,10 +273,24 @@ rememberPickedNames(ev: Event) {
   // ===== 既存メソッド（ガード追加） =====
   async renameProblemNode(node: { id: string; name: string }) {
     if (!(await this.requireCanEdit())) return;
-    const t = prompt(this.tr.instant('tree.prompt.renameProblem'), node.name);
-    if (!t?.trim()) return;
-    this.withPid(pid => this.problems.update(pid, node.id, { title: t.trim() }));
+    const input = prompt(this.tr.instant('tree.prompt.renameProblem'), node.name);
+    if (input === null) return; // キャンセル
+    const t = input.trim();
+    if (!t) return;
+
+    if (t.length > this.MAX_TITLE_PROBLEM) {
+      this.snack.open(
+        this.tr.instant('validation.max.problemTitle', { n: this.MAX_TITLE_PROBLEM })
+        || `問題タイトルは${this.MAX_TITLE_PROBLEM}文字以内で入力してください`,
+        'OK',
+        { duration: 3000 }
+      );
+      return;
+    }
+
+    this.withPid(pid => this.problems.update(pid, node.id, { title: t }));
   }
+
   async removeProblemNode(node: { id: string; name: string }) {
     if (!(await this.requireCanEdit())) return;
     if (!confirm(this.tr.instant('tree.confirm.deleteProblem', { name: node.name }))) return;
@@ -276,13 +298,28 @@ rememberPickedNames(ev: Event) {
       await this.softDeleteWithUndo('problem', { projectId: pid, problemId: node.id }, '(Problem)');
     });
   }
+
   async renameIssueNode(node: { id: string; name: string; parentId?: string }) {
     if (!node.parentId) return;
     if (!(await this.requireCanEdit())) return;
-    const t = prompt(this.tr.instant('tree.prompt.renameIssue'), node.name);
-    if (!t?.trim()) return;
-    this.withPid(pid => this.issues.update(pid, node.parentId!, node.id, { title: t.trim() }));
+    const input = prompt(this.tr.instant('tree.prompt.renameIssue'), node.name);
+    if (input === null) return;
+    const t = input.trim();
+    if (!t) return;
+
+    if (t.length > this.MAX_TITLE_ISSUE) {
+      this.snack.open(
+        this.tr.instant('validation.max.issueTitle', { n: this.MAX_TITLE_ISSUE })
+        || `課題タイトルは${this.MAX_TITLE_ISSUE}文字以内で入力してください`,
+        'OK',
+        { duration: 3000 }
+      );
+      return;
+    }
+
+    this.withPid(pid => this.issues.update(pid, node.parentId!, node.id, { title: t }));
   }
+
   async removeIssueNode(node: { id: string; name: string; parentId?: string }) {
     if (!node.parentId) return;
     if (!(await this.requireCanEdit())) return;
@@ -291,13 +328,28 @@ rememberPickedNames(ev: Event) {
       await this.softDeleteWithUndo('issue', { projectId: pid, problemId: node.parentId!, issueId: node.id }, node.name);
     });
   }
+
   async renameTaskNode(node: { id: string; name: string; parentProblemId?: string; parentIssueId?: string }) {
     if (!node.parentProblemId || !node.parentIssueId) return;
     if (!(await this.requireCanEdit())) return;
-    const t = prompt(this.tr.instant('tree.prompt.renameTask'), node.name);
-    if (!t?.trim()) return;
-    this.withPid(pid => this.tasks.update(pid, node.parentProblemId!, node.parentIssueId!, node.id, { title: t.trim() }));
+    const input = prompt(this.tr.instant('tree.prompt.renameTask'), node.name);
+    if (input === null) return;
+    const t = input.trim();
+    if (!t) return;
+
+    if (t.length > this.MAX_TITLE_TASK) {
+      this.snack.open(
+        this.tr.instant('validation.max.taskTitle', { n: this.MAX_TITLE_TASK })
+        || `タスクタイトルは${this.MAX_TITLE_TASK}文字以内で入力してください`,
+        'OK',
+        { duration: 3000 }
+      );
+      return;
+    }
+
+    this.withPid(pid => this.tasks.update(pid, node.parentProblemId!, node.parentIssueId!, node.id, { title: t }));
   }
+
   async removeTaskNode(node: { id: string; name: string; parentProblemId?: string; parentIssueId?: string }) {
     if (!node.parentProblemId || !node.parentIssueId || this.isBusyId(node.id)) return;
     if (!(await this.requireCanEdit())) return;
@@ -864,12 +916,32 @@ rememberPickedNames(ev: Event) {
     return `comment:${pid}:t:${node.parentProblemId}:${node.parentIssueId}:${node.id}`;
   }
 
+  private commentWarnedOverMax = false;
+
   onCommentBodyChange(val: string) {
-    // 600ms デバウンスで localStorage に保存
+    if (val && val.length > this.MAX_COMMENT_BODY) {
+      // 超えた分は即トリムして newBody に反映
+      this.newBody = val.slice(0, this.MAX_COMMENT_BODY);
+
+      if (!this.commentWarnedOverMax) {
+        this.snack.open(
+          this.tr.instant('validation.max.comment', { n: this.MAX_COMMENT_BODY })
+          || `コメントは${this.MAX_COMMENT_BODY}文字以内で入力してください`,
+          'OK',
+          { duration: 3000 }
+        );
+        this.commentWarnedOverMax = true;
+        setTimeout(() => { this.commentWarnedOverMax = false; }, 3000);
+      }
+    } else {
+      this.newBody = val;
+    }
+
+    // ここから下は既存通り：ドラフト保存
     if (this.commentSaveTimer) clearTimeout(this.commentSaveTimer);
     this.commentSaveTimer = setTimeout(() => {
       const key = this.draftKeyFor(this.selectedNode);
-      if (key) this.drafts.set(key, (val ?? '').toString());
+      if (key) this.drafts.set(key, (this.newBody ?? '').toString());
     }, 600);
   }
 
@@ -931,24 +1003,64 @@ rememberPickedNames(ev: Event) {
     if (!(await this.requireCanEdit())) return;
     if (this.commentSaveTimer) { clearTimeout(this.commentSaveTimer); this.commentSaveTimer = null; }
     if (!this.selectedNode || !this.newBody.trim()) return;
-    const t = await this.toTarget(this.selectedNode); if (!t) return;
 
+    if (this.newBody.length > this.MAX_COMMENT_BODY) {
+      this.snack.open(
+        this.tr.instant('validation.max.comment', { n: this.MAX_COMMENT_BODY })
+        || `コメントは${this.MAX_COMMENT_BODY}文字以内で入力してください`,
+        'OK',
+        { duration: 3000 }
+      );
+      return;
+    }
+
+    const t = await this.toTarget(this.selectedNode); if (!t) return;
     const uid = await firstValueFrom(this.auth.uid$);
     const name = await firstValueFrom(this.auth.displayName$);
     await this.comments.create(t, this.newBody.trim(), uid!, name || undefined);
     const key = this.draftKeyFor(this.selectedNode);
-    if (key) this.drafts.clear(key);    // ← クリア
+    if (key) this.drafts.clear(key);
     this.newBody = '';
   }
 
-  async saveEdit(){
+
+  private tt(key: string, fallback: string): string {
+    const v = this.tr.instant(key);
+    return v && v !== key ? v : fallback;
+  }
+  
+  async saveEdit() {
     if (!(await this.requireOnline())) return;
-    if (this.commentSaveTimer) { clearTimeout(this.commentSaveTimer); this.commentSaveTimer = null; }
-    const node = this.selectedNode; if (!node || !this.editingId || !this.newBody.trim()) return;
-    const t = await this.toTarget(node); if (!t) return;
-    await this.comments.update(t, this.editingId, this.newBody.trim());
+    if (this.commentSaveTimer) {
+      clearTimeout(this.commentSaveTimer);
+      this.commentSaveTimer = null;
+    }
+  
+    const node = this.selectedNode;
+    if (!node || !this.editingId) return;
+  
+    const body = (this.newBody ?? '').trim();
+    if (!body) return;
+  
+    // ★ ここで上限チェック（超えたら更新せずメッセージだけ出す）
+    if (body.length > this.MAX_COMMENT_BODY) {
+      const msg = this.tt(
+        'validation.max.comment',
+        `コメントは${this.MAX_COMMENT_BODY}文字以内で入力してください`
+      );
+      this.snack.open(msg, 'OK', { duration: 3000 });
+      // editingId / newBody は触らない → ユーザーがそのまま削って再トライできる
+      return;
+    }
+  
+    const t = await this.toTarget(node);
+    if (!t) return;
+  
+    await this.comments.update(t, this.editingId, body);
+  
     const key = this.draftKeyFor(node);
-    if (key) this.drafts.clear(key);    // ← クリア
+    if (key) this.drafts.clear(key);
+  
     this.editingId = null;
     this.newBody = '';
   }

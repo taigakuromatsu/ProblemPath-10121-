@@ -56,6 +56,10 @@ type MemberOption = { uid: string; label: string };
 export class BoardPage {
   columns: BoardColumn[] = DEFAULT_BOARD_COLUMNS;
 
+    // 列タイトル長制限
+    private readonly MIN_COLUMN_TITLE = 1;
+    private readonly MAX_COLUMN_TITLE = 20;
+
   /** 繰り返しテンプレートでない実体タスクだけ通す */
   private isRealTask(t: Task | null | undefined): t is Task {
     return !!t && (t as any).recurrenceTemplate !== true;
@@ -147,8 +151,20 @@ export class BoardPage {
     const result = await firstValueFrom(ref.afterClosed());
     if (!result) return;
 
+    const trimmedTitle = (result.title ?? '').trim();
+
+    // ★ 1〜20文字チェック（ダイアログ改変対策 & 明示メッセージ）
+    if (!this.isValidColumnTitle(trimmedTitle)) {
+      const msg = this.tt(
+        'validation.boardColumn.titleLength',
+        `列タイトルは${this.MIN_COLUMN_TITLE}〜${this.MAX_COLUMN_TITLE}文字で入力してください`
+      );
+      this.snack.open(msg, this.tr.instant('common.ok'), { duration: 3000 });
+      return;
+    }
+
     const patch: BoardColumnEditDialogResult = {
-      title: result.title,
+      title: trimmedTitle,
       categoryHint: result.categoryHint,
       progressHint: Math.min(100, Math.max(0, Number(result.progressHint ?? 0))),
     };
@@ -183,6 +199,18 @@ export class BoardPage {
     const result = await firstValueFrom(ref.afterClosed());
     if (!result) return;
 
+    const trimmedTitle = (result.title ?? '').trim();
+
+    // ★ 1〜20文字チェック
+    if (!this.isValidColumnTitle(trimmedTitle)) {
+      const msg = this.tt(
+        'validation.boardColumn.titleLength',
+        `列タイトルは${this.MIN_COLUMN_TITLE}〜${this.MAX_COLUMN_TITLE}文字で入力してください`
+      );
+      this.snack.open(msg, this.tr.instant('common.ok'), { duration: 3000 });
+      return;
+    }
+
     const nextOrder = this.nextColumnOrder();
 
     this.withPid(async (pid) => {
@@ -190,7 +218,7 @@ export class BoardPage {
         const columnId = `col_${Date.now()}`;
         await this.boardColumns.createColumn(pid, {
           columnId,
-          title: result.title,
+          title: trimmedTitle,
           order: nextOrder,
           categoryHint: result.categoryHint,
           progressHint: Math.min(100, Math.max(0, Number(result.progressHint ?? 0))),
@@ -202,6 +230,7 @@ export class BoardPage {
       }
     });
   }
+
 
   async onDeleteColumn(column: BoardColumn) {
     if (!(await this.requireCanEdit())) return;
@@ -783,6 +812,17 @@ export class BoardPage {
     return locks.includes(uid);
   }
 
+
+  private isValidColumnTitle(raw: string | null | undefined): boolean {
+    const t = (raw ?? '').trim();
+    const len = t.length;
+    return len >= this.MIN_COLUMN_TITLE && len <= this.MAX_COLUMN_TITLE;
+  }
+
+  private tt(key: string, fallback: string): string {
+    const v = this.tr.instant(key);
+    return v && v !== key ? v : fallback;
+  }
 }
 
 

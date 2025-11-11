@@ -124,11 +124,19 @@
     "phenomenonRequired": "Phenomenon is required",
     "goalRequired": "Goal is required",
     "max": {
-      "title": "Title must be at most {{n}} characters",
-      "phenomenon": "Phenomenon must be at most {{n}} characters",
-      "cause": "Cause must be at most {{n}} characters",
-      "solution": "Solution must be at most {{n}} characters",
-      "goal": "Goal must be at most {{n}} characters"
+      "title": "Title must be at most 200 characters",
+      "phenomenon": "Phenomenon must be at most 500 characters",
+      "cause": "Cause must be at most 500 characters",
+      "solution": "Solution must be at most 500 characters",
+      "goal": "Goal must be at most 300 characters",
+      "comment": "Comment must be at most 1000 characters",
+      "issueTitle": "Issue title must be at most 100 characters",
+      "taskTitle": "Task title must be at most 80 characters",
+      "problemTitle": "Problem title must be at most 200 characters",
+      "tag": "Tag must be at most 15 characters"
+    },
+    "boardColumn": {
+      "titleLength": "Column title must be between 1 and 20 characters"
     }
   },
   "auth": {
@@ -491,6 +499,9 @@
         "not_started": "Treat as Not started",
         "in_progress": "Treat as In progress",
         "done": "Treat as Done"
+      },
+      "hint": {
+        "titleLength": "Column title must be between 1 and 20 characters"
       }
     }
   },

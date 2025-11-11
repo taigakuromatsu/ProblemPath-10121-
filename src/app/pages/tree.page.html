@@ -219,7 +219,14 @@
                 <div class="alert-inline" *ngIf="!(isOnline$ | async)">{{ 'warn.offlineComments' | translate }}</div>
 
                 <div class="comment-editor">
-                  <textarea [(ngModel)]="newBody" (ngModelChange)="onCommentBodyChange($event)" [disabled]="!(canEdit$ | async)" rows="3" [placeholder]="'comment.placeholder' | translate"></textarea>
+                  <textarea
+                    [(ngModel)]="newBody"
+                    (ngModelChange)="onCommentBodyChange($event)"
+                    [disabled]="!(canEdit$ | async)"
+                    rows="3"
+                    [placeholder]="'comment.placeholder' | translate"
+                    [attr.maxlength]="editingId ? null : maxCommentBody"
+                  ></textarea>
                   <div class="editor-actions">
                     <button mat-raised-button color="primary" type="button" (click)="editingId ? saveEdit() : addComment()" [disabled]="!newBody.trim() || !(canEdit$ | async)">
                       {{ editingId ? ('comment.update' | translate) : ('comment.post' | translate) }}

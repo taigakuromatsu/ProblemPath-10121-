@@ -41,9 +41,12 @@ export interface BoardColumnEditDialogData {
             name="title"
             [(ngModel)]="title"
             required
-            maxlength="120"
+            [attr.maxlength]="MAX_TITLE_LEN"
             [attr.aria-label]="'board.columnEdit.field.title' | translate"
           />
+          <mat-hint>
+            {{ 'board.columnEdit.hint.titleLength' | translate:{ min: MIN_TITLE_LEN, max: MAX_TITLE_LEN } }}
+          </mat-hint>
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="field">
@@ -105,6 +108,9 @@ export interface BoardColumnEditDialogData {
   `,
 })
 export class BoardColumnEditDialogComponent {
+  readonly MIN_TITLE_LEN = 1;
+  readonly MAX_TITLE_LEN = 20;
+
   title = '';
   category: BoardColumnCategoryHint = 'not_started';
   progress = 0;
@@ -120,7 +126,12 @@ export class BoardColumnEditDialogComponent {
 
   canSave(): boolean {
     const trimmed = (this.title ?? '').trim();
-    return !!trimmed && ['not_started', 'in_progress', 'done'].includes(this.category);
+    const len = trimmed.length;
+    return (
+      len >= this.MIN_TITLE_LEN &&
+      len <= this.MAX_TITLE_LEN &&
+      ['not_started', 'in_progress', 'done'].includes(this.category)
+    );
   }
 
   onCancel() {
