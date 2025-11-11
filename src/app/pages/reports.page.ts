@@ -77,6 +77,39 @@ interface DraftReport {
   ],
 })
 export class ReportsPage {
+
+  readonly TITLE_MIN = 1;
+  readonly TITLE_MAX = 100;
+  readonly BODY_MIN = 1;
+  readonly BODY_MAX = 4000;
+
+  private clampText(value: string | null | undefined, max: number): string {
+    const s = (value ?? '').toString();
+    return s.length > max ? s.slice(0, max) : s;
+  }
+
+  private isValidTitle(title: string): boolean {
+    const len = (title ?? '').trim().length;
+    return len >= this.TITLE_MIN && len <= this.TITLE_MAX;
+  }
+
+  private isValidBody(body: string): boolean {
+    const len = (body ?? '').trim().length;
+    return len >= this.BODY_MIN && len <= this.BODY_MAX;
+  }
+
+  canSaveDraft(): boolean {
+    return this.isValidTitle(this.draftReport.title) &&
+           this.isValidBody(this.draftReport.body);
+  }
+
+  /** i18n フォールバック付きメッセージ取得 */
+  private tt(key: string, fallback: string): string {
+    const v = this.translate.instant(key);
+    return v && v !== key ? v : fallback;
+  }
+
+
   private readonly currentProject = inject(CurrentProjectService);
   private readonly firestore = inject(Firestore);
   private readonly functions = inject(Functions);
@@ -157,20 +190,22 @@ export class ReportsPage {
       >(this.functions, 'generateProgressReportDraft');
 
       callable({ projectId, scope, period, lang: normalizedLang })
-        .then(result => {
-          const data = result.data;
+      .then(result => {
+        const data = result.data;
 
-          // ★ ここがポイント：AI下書きを手動フォームへ流し込む
-          this.manualFormOpen = true;
-          this.draftReport = { title: data.title, body: data.body };
-          this.pendingMetrics = data.metrics ?? {
-            completedTasks: 0,
-            avgProgressPercent: 0,
-            notes: this.buildSummaryFromBody(data.body),
-          };
-          this.editingReportId = null;
-          // プレビューはそのまま（必要なら this.activeReport = null; にしてもOK）
-        })
+        const clampedTitle = this.clampText(data.title, this.TITLE_MAX);
+        const clampedBody = this.clampText(data.body, this.BODY_MAX);
+
+        this.manualFormOpen = true;
+        this.draftReport = { title: clampedTitle, body: clampedBody };
+        this.pendingMetrics = data.metrics ?? {
+          completedTasks: 0,
+          avgProgressPercent: 0,
+          notes: this.buildSummaryFromBody(clampedBody),
+        };
+        this.editingReportId = null;
+      })
+
         .catch(error => console.warn('Failed to generate report draft', error));
     });
   }
@@ -210,12 +245,16 @@ export class ReportsPage {
   /** 一覧→プレビューで自分のレポートなら編集開始（フォームに読み込み） */
   editReport(report: ReportEntry): void {
     this.manualFormOpen = true;
-    this.draftReport = { title: report.title, body: report.body };
+    this.draftReport = {
+      title: this.clampText(report.title, this.TITLE_MAX),
+      body: this.clampText(report.body, this.BODY_MAX),
+    };
     this.pendingMetrics = report.metrics ?? null;
     this.editingReportId = report.id;
     this.lastScope = report.scope ?? 'project';
     this.lastLang = report.lang ?? (this.translate.currentLang?.startsWith('en') ? 'en' : 'ja');
   }
+
 
   /** 保存：draftは新規、編集モードならupdate、手動フォームは新規/更新の両方対応 */
   saveReport(target: 'manual' | 'active' = 'manual'): void {
@@ -223,8 +262,23 @@ export class ReportsPage {
     const currentLang = this.translate.currentLang || this.translate.defaultLang || 'ja';
     const normalizedLang: 'ja' | 'en' = currentLang.startsWith('en') ? 'en' : 'ja';
 
-    const manualTitle = this.draftReport.title.trim();
-    const manualBody = this.draftReport.body.trim();
+    const manualTitleRaw = this.draftReport.title ?? '';
+    const manualBodyRaw = this.draftReport.body ?? '';
+    const manualTitle = manualTitleRaw.trim();
+    const manualBody = manualBodyRaw.trim();
+
+    // 手動フォーム経由の保存はここでバリデーション
+    if (useManualDraft) {
+      if (!this.isValidTitle(manualTitle) || !this.isValidBody(manualBody)) {
+        const msg = this.tt(
+          'reports.form.validationError',
+          `タイトルは${this.TITLE_MIN}〜${this.TITLE_MAX}文字、本文は${this.BODY_MIN}〜${this.BODY_MAX}文字で入力してください。`
+        );
+        alert(msg);
+        return;
+      }
+    }
+
     const manualMetrics: ReportMetrics = {
       completedTasks: 0,
       avgProgressPercent: 0,
@@ -233,12 +287,19 @@ export class ReportsPage {
     const metricsForManual = this.pendingMetrics ?? manualMetrics;
 
     const activeReport = this.activeReport;
+
     const reportToSave = useManualDraft
-      ? (manualTitle && manualBody ? { title: manualTitle, body: manualBody, metrics: metricsForManual } : null)
+      ? (manualTitle && manualBody
+          ? {
+              title: this.clampText(manualTitle, this.TITLE_MAX),
+              body: this.clampText(manualBody, this.BODY_MAX),
+              metrics: metricsForManual,
+            }
+          : null)
       : activeReport
         ? {
-            title: activeReport.title,
-            body: activeReport.body,
+            title: this.clampText(activeReport.title, this.TITLE_MAX),
+            body: this.clampText(activeReport.body, this.BODY_MAX),
             metrics: activeReport.metrics ?? {
               completedTasks: 0,
               avgProgressPercent: 0,

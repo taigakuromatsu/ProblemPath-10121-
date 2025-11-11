@@ -79,11 +79,21 @@
 
 .report-card__title {
   font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap; /* 1行省略 */
   color: var(--fg);
+  line-height: 1.4;
+
+  /* ★ 折り返し許可 */
+  white-space: normal;
+
+  /* ★ スペースのない長文(あああ…など)も中で折る */
+  word-break: break-word;
+  overflow-wrap: break-word;
+
+  /* 1行省略は不要なので削除 */
+  overflow: visible;
+  text-overflow: clip;
 }
+
 .report-card__meta {
   margin-top: 4px;
   display: flex;
@@ -99,6 +109,15 @@
   white-space: pre-wrap;
   line-height: 1.6;
   color: var(--fg);
+  overflow-wrap: anywhere;   // モダンブラウザ
+  word-break: break-word;    // Safari等向けフォールバック
+}
+
+.reports-page__preview .mat-mdc-card-title,
+.reports-page__preview .mat-card-title {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* misc */

@@ -19,7 +19,7 @@ import { FormsModule } from '@angular/forms';
 
 import { ProjectSwitcher } from './project-switcher';
 import { ThemeService } from './services/theme.service';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AuthService } from './services/auth.service';
 import { MessagingService } from './services/messaging.service';
 import { CurrentProjectService } from './services/current-project.service';
@@ -119,23 +119,61 @@ export class EmailLoginDialog {
 @Component({
   standalone: true,
   selector: 'pp-edit-name-dialog',
-  imports: [MatDialogModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatCheckboxModule, FormsModule, NgIf, TranslateModule],
+  imports: [
+    MatDialogModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatButtonModule,
+    MatCheckboxModule,
+    FormsModule,
+    NgIf,
+    TranslateModule,
+  ],
   template: `
-    <h2 mat-dialog-title>表示名を変更</h2>
+    <h2 mat-dialog-title>{{ 'editName.title' | translate }}</h2>
+
     <div mat-dialog-content style="display:grid; gap:12px; width:min(420px,90vw);">
       <mat-form-field appearance="outline">
-        <mat-label>新しい表示名</mat-label>
-        <input matInput [(ngModel)]="name" maxlength="120" />
+        <mat-label>{{ 'editName.label' | translate }}</mat-label>
+        <input
+          matInput
+          [(ngModel)]="name"
+          [attr.maxlength]="MAX_NAME"
+        />
+        <mat-hint align="start">
+          {{ 'editName.hint' | translate:{ min: MIN_NAME, max: MAX_NAME } }}
+        </mat-hint>
+        <mat-hint align="end">
+          {{ (name || '').length }} / {{ MAX_NAME }}
+        </mat-hint>
       </mat-form-field>
 
-      <mat-checkbox [(ngModel)]="syncMember">このプロジェクトのメンバー名にも反映する</mat-checkbox>
+      <mat-checkbox [(ngModel)]="syncMember">
+        {{ 'editName.syncMember' | translate }}
+      </mat-checkbox>
 
-      <div *ngIf="error" style="color:#d32f2f; font-size:12px;">{{ error }}</div>
+      <div *ngIf="error" style="color:#d32f2f; font-size:12px;">
+        {{ error }}
+      </div>
     </div>
 
     <div mat-dialog-actions style="justify-content:flex-end; gap:8px;">
-      <button mat-button (click)="close()" [disabled]="busy">キャンセル</button>
-      <button mat-flat-button color="primary" (click)="save()" [disabled]="busy || !name.trim()">保存</button>
+      <button
+        mat-button
+        (click)="close()"
+        [disabled]="busy"
+      >
+        {{ 'common.cancel' | translate }}
+      </button>
+
+      <button
+        mat-flat-button
+        color="primary"
+        (click)="save()"
+        [disabled]="busy || !isValidName()"
+      >
+        {{ 'common.save' | translate }}
+      </button>
     </div>
   `
 })
@@ -145,6 +183,10 @@ export class EditNameDialog {
   private current = inject(CurrentProjectService);
   private dialog = inject(MatDialog);
   private snack = inject(MatSnackBar);
+  private tr = inject(TranslateService);
+
+  readonly MIN_NAME = 1;
+  readonly MAX_NAME = 15;
 
   name = '';
   syncMember = true;
@@ -157,12 +199,37 @@ export class EditNameDialog {
     });
   }
 
-  close(){ this.dialog.closeAll(); }
+  private tt(key: string, fallback: string): string {
+    const v = this.tr.instant(key);
+    return v && v !== key ? v : fallback;
+  }
 
-  async save(){
-    this.error = null; this.busy = true;
-    try{
-      const newName = this.name.trim();
+  close() {
+    this.dialog.closeAll();
+  }
+
+  isValidName(): boolean {
+    const trimmed = (this.name || '').trim();
+    const len = trimmed.length;
+    return len >= this.MIN_NAME && len <= this.MAX_NAME;
+  }
+
+  async save() {
+    this.error = null;
+
+    const newName = (this.name || '').trim();
+    const len = newName.length;
+
+    if (len < this.MIN_NAME || len > this.MAX_NAME) {
+      this.error = this.tt(
+        'editName.error.length',
+        `表示名は${this.MIN_NAME}〜${this.MAX_NAME}文字で入力してください`
+      );
+      return;
+    }
+
+    this.busy = true;
+    try {
       await this.auth.updateMyDisplayName(newName);
 
       if (this.syncMember) {
@@ -170,19 +237,29 @@ export class EditNameDialog {
         const pid = this.current.getSync();
         if (uid && pid) {
           const ref = doc(this.fs as any, `projects/${pid}/members/${uid}`);
-          await setDoc(ref, { displayName: newName, updatedAt: serverTimestamp() }, { merge: true });
+          await setDoc(ref, {
+            displayName: newName,
+            updatedAt: serverTimestamp()
+          }, { merge: true });
         }
       }
 
-      this.snack.open('表示名を更新しました', 'OK', { duration: 2500 });
+      this.snack.open(
+        this.tt('editName.toast.success', '表示名を更新しました'),
+        this.tt('common.ok', 'OK'),
+        { duration: 2500 }
+      );
       this.close();
-    }catch(e:any){
-      this.error = e?.message ?? '更新に失敗しました';
-    }finally{
+    } catch (e: any) {
+      this.error =
+        e?.message ??
+        this.tt('editName.error.generic', '更新に失敗しました');
+    } finally {
       this.busy = false;
     }
   }
 }
+
 
 /* ───────── ルート App ───────── */
 @Component({

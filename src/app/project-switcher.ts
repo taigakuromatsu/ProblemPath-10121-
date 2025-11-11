@@ -161,7 +161,7 @@ import { arrayRemove } from 'firebase/firestore';
     </div>
   `
 })
-export class ProjectSwitcher implements OnDestroy {
+export class ProjectSwitcher implements OnDestroy {  
   projects: MyProject[] = [];
   selected: string | null = null;
   private prevSelected: string | null = null;
@@ -170,7 +170,11 @@ export class ProjectSwitcher implements OnDestroy {
   creating = false;
   deleting = false;
   leaving  = false;
-  renaming = false; // ← 追加
+  renaming = false;
+
+  // プロジェクト名の長さ制限
+  private readonly MIN_PROJECT_NAME = 1;
+  private readonly MAX_PROJECT_NAME = 20;
 
   isOnline$!: Observable<boolean>;
   private onlineNow = true;
@@ -387,11 +391,25 @@ export class ProjectSwitcher implements OnDestroy {
     try {
       this.creating = true; this.cdr.markForCheck();
       const u = (this.authSvc as any).auth?.currentUser;
-      if (!u) { await this.authSvc.signInWithGoogle({ forceChoose: true }); return; }
+      if (!u) {
+        await this.authSvc.signInWithGoogle({ forceChoose: true });
+        return;
+      }
 
       const placeholder = `${u.displayName || 'My'} Project`;
-      const name = prompt(this.i18n.instant('projectSwitcher.prompt.createName'), placeholder);
-      if (!name) return;
+      const input = prompt(this.i18n.instant('projectSwitcher.prompt.createName'), placeholder);
+      if (input === null) return; // キャンセル
+
+      const name = this.normalizedProjectName(input);
+      if (!this.isValidProjectName(name)) {
+        alert(
+          this.tt(
+            'projectSwitcher.validation.nameLength',
+            `プロジェクト名は${this.MIN_PROJECT_NAME}〜${this.MAX_PROJECT_NAME}文字で入力してください`
+          )
+        );
+        return;
+      }
 
       const projRef = await addDoc(collection(this.fs as any, 'projects'), {
         meta: { name, createdBy: u.uid, createdAt: serverTimestamp() }
@@ -422,6 +440,7 @@ export class ProjectSwitcher implements OnDestroy {
     }
   }
 
+
   // === 追加：プロジェクト名変更 ===
   async renameProject() {
     if (!await this.requireOnline()) return;
@@ -434,28 +453,49 @@ export class ProjectSwitcher implements OnDestroy {
       // 管理者チェック
       const memberSnap = await getDoc(doc(this.fs as any, `projects/${pid}/members/${u.uid}`));
       const myRole = memberSnap.exists() ? (memberSnap.data() as any).role : null;
-      if (myRole !== 'admin') { alert(this.i18n.instant('projectSwitcher.alert.renameOnlyAdmin')); return; }
+      if (myRole !== 'admin') {
+        alert(this.i18n.instant('projectSwitcher.alert.renameOnlyAdmin'));
+        return;
+      }
 
       // 現在名の取得
       const projSnap = await getDoc(doc(this.fs as any, `projects/${pid}`));
-      const currentName = projSnap.exists() ? ((projSnap.data() as any)?.meta?.name ?? '') : '';
+      const currentNameRaw = projSnap.exists() ? ((projSnap.data() as any)?.meta?.name ?? '') : '';
+      const currentName = this.normalizedProjectName(currentNameRaw);
 
-      const newName = prompt(this.i18n.instant('projectSwitcher.prompt.rename'), currentName || 'Project');
-      if (!newName || newName.trim() === currentName) return;
+      const input = prompt(
+        this.i18n.instant('projectSwitcher.prompt.rename'),
+        currentName || 'Project'
+      );
+      if (input === null) return; // キャンセル
+
+      const newName = this.normalizedProjectName(input);
+
+      if (newName === currentName) return;
+
+      if (!this.isValidProjectName(newName)) {
+        alert(
+          this.tt(
+            'projectSwitcher.validation.nameLength',
+            `プロジェクト名は${this.MIN_PROJECT_NAME}〜${this.MAX_PROJECT_NAME}文字で入力してください`
+          )
+        );
+        return;
+      }
 
       await setDoc(
         doc(this.fs as any, `projects/${pid}`),
-        { meta: { name: newName.trim(), updatedAt: serverTimestamp() } },
+        { meta: { name: newName, updatedAt: serverTimestamp() } },
         { merge: true }
       );
 
-      // 表示更新
       await this.reload(u.uid);
       alert(this.i18n.instant('projectSwitcher.alert.renamed'));
     } finally {
       this.renaming = false; this.cdr.markForCheck();
     }
   }
+
 
   private async safeDelete(path: string) { await deleteDoc(doc(this.fs as any, path)).catch((e) => { throw e; }); }
 
@@ -592,6 +632,24 @@ export class ProjectSwitcher implements OnDestroy {
     }));
     return items.filter(p => p.name !== '(deleted)');
   }
+
+    // 入力をトリムして正規化
+    private normalizedProjectName(input: string | null | undefined): string {
+      return (input ?? '').trim();
+    }
+  
+    // 1〜30文字チェック
+    private isValidProjectName(name: string): boolean {
+      const len = name.length;
+      return len >= this.MIN_PROJECT_NAME && len <= this.MAX_PROJECT_NAME;
+    }
+  
+    // i18n → なければフォールバック文言
+    private tt(key: string, fallback: string): string {
+      const v = this.i18n.instant(key);
+      return v && v !== key ? v : fallback;
+    }
+  
 }
 
 

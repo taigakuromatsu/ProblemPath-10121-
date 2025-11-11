@@ -37,27 +37,55 @@
         <mat-form-field appearance="outline">
           <mat-label>{{ 'reports.form.titleLabel' | translate }}</mat-label>
           <input
-            matInput name="title"
-            [(ngModel)]="draftReport.title" required
-            placeholder="{{ 'reports.form.titlePlaceholder' | translate }}" />
-        </mat-form-field>
+            matInput
+            name="title"
+            [(ngModel)]="draftReport.title"
+            required
+            [attr.maxlength]="TITLE_MAX"
+            placeholder="{{ 'reports.form.titlePlaceholder' | translate }}"
+          />
+          <mat-hint align="start">
+            {{ 'reports.form.titleHint' | translate:{ min: TITLE_MIN, max: TITLE_MAX } }}
+          </mat-hint>
+          <mat-hint align="end">
+            {{ (draftReport.title || '').length }} / {{ TITLE_MAX }}
+          </mat-hint>
+        </mat-form-field>        
 
         <mat-form-field appearance="outline">
           <mat-label>{{ 'reports.form.bodyLabel' | translate }}</mat-label>
           <textarea
-            matInput name="body" rows="5"
-            [(ngModel)]="draftReport.body" required
-            placeholder="{{ 'reports.form.bodyPlaceholder' | translate }}"></textarea>
+            matInput
+            name="body"
+            rows="5"
+            [(ngModel)]="draftReport.body"
+            required
+            [attr.maxlength]="BODY_MAX"
+            placeholder="{{ 'reports.form.bodyPlaceholder' | translate }}"
+          ></textarea>
+          <mat-hint align="start">
+            {{ 'reports.form.bodyHint' | translate:{ min: BODY_MIN, max: BODY_MAX } }}
+          </mat-hint>
+          <mat-hint align="end">
+            {{ (draftReport.body || '').length }} / {{ BODY_MAX }}
+          </mat-hint>
         </mat-form-field>
+        
 
         <div class="reports-page__manual-form-actions">
           <button mat-stroked-button type="button" (click)="cancelManualReport()">
             {{ 'reports.form.cancel' | translate }}
           </button>
-          <button mat-flat-button color="primary" type="submit">
+          <button
+            mat-flat-button
+            color="primary"
+            type="submit"
+            [disabled]="!canSaveDraft()"
+          >
             {{ 'reports.form.save' | translate }}
           </button>
         </div>
+        
       </form>
     </mat-card-content>
   </mat-card>
