@@ -118,6 +118,26 @@
     "titleRequired": "タイトルは必須です",
     "phenomenonRequired": "現象は必須です",
     "goalRequired": "目標は必須です",
+    "saemchar": {
+      "problemTitle": "問題タイトルを同一文字の繰り返しで入力しないでください",
+      "phenomenon": "現象を同一文字の繰り返しで入力しないでください",
+      "goal": "目標を同一文字の繰り返しで入力しないでください"
+    },
+    "numeric": {
+      "problemTitle": "問題タイトルを数字だけで入力することはできません",
+      "phenomenon": "現象を数字だけで入力することはできません",
+      "goal": "目標を数字だけで入力することはできません"  
+        },
+    "letters": {
+      "problemTitle": "問題タイトルに自然文（日本語/英字）を含めてください",
+      "phenomenon": "現象に自然文（日本語/英字）を含めてください",
+      "goal": "目標に自然文（日本語/英字）を含めてください"
+    },
+    "min": {
+      "problemTitle": "問題タイトルは{n}文字以上必要です",
+      "problemPhenomenon": "現象は{n}文字以上必要です",
+      "problemGoal": "目標は{n}文字以上必要です"
+    },
     "max": {
       "title": "タイトルは200文字以内にしてください",
       "phenomenon": "現象は500文字以内にしてください",
@@ -638,7 +658,18 @@
     "loading": "課題を生成中…",
     "error": "AIエラー",
     "clear": "クリア",
-    "noProblem": "問題を選択してください"
+    "noProblem": "問題を選択してください",
+    "min": {
+      "title": "タイトルは{{n}}文字以上必要です（現在{{cur}}文字）",
+      "phenomenon": "現象は{{n}}文字以上必要です（現在{{cur}}文字）",
+      "goal": "目標は{{n}}文字以上必要です（現在{{cur}}文字）",
+      "hintPrefix": "AI提案を使うには、",
+      "defaultError": "入力が短すぎます。必要な文字数を満たしてください。"
+    },
+    "requirements": {
+      "unmet": "AI提案を使うには、タイトル{titleMin}文字以上・現象{phenMin}文字以上・目標{goalMin}文字以上を入力してください。",
+      "hint": "短すぎる入力は精度が下がります。必要な最小文字数を満たしてください。"
+    }
   },
   "app": {
     "offline": {

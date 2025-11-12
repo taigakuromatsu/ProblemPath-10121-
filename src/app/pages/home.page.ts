@@ -136,6 +136,49 @@ export class HomePage implements OnInit, OnDestroy {
     viewer: 'role.viewerLabel',
   };
 
+  // === 入力品質チェック ===
+private _norm(s: string) {
+  return (s ?? '').normalize('NFKC').replace(/\s+/gu, ' ').trim();
+}
+private _isSameCharOnly(s: string) {
+  const t = this._norm(s).replace(/\s/gu, '');
+  return !!t && /^(.)(\1)+$/u.test(t);
+}
+private _isNumericOnly(s: string) {
+  const t = this._norm(s).replace(/\s/gu, '');
+  return !!t && /^\p{Nd}+$/u.test(t);
+}
+private _letterRatio(s: string) {
+  const t = this._norm(s).replace(/\s/gu, '');
+  if (!t) return 0;
+  const letters = (t.match(/\p{L}/gu) || []).length;
+  return letters / t.length;
+}
+
+// 共通: 最低文字数と品質を確認
+private _validateText(
+  labelKey: string, // 表示用ラベルの i18n キー
+  s: string,
+  minLen: number
+): string[] {
+  const msg: string[] = [];
+  const v = this._norm(s);
+  if (v.length < minLen) {
+    msg.push(this.t(`validation.min.${labelKey}`, `${labelKey}は${minLen}文字以上で入力してください`));
+  }
+  if (this._isSameCharOnly(v)) {
+    msg.push(this.t(`validation.samechar.${labelKey}`, `${labelKey}が同一文字の繰り返しです`));
+  }
+  if (this._isNumericOnly(v)) {
+    msg.push(this.t(`validation.numeric.${labelKey}`, `${labelKey}を数字だけで入力することはできません`));
+  }
+  if (this._letterRatio(v) < 0.3) {
+    msg.push(this.t(`validation.letters.${labelKey}`, `${labelKey}に自然文（日本語/英字）を含めてください`));
+  }
+  return msg;
+}
+
+
   // テンプレから呼ぶ用（純関数）
   getRoleLabelKey(role: Role | null | undefined): string | null {
     return role ? (this.roleLabelMap[role] ?? null) : null;
@@ -995,12 +1038,16 @@ endModel: Record<string, Date | null> = {};
   // 作成保存（バリデーション文言 i18n）
   async createProblemWithDefinition() {
     if (!(await this.requireOnline())) return;
-
+  
     const p = this.newProblem;
     const errs: string[] = [];
+  
+    // 必須のみ
     if (!p.title.trim()) errs.push(this.i18n.instant('validation.titleRequired'));
     if (!p.phenomenon.trim()) errs.push(this.i18n.instant('validation.phenomenonRequired'));
     if (!p.goal.trim()) errs.push(this.i18n.instant('validation.goalRequired'));
+  
+    // 文字数上限のみ（最小/品質はチェックしない）
     const over = (s: string, n: number) => s && s.length > n;
     if (over(p.title, 200)) errs.push(this.t('validation.max.problemTitle', '問題タイトルは200文字以内で入力してください'));
     if (over(p.phenomenon, 500)) errs.push(this.t('validation.max.phenomenon', '現象は500文字以内で入力してください'));
@@ -1008,11 +1055,12 @@ endModel: Record<string, Date | null> = {};
     if (over(p.solution, 500)) errs.push(this.t('validation.max.solution', '解決策は500文字以内で入力してください'));
     if (over(p.goal, 300)) errs.push(this.t('validation.max.goal', '目標は300文字以内で入力してください'));
   
+    // ★ 最小文字数/品質チェックは行わない（AI側でのみチェック）
     if (errs.length) { alert(errs.join('\n')); return; }
-
+  
     const pid = this.currentProject.getSync();
     if (!pid) { alert(this.i18n.instant('common.projectNotSelected')); return; }
-
+  
     const uid = await firstValueFrom(this.auth.uid$);
     const payload: any = {
       title: p.title.trim(),
@@ -1028,11 +1076,11 @@ endModel: Record<string, Date | null> = {};
     const solution = p.solution.trim();
     if (cause) payload.problemDef.cause = cause;
     if (solution) payload.problemDef.solution = solution;
-
+  
     const ref = await this.problems.create(pid, payload);
     this.selectedProblemId = (ref as any)?.id ?? null;
     this.selectedProblem$.next(this.selectedProblemId);
-
+  
     const kNew = this.draftKeyNewProblem(); if (kNew) this.drafts.clear(kNew);
     this.closeNewProblemDialog();
   }
@@ -1076,22 +1124,27 @@ endModel: Record<string, Date | null> = {};
   // 編集保存（バリデーション文言 i18n）
   async saveEditedProblemDef() {
     if (!(await this.requireOnline())) return;
-
+  
     const pid = this.currentProject.getSync();
     if (!pid || !this.selectedProblemId) { alert(this.i18n.instant('common.projectNotSelected')); return; }
-
+  
     const d = this.editProblem;
     const errs: string[] = [];
+  
+    // 必須のみ
     if (!d.phenomenon.trim()) errs.push(this.i18n.instant('validation.phenomenonRequired'));
     if (!d.goal.trim()) errs.push(this.i18n.instant('validation.goalRequired'));
+  
+    // 文字数上限のみ（最小/品質はチェックしない）
     const over = (s: string, n: number) => s && s.length > n;
     if (over(d.phenomenon, 500)) errs.push(this.t('validation.max.phenomenon', '現象は500文字以内で入力してください'));
     if (over(d.cause, 500)) errs.push(this.t('validation.max.cause', '原因は500文字以内で入力してください'));
     if (over(d.solution, 500)) errs.push(this.t('validation.max.solution', '解決策は500文字以内で入力してください'));
     if (over(d.goal, 300)) errs.push(this.t('validation.max.goal', '目標は300文字以内で入力してください'));
   
+    // ★ 最小文字数/品質チェックは行わない（AI側でのみチェック）
     if (errs.length) { alert(errs.join('\n')); return; }
-
+  
     const uid = await firstValueFrom(this.auth.uid$);
     await this.problems.updateProblemDef(pid, this.selectedProblemId, {
       phenomenon: d.phenomenon.trim(),
@@ -1101,7 +1154,7 @@ endModel: Record<string, Date | null> = {};
       updatedBy: uid || '',
       updatedAt: serverTimestamp(),
     });
-
+  
     const kEdit = this.draftKeyEditProblem(this.selectedProblemId); if (kEdit) this.drafts.clear(kEdit);
     this.closeEditProblemDialog();
   }

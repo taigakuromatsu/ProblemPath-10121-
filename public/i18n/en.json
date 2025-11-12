@@ -123,6 +123,26 @@
     "titleRequired": "Title is required",
     "phenomenonRequired": "Phenomenon is required",
     "goalRequired": "Goal is required",
+    "samechar": {
+      "problemTitle": "Do not enter the same characters for the problem title",
+      "phenomenon": "Do not enter the same characters for the phenomenon",
+      "goal": "Do not enter the same characters for the goal"
+    },
+    "numeric": {
+      "problemTitle": "Do not enter only numbers for the problem title",
+      "phenomenon": "Do not enter only numbers for the phenomenon",
+      "goal": "Do not enter only numbers for the goal"
+    },
+    "letters": {
+      "problemTitle": "Please include natural text (Japanese/English) in the problem title",
+      "phenomenon": "Please include natural text (Japanese/English) in the phenomenon",
+      "goal": "Please include natural text (Japanese/English) in the goal"
+    },
+    "min": {
+      "problemTitle": "Problem title must be at least {n} characters",
+      "problemPhenomenon": "Phenomenon must be at least {n} characters",
+      "problemGoal": "Goal must be at least {n} characters"
+    },
     "max": {
       "title": "Title must be at most 200 characters",
       "phenomenon": "Phenomenon must be at most 500 characters",
@@ -679,7 +699,18 @@
     "loading": "Generating suggestions…",
     "error": "AI error",
     "clear": "Clear",
-    "noProblem": "Select a Problem first"
+    "noProblem": "Select a Problem first",
+    "min": {
+      "title": "Title must be at least {{n}} characters (currently {{cur}})",
+      "phenomenon": "Phenomenon must be at least {{n}} characters (currently {{cur}})",
+      "goal": "Goal must be at least {{n}} characters (currently {{cur}})",
+      "hintPrefix": "To use AI suggestions, ",
+      "defaultError": "Input is too short. Please meet the required fields."
+    },
+    "requirements": {
+      "unmet": "To use AI suggestions, please enter at least {titleMin} characters for the title, {phenMin} characters for the phenomenon, and {goalMin} characters for the goal.",
+      "hint": "Short inputs reduce accuracy. Please meet the minimum required length."
+    }
     },
   "guard": {
     "projectRequired": "Project is not selected, so you were returned to the home page."
