@@ -360,7 +360,8 @@
 /* Task: グリッドで「左=タイトル / 右上=ステータス / 右下=コメント等」配置 */
 .node-row--task {
   display: grid;
-  grid-template-columns: 1fr auto;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, max-content); /* 右カラムは必要幅だけ */
   grid-template-rows: auto auto;
   column-gap: clamp(8px, 1vw, 12px);
   row-gap: 4px;
@@ -376,16 +377,32 @@
 .node-row--task .node-meta {
   grid-column: 2 / 3;
   grid-row: 1 / 2;
-  justify-content: flex-end;
+  justify-self: end;     /* ★これが決定打（要素箱を右端へ） */
+  align-self: start;     /* 上に揃える */
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 180px;      /* あってOK。縮んでも右端に張り付く */
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
+/* 右下：コメント/名前変更/削除 —— 要素“自体”を右端へ */
 .node-row--task .node-chips {
   grid-column: 2 / 3;
   grid-row: 2 / 3;
-  display: flex;
+  justify-self: end;     /* ★これで右端固定 */
+  align-self: end;
+  display: inline-flex;
   flex-wrap: wrap;
-  gap: clamp(4px, 0.5vw, 8px);
-  justify-content: flex-end;
+  gap: 4px;
+}
+
+/* ステータスと優先度は縮めない */
+.node-row--task .task-status-pill,
+.node-row--task .chip-priority {
+  flex-shrink: 0;
 }
 
 .node-children {
@@ -491,6 +508,13 @@
   font-size: clamp(18px, 1.8vw, 24px);
   font-weight: 700;
   color: var(--foreground, #1f2933);
+
+  /* ← 英語の長い連続文字を確実に折り返す */
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere; /* modern */
+  word-break: break-word;  /* Safari/Fallback */
+  hyphens: auto;
 }
 
 .detail-subtitle {
@@ -612,7 +636,11 @@
 }
 
 .comment-item .body {
+  /* 改行・空白は保持しつつ、英語の長い語も折り返す */
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  hyphens: auto;
   line-height: 1.6;
 }
 
@@ -1429,3 +1457,51 @@
     font-size: 0.7rem;
   }
 }
+
+/* ===== デスクトップ：右列の見切れ対策（必ず末尾に配置） ===== */
+@media (min-width: 769px) {
+  /* 右カラムは中身に合わせて広がる */
+  .node-row--task {
+    display: grid;
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) max-content; /* ← 右列=内容幅 */
+    grid-template-rows: auto auto;
+    column-gap: clamp(8px, 1vw, 12px);
+    row-gap: 4px;
+    align-items: flex-start;
+  }
+
+  /* 右上：ステータス＋優先度（箱ごと右端・切らない） */
+  .node-row--task > .node-meta {
+    grid-column: 2 / 3;
+    grid-row: 1 / 2;
+    justify-self: end;
+    align-self: start;
+
+    display: inline-flex;
+    gap: 4px;
+    white-space: nowrap;
+
+    width: max-content;   /* ← 中身ぶんだけの箱 */
+    max-width: none;      /* ← 180px 制限を解除 */
+    overflow: visible;    /* ← 見切れ防止 */
+    padding-left: 2px;    /* ← 2カラムの切れ目の視覚的余裕 */
+  }
+
+  /* 右下：コメント等（箱ごと右端・切らない） */
+  .node-row--task > .node-chips {
+    grid-column: 2 / 3;
+    grid-row: 2 / 3;
+    justify-self: end;
+    align-self: end;
+
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+
+    width: max-content;
+    max-width: none;
+    overflow: visible;
+  }
+}
+

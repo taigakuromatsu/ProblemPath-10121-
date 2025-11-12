@@ -433,7 +433,7 @@
                 <div class="issue-list" *ngIf="issues.length > 0; else emptyIssues">
                   <article class="issue-item" *ngFor="let i of issues">
                     <header class="issue-header">
-                      <h3 class="section-title section-title--info no-truncate issue-title-line">
+                      <h3 class="section-title section-title--info issue-title-line">
                         <mat-icon aria-hidden="true">label_important</mat-icon>
                         <span class="issue-title-text">{{ i.title }}</span>
                       </h3>
@@ -573,7 +573,7 @@
                         <li *ngFor="let t of tasks" class="task-item">
                           <div class="task-main">
                             <div class="task-title-row">
-                              <span class="task-title text-1line no-truncate">
+                              <span class="task-title">
                                 {{ t.title }}
                               </span>
                               <span class="task-template-chip" *ngIf="t.recurrenceTemplate">

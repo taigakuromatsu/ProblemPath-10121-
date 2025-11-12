@@ -880,3 +880,46 @@
     gap: 8px;
   }
 }
+
+/* ==== Long English wrapping fixes (Issues / Tasks / ProblemDef) ==== */
+
+/* 1) 折り返しルール：英語の長語/URL/aaaa… を強制改行 */
+.problem-def dd,
+.issue-title-text,
+.task-title {
+  overflow-wrap: anywhere; /* 最優先：空白が無くても折り返す */
+  word-break: break-word;  /* 旧ブラウザ対策 */
+  hyphens: auto;           /* 辞書あり環境ならハイフン分割 */
+  white-space: normal;     /* no-truncate の影響を打ち消す */
+}
+
+/* 2) 問題定義は改行/スペースを保ったまま折り返し */
+.problem-def dd {
+  white-space: pre-wrap;   /* 改行を保持しつつ折り返し */
+}
+
+/* 3) Flex 行で子要素が縮められるように（横スクロール防止） */
+.issue-header > *,
+.task-main > * {
+  min-width: 0;
+}
+
+/* 4) タイトル側が幅を確保できるように */
+.issue-title-line {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 5) タスクタイトル行も同様に可変幅＋折り返しを許可 */
+.task-title {
+  flex: 1 1 auto;
+  display: inline-block; /* Safari の折り返し安定化 */
+}
+
+/* 参考：必要なら mat-select の選択値も折り返し可能に（任意）
+:host ::ng-deep .problem-card__section .mat-mdc-select-value {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+*/

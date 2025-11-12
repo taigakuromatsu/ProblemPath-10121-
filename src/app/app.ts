@@ -354,17 +354,28 @@ export class EditNameDialog {
     }
 
     .user-chip.user-chip--compact {
+      display: inline-block;                /* ellipsis/幅制御の前提 */
       font-size: 12px;
       padding: 2px 6px;
       border-radius: 9999px;
       background: rgba(255,255,255,.25);
       white-space: nowrap;
-      max-width: 24ch;
       overflow: hidden;
-      text-overflow: ellipsis;
+
+      /* 15 文字 + 左右パディング 6px×2 分の幅を許容 */
+      inline-size: fit-content;
+      max-inline-size: calc(15em + 12px);
+      text-overflow: clip;                  /* 15 文字は切らない（MAX_NAME=15なので省略記号不要） */
     }
 
     .menu-button { margin-right: 4px; }
+
+    /* 対応ブラウザでは CJK 幅に最適化（ic = ideographic character） */
+      @supports (max-inline-size: 1ic) {
+        .user-chip.user-chip--compact {
+          max-inline-size: calc(15ic + 12px);
+        }
+      }
 
     /* ====== モバイル向け調整（崩れ防止） ====== */
     @media (max-width: 768px) {
@@ -403,7 +414,7 @@ export class EditNameDialog {
       }
 
       .user-chip.user-chip--compact {
-        max-width: 14ch;
+        max-inline-size: calc(15em + 12px);
       }
     }
   `],
