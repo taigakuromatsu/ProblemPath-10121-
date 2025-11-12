@@ -1,3 +1,4 @@
+// src/app/services/auth.service.ts
 import { Injectable, inject } from '@angular/core';
 import {
   Auth,
@@ -10,7 +11,6 @@ import {
   user as afUser,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  sendEmailVerification,
   sendPasswordResetEmail,
   updateProfile,
 } from '@angular/fire/auth';
@@ -52,7 +52,7 @@ export class AuthService {
   }
 
   constructor() {
-    // 1) リダイレクト結果を回収
+    // 1) リダイレクト結果を回収（発生した場合のみ）
     getRedirectResult(this.auth)
       .then(async (cred) => {
         if (cred?.user) {
@@ -62,6 +62,7 @@ export class AuthService {
           }
           console.debug('[auth] redirect result user=', cred.user.uid);
           await this.ensureOnboard(cred.user.uid, name);
+          await this.currentProject.restoreForUser(cred.user.uid); // ★ 前回選択をユーザー単位で復元
         } else {
           console.debug('[auth] redirect result: none');
         }
@@ -70,30 +71,40 @@ export class AuthService {
         console.warn('[auth] getRedirectResult error:', e?.code || e);
       });
 
-    // 2) onAuthStateChanged（保険）
+    // 2) onAuthStateChanged（常時）
     onAuthStateChanged(this.auth, async (u) => {
       console.debug('[auth] onAuthStateChanged =>', !!u, u?.uid);
       if (!u) {
         this.didOnboard = false;
         this.displayNameSubject.next(null);
+        // メモリ上の選択だけはクリア（ローカル保存は保持して次回復元）
+        this.currentProject.clear();
         return;
       }
+
       if (this.didOnboard) {
-        // サインイン状態の変化時はここで displayNameSubject を最新化
+        // サインイン状態の変化時はここで displayName を最新化
         const name = u.displayName ?? this.deriveDisplayName(u.email) ?? 'Me';
         this.displayNameSubject.next(name);
         return;
       }
+
       this.didOnboard = true;
+
       let name = u.displayName ?? this.deriveDisplayName(u.email) ?? 'Me';
       if (!u.displayName && name) {
         try { await updateProfile(u, { displayName: name }); } catch {}
       }
       this.displayNameSubject.next(name);
+
+      // ユーザー初期化（無ければ初期プロジェクトを作る）
       await this.ensureOnboard(u.uid, name);
+
+      // ★ ここで必ず待つ：ユーザー別キーから検証復元 → ready$ true
+      await this.currentProject.restoreForUser(u.uid);
     });
 
-    // 3) user$ からも常に同期（ページ初期表示など）
+    // 3) user$ からも常に同期（初期表示など）
     this.user$.subscribe((u) => {
       const name = u?.displayName ?? this.deriveDisplayName(u?.email ?? null) ?? null;
       this.displayNameSubject.next(name);
@@ -152,8 +163,7 @@ export class AuthService {
     if (!u) return;
     await updateProfile(u, { displayName: newName });
 
-    // Firebase Auth の user ストリームは profile 更新で再発火しないことがあるため、
-    // ここで手動でストリームに流してヘッダー等を即時更新する。
+    // Auth のストリームは profile 更新で再発火しないことがあるため即時反映
     this.displayNameSubject.next(newName);
   }
 
@@ -165,7 +175,8 @@ export class AuthService {
   async signOut(): Promise<void> {
     this._isSigningOut = true;
     try {
-      this.currentProject.set(null);
+      // メモリの選択だけクリア（ユーザー別 localStorage は保持）
+      this.currentProject.clear();
       await signOut(this.auth);
       this.didOnboard = false;
       this.displayNameSubject.next(null);
@@ -174,22 +185,14 @@ export class AuthService {
     }
   }
 
-  // ---- 初回ログイン時の自動作成 / 既存ユーザーは前回 or 最初のプロジェクトを選択 ----
+  // ---- 初回ログイン時の自動作成：メンバーシップが無ければ初期プロジェクトを作成 ----
   private async ensureOnboard(uid: string, displayName: string) {
-    const persisted = localStorage.getItem('pp.currentProjectId');
-    if (persisted) {
-      this.currentProject.set(persisted);
-      return;
-    }
-
+    // 既に1件でも membership があれば何もしない
     const membershipsCol = collection(this.fs as any, `users/${uid}/memberships`);
     const snap = await getDocs(query(membershipsCol, limit(1)));
-    if (!snap.empty) {
-      const firstId = snap.docs[0].id;
-      this.currentProject.set(firstId);
-      return;
-    }
+    if (!snap.empty) return;
 
+    // 初期プロジェクトを作成
     const projectsCol = collection(this.fs as any, 'projects');
     const projDoc = await addDoc(projectsCol, {
       meta: { name: `${displayName} Project`, createdBy: uid, createdAt: serverTimestamp() }
@@ -200,7 +203,7 @@ export class AuthService {
       role: 'admin',
       joinedAt: serverTimestamp(),
       displayName,
-      email: (this as any).auth.currentUser?.email ?? null,
+      email: this.auth.currentUser?.email ?? null,
     }, { merge: true });
 
     await setDoc(doc(this.fs as any, `users/${uid}/memberships/${projectId}`), {
@@ -208,10 +211,9 @@ export class AuthService {
       joinedAt: serverTimestamp(),
     });
 
-    this.currentProject.set(projectId);
+    // プロジェクト「選択」はしない（restoreForUser が担当）
   }
 }
-
 
 
 

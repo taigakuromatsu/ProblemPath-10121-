@@ -3,7 +3,7 @@ import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { AsyncPipe, NgFor, NgIf } from '@angular/common';
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
 import { map } from 'rxjs/operators';
-import { Observable, firstValueFrom } from 'rxjs';
+import { Observable, firstValueFrom, combineLatest } from 'rxjs';
 
 import { MatSidenavModule, MatSidenav } from '@angular/material/sidenav';
 import { MatToolbarModule } from '@angular/material/toolbar';
@@ -354,28 +354,45 @@ export class EditNameDialog {
     }
 
     .user-chip.user-chip--compact {
-      display: inline-block;                /* ellipsis/幅制御の前提 */
+      display: inline-block;
       font-size: 12px;
       padding: 2px 6px;
       border-radius: 9999px;
       background: rgba(255,255,255,.25);
       white-space: nowrap;
       overflow: hidden;
-
-      /* 15 文字 + 左右パディング 6px×2 分の幅を許容 */
       inline-size: fit-content;
       max-inline-size: calc(15em + 12px);
-      text-overflow: clip;                  /* 15 文字は切らない（MAX_NAME=15なので省略記号不要） */
+      text-overflow: clip;
+    }
+    @supports (max-inline-size: 1ic) {
+      .user-chip.user-chip--compact { max-inline-size: calc(15ic + 12px); }
     }
 
     .menu-button { margin-right: 4px; }
 
-    /* 対応ブラウザでは CJK 幅に最適化（ic = ideographic character） */
-      @supports (max-inline-size: 1ic) {
-        .user-chip.user-chip--compact {
-          max-inline-size: calc(15ic + 12px);
-        }
-      }
+    /* 読み込みスプラッシュ */
+    .loading-splash {
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:12px;
+      padding:48px 16px;
+      color: rgba(0,0,0,.6);
+    }
+    .spinner {
+      width:28px; height:28px; border-radius:50%;
+      border:3px solid rgba(0,0,0,.12);
+      border-top-color: rgba(0,0,0,.54);
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .sidenav__wrapper.is-disabled {
+      opacity:.5;
+      pointer-events:none;
+    }
 
     /* ====== モバイル向け調整（崩れ防止） ====== */
     @media (max-width: 768px) {
@@ -389,33 +406,12 @@ export class EditNameDialog {
         row-gap: 4px;
         padding-inline: 4px;
       }
-
-      .brand__title {
-        font-size: 14px;
-      }
-
-      /* メニューアイコン分だけ少し右にずらして、1行目と揃えて見せる */
-      .topnav-viewport {
-        margin-left: 36px;
-      }
-
-      .topnav-track {
-        gap: 4px;
-      }
-
-      .tab-btn {
-        height: 26px;
-        padding: 0 6px;
-        font-size: 10px;
-      }
-
-      .topbar-actions {
-        gap: 4px;
-      }
-
-      .user-chip.user-chip--compact {
-        max-inline-size: calc(15em + 12px);
-      }
+      .brand__title { font-size: 14px; }
+      .topnav-viewport { margin-left: 36px; }
+      .topnav-track { gap: 4px; }
+      .tab-btn { height: 26px; padding: 0 6px; font-size: 10px; }
+      .topbar-actions { gap: 4px; }
+      .user-chip.user-chip--compact { max-inline-size: calc(15em + 12px); }
     }
   `],
   template: `
@@ -426,7 +422,9 @@ export class EditNameDialog {
         [mode]="(isHandset$ | async) ? 'over' : 'side'"
         [opened]="!(isHandset$ | async)"
         [autoFocus]="false">
-        <div class="sidenav__wrapper">
+        <div
+          class="sidenav__wrapper"
+          [class.is-disabled]="(auth.loggedIn$ | async) && !(projectReady$ | async)">
           <pp-project-switcher></pp-project-switcher>
         </div>
       </mat-sidenav>
@@ -504,13 +502,23 @@ export class EditNameDialog {
         </mat-toolbar>
 
         <div class="content-area">
-          <router-outlet></router-outlet>
+          <!-- ★ ログイン中は projectReady$ が true になるまで描画を止める -->
+          <ng-container *ngIf="appReady$ | async; else appLoading">
+            <router-outlet></router-outlet>
+          </ng-container>
+          <ng-template #appLoading>
+            <div class="loading-splash" aria-live="polite">
+              <div class="spinner" aria-hidden="true"></div>
+              <p>プロジェクトを読み込み中...</p>
+            </div>
+          </ng-template>
         </div>
       </mat-sidenav-content>
     </mat-sidenav-container>
   `
 })
 export class App {
+
   readonly navLinks = [
     { label: 'nav.home', path: '/', exact: true },
     { label: 'nav.tree', path: '/tree', exact: false },
@@ -522,6 +530,8 @@ export class App {
   ];
 
   readonly isHandset$: Observable<boolean>;
+  readonly projectReady$ = inject(CurrentProjectService).ready$;
+  readonly appReady$: Observable<boolean>;
   @ViewChild('drawer') drawer!: MatSidenav;
 
   constructor(
@@ -529,11 +539,16 @@ export class App {
     private breakpoint: BreakpointObserver,
     public auth: AuthService,
     private _msg: MessagingService,
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private current: CurrentProjectService,
   ){
     this.isHandset$ = this.breakpoint
       .observe(Breakpoints.Handset)
       .pipe(map(r => r.matches));
+
+    // 未ログイン時はすぐ表示可、ログイン時は ready=true まで待つ
+    this.appReady$ = combineLatest([this.auth.loggedIn$, this.current.ready$])
+      .pipe(map(([logged, ready]) => !logged || ready));
   }
 
   ngOnInit(){
@@ -548,6 +563,7 @@ export class App {
     this.dialog.open(EditNameDialog, { disableClose: true });
   }
 }
+
 
 
 
