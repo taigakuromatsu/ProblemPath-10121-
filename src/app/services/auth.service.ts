@@ -18,7 +18,7 @@ import { map, shareReplay } from 'rxjs/operators';
 import { Observable, BehaviorSubject } from 'rxjs';
 
 import { Firestore } from '@angular/fire/firestore';
-import { addDoc, collection, doc, setDoc, serverTimestamp, getDocs, limit, query } from 'firebase/firestore';
+import { addDoc, collection, doc, setDoc, serverTimestamp, getDocs, limit, query, getDoc } from 'firebase/firestore';
 
 import { CurrentProjectService } from './current-project.service';
 import { setPersistence, browserLocalPersistence } from 'firebase/auth';
@@ -28,6 +28,9 @@ export class AuthService {
   private auth = inject(Auth);
   private fs   = inject(Firestore);
   private currentProject = inject(CurrentProjectService);
+  // 変更2: クラス内フィールドを追加
+  private prevUid: string | null = null;
+
 
   /** Firebase Auth user$ */
   readonly user$ = afUser(this.auth).pipe(
@@ -53,19 +56,25 @@ export class AuthService {
 
   constructor() {
     // 1) リダイレクト結果を回収
+    // 変更3: constructor 内 getRedirectResult の then ブロックで、ensureOnboard 前にクリア
     getRedirectResult(this.auth)
-      .then(async (cred) => {
-        if (cred?.user) {
-          let name = cred.user.displayName ?? this.deriveDisplayName(cred.user.email) ?? 'Me';
-          if (!cred.user.displayName && name) {
-            try { await updateProfile(cred.user, { displayName: name }); } catch {}
-          }
-          console.debug('[auth] redirect result user=', cred.user.uid);
-          await this.ensureOnboard(cred.user.uid, name);
-        } else {
-          console.debug('[auth] redirect result: none');
+    .then(async (cred) => {
+      if (cred?.user) {
+        let name = cred.user.displayName ?? this.deriveDisplayName(cred.user.email) ?? 'Me';
+        if (!cred.user.displayName && name) {
+          try { await updateProfile(cred.user, { displayName: name }); } catch {}
         }
-      })
+        // ★ ここを追加：アカウント切替直後は一度クリアして古いIDの初期発火を止める
+        this.currentProject.set(null);
+        this.prevUid = cred.user.uid;
+
+        console.debug('[auth] redirect result user=', cred.user.uid);
+        await this.ensureOnboard(cred.user.uid, name);
+      } else {
+        console.debug('[auth] redirect result: none');
+      }
+    })
+
       .catch((e) => {
         console.warn('[auth] getRedirectResult error:', e?.code || e);
       });
@@ -76,10 +85,19 @@ export class AuthService {
       if (!u) {
         this.didOnboard = false;
         this.displayNameSubject.next(null);
+        this.prevUid = null;
+        // ★ サインアウト時も念のためクリア
+        this.currentProject.set(null);
         return;
       }
+    
+      // ★ アカウントが変わった/初回サインインのタイミングで古いIDを無効化
+      if (u.uid !== this.prevUid) {
+        this.currentProject.set(null);
+        this.prevUid = u.uid;
+      }
+    
       if (this.didOnboard) {
-        // サインイン状態の変化時はここで displayNameSubject を最新化
         const name = u.displayName ?? this.deriveDisplayName(u.email) ?? 'Me';
         this.displayNameSubject.next(name);
         return;
@@ -176,12 +194,22 @@ export class AuthService {
 
   // ---- 初回ログイン時の自動作成 / 既存ユーザーは前回 or 最初のプロジェクトを選択 ----
   private async ensureOnboard(uid: string, displayName: string) {
+    // ▼ まずは per-user で有効か検証（別アカウントの残骸を使わない）
     const persisted = localStorage.getItem('pp.currentProjectId');
     if (persisted) {
-      this.currentProject.set(persisted);
-      return;
+      try {
+        const memRef = doc(this.fs as any, `users/${uid}/memberships/${persisted}`);
+        const memSnap = await getDoc(memRef);
+        if (memSnap.exists()) {
+          this.currentProject.set(persisted);
+          return;
+        }
+      } catch {}
+      // 無効なら掃除
+      localStorage.removeItem('pp.currentProjectId');
     }
-
+  
+    // ▼ 既存 membership があれば最初のものを使う
     const membershipsCol = collection(this.fs as any, `users/${uid}/memberships`);
     const snap = await getDocs(query(membershipsCol, limit(1)));
     if (!snap.empty) {
@@ -189,25 +217,26 @@ export class AuthService {
       this.currentProject.set(firstId);
       return;
     }
-
+  
+    // ▼ なければ作成（従来どおり）
     const projectsCol = collection(this.fs as any, 'projects');
     const projDoc = await addDoc(projectsCol, {
       meta: { name: `${displayName} Project`, createdBy: uid, createdAt: serverTimestamp() }
     });
     const projectId = projDoc.id;
-
+  
     await setDoc(doc(this.fs as any, `projects/${projectId}/members/${uid}`), {
       role: 'admin',
       joinedAt: serverTimestamp(),
       displayName,
       email: (this as any).auth.currentUser?.email ?? null,
     }, { merge: true });
-
+  
     await setDoc(doc(this.fs as any, `users/${uid}/memberships/${projectId}`), {
       role: 'admin',
       joinedAt: serverTimestamp(),
     });
-
+  
     this.currentProject.set(projectId);
   }
 }

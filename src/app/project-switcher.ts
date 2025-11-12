@@ -1,4 +1,3 @@
-// src/app/project-switcher.ts
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, ChangeDetectorRef, OnDestroy } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
@@ -45,7 +44,6 @@ import { arrayRemove } from 'firebase/firestore';
       background: rgba(255, 255, 255, 0.08); color: inherit; text-align: left;
       transition: background-color .15s ease, box-shadow .15s ease, border-color .15s ease;
       border: 1px solid rgba(255, 255, 255, 0.12); cursor: pointer; box-shadow: 0 10px 24px rgba(2, 6, 23, 0.35);
-      /* ここ重要：中寄せ用に内部ラッパを中央配置 */
       justify-content: center;
     }
     .switcher__item:hover { background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.22); }
@@ -53,12 +51,11 @@ import { arrayRemove } from 'firebase/firestore';
     .switcher__item:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
     .switcher__item[disabled] { opacity: .5; cursor: default; }
 
-    /* 中寄せ用の内側コンテナ：横幅を少し狭めて左右に余白を持たせる */
     .switcher__inner {
       display: inline-flex; align-items: center; gap: calc(10px * var(--m));
-      width: 100%; max-width: 88%; /* ← ここで両端に余白を確保（お好みで 82–92% 程度） */
+      width: 100%; max-width: 88%;
       justify-content: space-between;
-      margin-inline: auto;  /* ボタン内で中央寄せ */
+      margin-inline: auto;
       min-width: 0;
     }
 
@@ -75,7 +72,6 @@ import { arrayRemove } from 'firebase/firestore';
     .switcher__actions button:hover { border-color: color-mix(in srgb, var(--accent-blue) 48%, rgba(255, 255, 255, 0.2)); }
     .switcher__actions .mat-mdc-button { font-size: calc(12px * var(--m)); height: calc(28px * var(--m)); min-height: calc(28px * var(--m)); }
 
-    /* モバイル対応 */
     @media (max-width: 768px) {
       .switcher__wrapper {
         height: 100%;
@@ -84,7 +80,7 @@ import { arrayRemove } from 'firebase/firestore';
       }
 
       .switcher__item {
-        min-height: 44px; /* タップしやすいサイズ */
+        min-height: 44px;
         padding: clamp(8px, 2vw, 12px) clamp(10px, 2.5vw, 14px);
       }
 
@@ -140,7 +136,6 @@ import { arrayRemove } from 'firebase/firestore';
           <span>{{ 'projectSwitcher.new' | translate }}</span>
         </button>
 
-        <!-- 追加：プロジェクト名変更（管理者のみ） -->
         <button mat-stroked-button type="button" (click)="renameProject()"
          [disabled]="renaming || loading || !(isOnline$ | async)">
           <mat-icon>edit</mat-icon>
@@ -161,7 +156,7 @@ import { arrayRemove } from 'firebase/firestore';
     </div>
   `
 })
-export class ProjectSwitcher implements OnDestroy {  
+export class ProjectSwitcher implements OnDestroy {
   projects: MyProject[] = [];
   selected: string | null = null;
   private prevSelected: string | null = null;
@@ -172,7 +167,6 @@ export class ProjectSwitcher implements OnDestroy {
   leaving  = false;
   renaming = false;
 
-  // プロジェクト名の長さ制限
   private readonly MIN_PROJECT_NAME = 1;
   private readonly MAX_PROJECT_NAME = 20;
 
@@ -182,6 +176,7 @@ export class ProjectSwitcher implements OnDestroy {
   private stopMembershipWatch?: () => void;
   private stopMembershipsListWatch?: () => void;
   private authSub?: Subscription;
+  private currSub?: Subscription; // ★ 追加：CurrentProject に追従
   private currentUid: string | null = null;
   private liveRole: 'admin'|'member'|'viewer'|null = null;
 
@@ -212,7 +207,11 @@ export class ProjectSwitcher implements OnDestroy {
           })
         );
         const list = (items.filter(Boolean) as MyProject[]);
-        const removedCurrent = this.selected && !list.some(p => p.pid === this.selected);
+
+        // ★ 修正：service の真値で「喪失」を判定
+        const currentPid = this.current.getSync();
+        const removedCurrent = currentPid && !list.some(p => p.pid === currentPid);
+
         this.projects = list;
 
         if (removedCurrent) {
@@ -226,28 +225,22 @@ export class ProjectSwitcher implements OnDestroy {
   }
 
   private handleProjectLost(_reason: 'removed'|'deleted'|'error') {
-    // ▼ サインアウト中: アラート出さずに全部掃除
     if ((this.authSvc as any).isSigningOut) {
       this.current.set(null);
       this.selected = null;
       this.prevSelected = null;
       this.liveRole = null;
-      this.stopAllWatchers();        // ← サインアウト時だけ全停止
+      this.stopAllWatchers();
       this.cdr.markForCheck();
       return;
     }
-  
-    // ▼ 通常の「プロジェクト喪失」（削除 / 追放 / エラー）
-    //    → 選択解除＋そのプロジェクトの membership watcher だけ止める
-    //    → memberships リスト監視は生かす（一覧を正しく更新させるため）
+
     this.current.set(null);
     this.selected = null;
     this.prevSelected = null;
     this.liveRole = null;
-  
-    this.stopProjectMembershipWatch();   // ★ここだけ
-    // this.stopMembershipsListWatcher(); は呼ばない
-  
+
+    this.stopProjectMembershipWatch();
     this.cdr.markForCheck();
     this.router.navigateByUrl('/', { replaceUrl: true });
     try {
@@ -259,19 +252,35 @@ export class ProjectSwitcher implements OnDestroy {
     this.isOnline$ = this.network.isOnline$;
     this.isOnline$.subscribe(v => { this.onlineNow = !!v; });
 
+    // ★ 追加：CurrentProject の真値に UI を追従（ここが唯一の選択ソース）
+    this.currSub = this.current.projectId$.subscribe(pid => {
+      if (pid === this.selected) return;
+
+      this.selected = pid;
+      this.prevSelected = pid;
+      this.liveRole = null;
+
+      this.stopProjectMembershipWatch();
+      if (pid && this.currentUid) this.startMembershipWatch(pid, this.currentUid);
+      this.cdr.markForCheck();
+    });
+
     this.authSub = this.authSvc.uid$.subscribe(async (uid) => {
       if (uid === this.currentUid) return;
       this.currentUid = uid ?? null;
 
       this.stopAllWatchers();
 
+      // アカウント切替時は一旦クリア（古いID由来の初期発火を抑止）
+      this.current.set(null);
+      this.selected = null;
+      this.prevSelected = null;
+      this.liveRole = null;
+      this.cdr.markForCheck();
+
       if (!uid) {
         this.projects = [];
-        this.current.set(null);
-        this.selected = null;
-        this.prevSelected = null;
         this.loading = false;
-        this.liveRole = null;
         this.cdr.markForCheck();
         return;
       }
@@ -279,16 +288,9 @@ export class ProjectSwitcher implements OnDestroy {
       this.startMembershipsListWatch(uid);
       await this.reload(uid);
 
-      const curr = this.current.getSync();
-      if (curr && this.projects.some(p => p.pid === curr)) {
-        this.selected = curr;
-      } else {
-        this.selected = this.projects[0]?.pid ?? null;
-        this.current.set(this.selected);
-      }
-      this.prevSelected = this.selected;
-
-      if (this.selected) this.startMembershipWatch(this.selected, uid);
+      // ★ 重要：ここで「勝手に初期選択して set する」ロジックは削除
+      // 決定は AuthService.ensureOnboard() 等が current.set(...) で行い、
+      // 上の projectId$ 購読で UI が追従する。
       this.cdr.markForCheck();
     });
   }
@@ -296,6 +298,7 @@ export class ProjectSwitcher implements OnDestroy {
   ngOnDestroy(): void {
     this.stopAllWatchers();
     this.authSub?.unsubscribe();
+    this.currSub?.unsubscribe(); // ★ 追従購読の解放
   }
 
   private async requireOnline(): Promise<boolean> {
@@ -307,19 +310,11 @@ export class ProjectSwitcher implements OnDestroy {
   onChange(pid: string | null) {
     if (!this.onlineNow) {
       alert(this.i18n.instant('projectSwitcher.cannotSwitchOffline'));
-      this.selected = this.prevSelected;
-      this.cdr.markForCheck();
+      // UI の巻き戻しは projectId$ 購読が自動で同期するので不要
       return;
     }
+    // ★ 簡素化：真値は service のみを更新。UI は購読で追従。
     this.current.set(pid);
-    this.selected = pid;
-    this.prevSelected = pid;
-    this.liveRole = null;
-
-    this.stopProjectMembershipWatch();
-
-    if (pid && this.currentUid) this.startMembershipWatch(pid, this.currentUid);
-    this.cdr.markForCheck();
   }
 
   private get selectedRole(): 'admin'|'member'|'viewer'|null {
@@ -328,7 +323,7 @@ export class ProjectSwitcher implements OnDestroy {
   }
   get canDelete()  { return this.selectedRole === 'admin'; }
   get canLeave()   { return this.selectedRole === 'member' || this.selectedRole === 'viewer'; }
-  get canRename()  { return this.selectedRole === 'admin'; } // ← 追加
+  get canRename()  { return this.selectedRole === 'admin'; }
 
   private startMembershipWatch(pid: string, uid: string) {
     const ref = doc(this.fs as any, `projects/${pid}/members/${uid}`);
@@ -379,9 +374,7 @@ export class ProjectSwitcher implements OnDestroy {
     } catch {
       this.projects = [];
     } finally {
-      if (this.selected && !this.projects.find(p => p.pid === this.selected)) {
-        this.handleProjectLost('deleted');
-      }
+      // 喪失の最終確認は handleProjectLost に任せる
       this.loading = false; this.cdr.markForCheck();
     }
   }
@@ -398,7 +391,7 @@ export class ProjectSwitcher implements OnDestroy {
 
       const placeholder = `${u.displayName || 'My'} Project`;
       const input = prompt(this.i18n.instant('projectSwitcher.prompt.createName'), placeholder);
-      if (input === null) return; // キャンセル
+      if (input === null) return;
 
       const name = this.normalizedProjectName(input);
       if (!this.isValidProjectName(name)) {
@@ -429,19 +422,16 @@ export class ProjectSwitcher implements OnDestroy {
       }, { merge: true });
 
       await this.reload(u.uid);
-      this.selected = pid;
-      this.prevSelected = pid;
+
+      // ★ ここも service に書くだけ。UI/Watcher は購読で追従。
       this.current.set(pid);
-      this.stopProjectMembershipWatch();
-      this.startMembershipWatch(pid, u.uid);
+
       alert(this.i18n.instant('projectSwitcher.alert.created'));
     } finally {
       this.creating = false; this.cdr.markForCheck();
     }
   }
 
-
-  // === 追加：プロジェクト名変更 ===
   async renameProject() {
     if (!await this.requireOnline()) return;
     try {
@@ -450,7 +440,6 @@ export class ProjectSwitcher implements OnDestroy {
       const pid = this.selected;
       if (!u || !pid) return;
 
-      // 管理者チェック
       const memberSnap = await getDoc(doc(this.fs as any, `projects/${pid}/members/${u.uid}`));
       const myRole = memberSnap.exists() ? (memberSnap.data() as any).role : null;
       if (myRole !== 'admin') {
@@ -458,7 +447,6 @@ export class ProjectSwitcher implements OnDestroy {
         return;
       }
 
-      // 現在名の取得
       const projSnap = await getDoc(doc(this.fs as any, `projects/${pid}`));
       const currentNameRaw = projSnap.exists() ? ((projSnap.data() as any)?.meta?.name ?? '') : '';
       const currentName = this.normalizedProjectName(currentNameRaw);
@@ -467,7 +455,7 @@ export class ProjectSwitcher implements OnDestroy {
         this.i18n.instant('projectSwitcher.prompt.rename'),
         currentName || 'Project'
       );
-      if (input === null) return; // キャンセル
+      if (input === null) return;
 
       const newName = this.normalizedProjectName(input);
 
@@ -495,7 +483,6 @@ export class ProjectSwitcher implements OnDestroy {
       this.renaming = false; this.cdr.markForCheck();
     }
   }
-
 
   private async safeDelete(path: string) { await deleteDoc(doc(this.fs as any, path)).catch((e) => { throw e; }); }
 
@@ -535,10 +522,9 @@ export class ProjectSwitcher implements OnDestroy {
 
       if (!confirm(this.i18n.instant('projectSwitcher.confirm.delete'))) return;
 
+      // ★ service にのみ反映。UI は購読で追従。
       this.current.set(null);
-      this.selected = null;
-      this.prevSelected = null;
-      this.stopProjectMembershipWatch();
+
       this.cdr.markForCheck();
 
       try {
@@ -604,10 +590,8 @@ export class ProjectSwitcher implements OnDestroy {
 
       if (!confirm(this.i18n.instant('projectSwitcher.confirm.leave'))) return;
 
+      // ★ service にのみ反映。UI は購読で追従。
       this.current.set(null);
-      this.selected = null;
-      this.prevSelected = null;
-      this.stopProjectMembershipWatch();
       this.cdr.markForCheck();
 
       await this.unassignAllTasksForUser(pid, u.uid);
@@ -633,23 +617,19 @@ export class ProjectSwitcher implements OnDestroy {
     return items.filter(p => p.name !== '(deleted)');
   }
 
-    // 入力をトリムして正規化
-    private normalizedProjectName(input: string | null | undefined): string {
-      return (input ?? '').trim();
+  private normalizedProjectName(input: string | null | undefined): string {
+    return (input ?? '').trim();
+  }
+
+  private isValidProjectName(name: string): boolean {
+    const len = name.length;
+    return len >= this.MIN_PROJECT_NAME && len <= this.MAX_PROJECT_NAME;
     }
-  
-    // 1〜30文字チェック
-    private isValidProjectName(name: string): boolean {
-      const len = name.length;
-      return len >= this.MIN_PROJECT_NAME && len <= this.MAX_PROJECT_NAME;
-    }
-  
-    // i18n → なければフォールバック文言
-    private tt(key: string, fallback: string): string {
-      const v = this.i18n.instant(key);
-      return v && v !== key ? v : fallback;
-    }
-  
+
+  private tt(key: string, fallback: string): string {
+    const v = this.i18n.instant(key);
+    return v && v !== key ? v : fallback;
+  }
 }
 
 
