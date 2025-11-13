@@ -775,11 +775,14 @@ endModel: Record<string, Date | null> = {};
         await this.tasks.create(pid, problemId, issueId, { title: t, dueDate: dueRaw });
       }
       this.taskTitle[issueId] = '';
-      this.taskDueDate[issueId] = '';
+
+      this.clearDue(issueId);
       this.taskRecurrenceEnabled[issueId] = false;
       this.taskRecurrenceInterval[issueId] = 1;
       this.taskRecurrenceFreq[issueId] = freq;
-      this.taskRecurrenceEndDate[issueId] = '';
+      
+      this.clearEnd(issueId);
+      
       const key = this.draftKeyTaskTitle(this.selectedProblemId, issueId);
       if (key) this.drafts.clear(key);
     });
