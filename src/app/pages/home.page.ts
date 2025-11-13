@@ -309,6 +309,7 @@ endModel: Record<string, Date | null> = {};
   themeMode: 'light' | 'dark' | 'system' = 'system';
 
   async ngOnInit() {
+    this.cleanupLegacyDrafts();
     // テーマと言語
     this.prefs.prefs$
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -387,13 +388,6 @@ endModel: Record<string, Date | null> = {};
             },
             [] as Task[]
           );
-
-          // Task タイトルのドラフト復元
-          const keyT = this.draftKeyTaskTitle(this.selectedProblemId, id);
-          const recT = keyT ? this.drafts.get<string>(keyT) : null;
-          if (recT && !this.taskTitle[id]) {
-            this.taskTitle[id] = recT.value || '';
-          }
         }
         this.tasksMap = nextMap;
       });
@@ -610,16 +604,7 @@ endModel: Record<string, Date | null> = {};
     }
     this.selectedProblemId = val;
     this.selectedProblem$.next(val);
-
-    // Issue タイトルのドラフト復元
-    const key = this.draftKeyIssueTitle(val);
-    if (key) {
-      const rec = this.drafts.get<string>(key);
-      if (rec && !this.issueTitle) {
-        const ok = confirm(this.i18n.instant('draft.restoreIssueTitle'));
-        if (ok) this.issueTitle = rec.value || '';
-      }
-    }
+    // ※ 課題タイトルのドラフト復元は廃止（仕様変更）
   }
 
   // 共通 withPid
@@ -650,11 +635,7 @@ endModel: Record<string, Date | null> = {};
     return `issueTitle:${pid}:${problemId}`;
   }
   onIssueTitleChange(val: string) {
-    if (this.issueTitleTimer) clearTimeout(this.issueTitleTimer);
-    this.issueTitleTimer = setTimeout(() => {
-      const key = this.draftKeyIssueTitle(this.selectedProblemId);
-      if (key) this.drafts.set(key, (val ?? '').toString());
-    }, 600);
+    // 仕様変更：課題タイトルのドラフトは保存しない
   }
 
   // --- Problem 操作 ---
@@ -740,12 +721,7 @@ endModel: Record<string, Date | null> = {};
     return `taskTitle:${pid}:${problemId}:${issueId}`;
   }
   onTaskTitleChange(issueId: string, val: string) {
-    const k = this.draftKeyTaskTitle(this.selectedProblemId, issueId);
-    if (!k) return;
-    if (this.taskTitleTimers[issueId]) clearTimeout(this.taskTitleTimers[issueId]);
-    this.taskTitleTimers[issueId] = setTimeout(() => {
-      this.drafts.set(k, (val ?? '').toString());
-    }, 600);
+    // 仕様変更：タスクタイトルのドラフトは保存しない
   }
 
   async createTask(problemId: string, issueId: string) {
@@ -924,7 +900,11 @@ endModel: Record<string, Date | null> = {};
     const key = this.draftKeyNewProblem(); if (!key) return;
     if (this.newProblemTimers[field]) clearTimeout(this.newProblemTimers[field]);
     this.newProblemTimers[field] = setTimeout(() => {
-      this.drafts.set(key, JSON.stringify(this.newProblem));
+      if (this.hasAnyNewProblemInput()) {
+        this.drafts.set(key, JSON.stringify(this.newProblem));
+      } else {
+        this.drafts.clear(key);
+      }
     }, 600);
   }
 
@@ -933,7 +913,11 @@ endModel: Record<string, Date | null> = {};
     const key = this.draftKeyEditProblem(this.selectedProblemId); if (!key) return;
     if (this.editProblemTimers[field]) clearTimeout(this.editProblemTimers[field]!);
     this.editProblemTimers[field] = setTimeout(() => {
-      this.drafts.set(key, JSON.stringify(this.editProblem));
+      if (this.hasAnyEditProblemInput()) {
+        this.drafts.set(key, JSON.stringify(this.editProblem));
+      } else {
+        this.drafts.clear(key);
+      }
     }, 600);
   }
 
@@ -1259,6 +1243,48 @@ endModel: Record<string, Date | null> = {};
   
     return '';
   }
+
+
+  /** 新規問題ドラフトに有効入力があるか */
+private hasAnyNewProblemInput(): boolean {
+  const p = this.newProblem;
+  return !!(p.title?.trim() || p.phenomenon?.trim() || p.cause?.trim() || p.solution?.trim() || p.goal?.trim());
+}
+/** 問題定義編集ドラフトに有効入力があるか */
+private hasAnyEditProblemInput(): boolean {
+  const d = this.editProblem;
+  return !!(d.phenomenon?.trim() || d.cause?.trim() || d.solution?.trim() || d.goal?.trim());
+}
+
+/** レガシー鍵の掃除（issue/task タイトルのドラフト・空の問題ドラフト） */
+private cleanupLegacyDrafts() {
+  try {
+    const toDelete: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i) || '';
+      if (!k.startsWith('pp.draft:')) continue;
+      // 課題/タスクのタイトルドラフトは全削除
+      if (k.includes('issueTitle:') || k.includes('taskTitle:')) {
+        toDelete.push(k); continue;
+      }
+      // 「新規問題」ドラフトが空内容なら削除
+      if (k.includes('pp.draft:problem:new:')) {
+        const raw = localStorage.getItem(k);
+        if (!raw) continue;
+        try {
+          const rec = JSON.parse(raw);
+          if (rec && typeof rec.value === 'string') {
+            const obj = JSON.parse(rec.value || '{}');
+            const has = !!(obj?.title?.trim() || obj?.phenomenon?.trim() || obj?.cause?.trim() || obj?.solution?.trim() || obj?.goal?.trim());
+            if (!has) toDelete.push(k);
+          }
+        } catch {}
+      }
+    }
+    toDelete.forEach(k => localStorage.removeItem(k));
+  } catch {}
+}
+
 
 }
 

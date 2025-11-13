@@ -10,6 +10,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatMenuModule } from '@angular/material/menu';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { DraftsService } from '../services/drafts.service';
 import {
   addDoc,
   collection,
@@ -109,6 +110,23 @@ export class ReportsPage {
     return v && v !== key ? v : fallback;
   }
 
+  private readonly drafts = inject(DraftsService);
+
+  private draftTimer: any = null;
+  private currentProjectId: string | null = null;
+
+  // draft key（新規/編集で切替）
+  private get manualDraftKey(): string | null {
+    const pid = this.currentProjectId;
+    const uid = this.auth.currentUser?.uid || null;
+    return (pid && uid) ? `report:manual:${pid}:${uid}` : null;
+  }
+  private get editDraftKey(): string | null {
+    const pid = this.currentProjectId;
+    const uid = this.auth.currentUser?.uid || null;
+    const id = this.editingReportId;
+    return (pid && uid && id) ? `report:edit:${pid}:${uid}:${id}` : null;
+  }
 
   private readonly currentProject = inject(CurrentProjectService);
   private readonly firestore = inject(Firestore);
@@ -170,6 +188,10 @@ export class ReportsPage {
         }
         this.activeReport = reports[0];
       });
+
+      this.projectId$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(pid => this.currentProjectId = pid);
   }
 
   /** 旧ショートカット（デフォはプロジェクト週次） */
@@ -219,6 +241,8 @@ export class ReportsPage {
     const currentLang = this.translate.currentLang || this.translate.defaultLang || 'ja';
     this.lastScope = 'project';
     this.lastLang = currentLang.startsWith('en') ? 'en' : 'ja';
+
+    this.restoreManualDraftIfAny();
   }
 
   cancelManualReport(): void {
@@ -228,6 +252,7 @@ export class ReportsPage {
     if (hasInput) {
       const ok = window.confirm(this.translate.instant('reports.confirm.discardDraft'));
       if (!ok) return;
+      this.clearAllReportDrafts();
     }
     this.manualFormOpen = false;
     this.draftReport = { title: '', body: '' };
@@ -253,6 +278,8 @@ export class ReportsPage {
     this.editingReportId = report.id;
     this.lastScope = report.scope ?? 'project';
     this.lastLang = report.lang ?? (this.translate.currentLang?.startsWith('en') ? 'en' : 'ja');
+
+    this.restoreEditDraftIfAny(report.id);
   }
 
 
@@ -371,6 +398,8 @@ export class ReportsPage {
           };
         }
 
+        this.clearAllReportDrafts();
+
         this.manualFormOpen = false;
         this.draftReport = { title: '', body: '' };
         this.pendingMetrics = null;
@@ -428,6 +457,11 @@ export class ReportsPage {
     return new Date(0);
   }
 
+  ngOnDestroy() {
+    if (this.draftTimer) { clearTimeout(this.draftTimer); this.draftTimer = null; }
+  }
+  
+
   private buildSummaryFromBody(body: string): string {
     const normalized = body.replace(/\s+/g, ' ').trim();
     if (normalized.length <= 80) return normalized;
@@ -456,5 +490,63 @@ export class ReportsPage {
       lang: raw?.lang,
     };
   }
+
+  private hasManualInput(): boolean {
+    return !!(this.draftReport.title?.trim() || this.draftReport.body?.trim());
+  }
+  onManualFieldChange() {
+    if (this.draftTimer) clearTimeout(this.draftTimer);
+    this.draftTimer = setTimeout(() => this.saveManualDraftNow(), 600);
+  }
+  private saveManualDraftNow() {
+    const key = this.editingReportId ? this.editDraftKey : this.manualDraftKey;
+    if (!key) return;
+    if (this.hasManualInput()) {
+      this.drafts.set(key, JSON.stringify(this.draftReport));
+    } else {
+      this.drafts.clear(key);
+    }
+  }
+  private restoreManualDraftIfAny() {
+    const key = this.manualDraftKey; if (!key) return;
+    const rec = this.drafts.get<string>(key);
+    if (!rec) return;
+    try {
+      const obj = JSON.parse(rec.value || '{}');
+      const has = !!(obj?.title?.trim() || obj?.body?.trim());
+      if (!has) { this.drafts.clear(key); return; }
+      const ok = window.confirm(this.tt('reports.form.restoreDraft', '前回の下書きを復元しますか？'));
+      if (ok) {
+        this.draftReport = {
+          title: this.clampText(obj.title || '', this.TITLE_MAX),
+          body: this.clampText(obj.body || '', this.BODY_MAX),
+        };
+      }
+    } catch { /* ignore */ }
+  }
+  private restoreEditDraftIfAny(reportId: string) {
+    const key = this.editDraftKey; if (!key) return;
+    const rec = this.drafts.get<string>(key);
+    if (!rec) return;
+    try {
+      const obj = JSON.parse(rec.value || '{}');
+      const has = !!(obj?.title?.trim() || obj?.body?.trim());
+      if (!has) { this.drafts.clear(key); return; }
+      const ok = window.confirm(this.tt('reports.form.restoreEditDraft', '編集中の下書きを復元しますか？'));
+      if (ok) {
+        this.draftReport = {
+          title: this.clampText(obj.title || '', this.TITLE_MAX),
+          body: this.clampText(obj.body || '', this.BODY_MAX),
+        };
+      }
+    } catch {}
+  }
+  private clearAllReportDrafts() {
+    try {
+      const mk = this.manualDraftKey; if (mk) this.drafts.clear(mk);
+      const ek = this.editDraftKey;   if (ek) this.drafts.clear(ek);
+    } catch {}
+  }
+  
 }
 

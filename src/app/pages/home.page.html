@@ -412,7 +412,6 @@
                   [placeholder]="'issue.placeholderNewTitle' | translate"
                   required
                   maxlength="100"
-                  (ngModelChange)="onIssueTitleChange($event)"
                 />
                 <button mat-raised-button color="primary" type="submit" [disabled]="!(canEdit$ | async)">
                   ＋ {{ 'issue.add' | translate }}
@@ -465,7 +464,6 @@
                             name="taskTitle-{{ i.id }}"
                             [placeholder]="'task.placeholderNewTitle' | translate"
                             required
-                            (ngModelChange)="onTaskTitleChange(i.id!, taskTitle[i.id!])"
                             maxlength="80"
                           />
                           <mat-form-field appearance="outline" class="date-field date-field--sm">

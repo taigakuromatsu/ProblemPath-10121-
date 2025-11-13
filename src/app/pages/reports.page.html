@@ -40,6 +40,7 @@
             matInput
             name="title"
             [(ngModel)]="draftReport.title"
+            (ngModelChange)="onManualFieldChange()"
             required
             [attr.maxlength]="TITLE_MAX"
             placeholder="{{ 'reports.form.titlePlaceholder' | translate }}"
@@ -59,6 +60,7 @@
             name="body"
             rows="5"
             [(ngModel)]="draftReport.body"
+            (ngModelChange)="onManualFieldChange()"
             required
             [attr.maxlength]="BODY_MAX"
             placeholder="{{ 'reports.form.bodyPlaceholder' | translate }}"
